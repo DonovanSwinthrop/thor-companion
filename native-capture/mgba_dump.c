@@ -34,9 +34,11 @@
 //                        party mon into a state worth screenshotting
 //   wideon MARGIN      - run the app's WIDE (pk_wide.c) after every frame from now on, MARGIN
 //                        GBA px per side, for the game the ROM header names (repo builds only)
-//   widecheck          - also rebuild the middle 240x160 each frame and compare it with the real
-//                        frame, pixel for pixel, printing frames that differ; `widestats` prints
-//                        the tally since
+//   widecheck [all]    - also rebuild the middle 240x160 each frame and compare it with the real
+//                        frame, pixel for pixel, printing frames that differ (the first 4 saved as
+//                        /work/miss_<frame>.ppm: real | rebuild); `widestats` prints
+//                        the tally since. Map frames only, unless `all` (battles: capture with
+//                        `layers 0x18`, since their rebuild is BG3 + sprites)
 //   wideshot FILE      - write the last wide frame as a PPM
 //   widecentre FILE    - write the last rebuild of the middle 240x160 (widecheck on) as a PPM
 //   widerec FILE N     - run N frames, recording every wide frame into FILE (scripts/wide_gif.py)
@@ -121,7 +123,7 @@ static unsigned videoW, videoH;
 
 #ifdef HAVE_PK_WIDE
 // WIDE (the app's pk_wide.c): run after every frame once `wideon`, as the app does.
-static bool wideOn, wideCheck;
+static bool wideOn, wideCheck, wideCheckBattles;
 static int wideMargin;
 static uint32_t wideOut[(PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H];
 static uint32_t wideCentre[PK_WIDE_W * PK_WIDE_H];
@@ -144,15 +146,36 @@ static void wideAfterFrame(void) {
         return;
     }
     if (pk_wide_last_mode() == PK_WIDE_MODE_BATTLE) wideStats.battle++;
-    if (!wideCheck) return;
+    // A battle's rebuild draws BG3 and sprites only: compare it only when asked (a capture with `layers 0x18`).
+    if (!wideCheck || (pk_wide_last_mode() == PK_WIDE_MODE_BATTLE && !wideCheckBattles)) return;
     // The rebuild of the middle against the real frame, pixel for pixel (RGB).
     int miss = 0;
     for (int i = 0; i < PK_WIDE_W * PK_WIDE_H; i++)
         miss += ((wideCentre[i] ^ (uint32_t) video[(i / PK_WIDE_W) * videoW + i % PK_WIDE_W]) & 0xFFFFFF) != 0;
     wideStats.checked++;
     if (!miss) wideStats.exact++;
-    else printf("widecheck: frame %u (%s): %d px differ\n", core->frameCounter(core),
-                pk_wide_last_mode() == PK_WIDE_MODE_BATTLE ? "battle" : "map", miss);
+    else {
+        printf("widecheck: frame %u (%s): %d px differ\n", core->frameCounter(core),
+               pk_wide_last_mode() == PK_WIDE_MODE_BATTLE ? "battle" : "map", miss);
+        // The first few as images: the real frame, then the rebuild, side by side.
+        static int dumped;
+        if (dumped < 4) {
+            char path[64];
+            snprintf(path, sizeof(path), "/work/miss_%u.ppm", core->frameCounter(core));
+            FILE* f = fopen(path, "wb");
+            if (f) {
+                dumped++;
+                fprintf(f, "P6\n%d %d\n255\n", 2 * PK_WIDE_W, PK_WIDE_H);
+                for (int y = 0; y < PK_WIDE_H; y++)
+                    for (int x = 0; x < 2 * PK_WIDE_W; x++) {
+                        uint32_t c = x < PK_WIDE_W ? (uint32_t) video[y * videoW + x] : wideCentre[y * PK_WIDE_W + x - PK_WIDE_W];
+                        uint8_t rgb[3] = { (uint8_t) c, (uint8_t) (c >> 8), (uint8_t) (c >> 16) };
+                        fwrite(rgb, 1, 3, f);
+                    }
+                fclose(f);
+            }
+        }
+    }
     if (miss > wideStats.worst) {
         wideStats.worst = miss;
         wideStats.worstFrame = (int) core->frameCounter(core);
@@ -729,7 +752,10 @@ int main(int argc, char** argv) {
             memset(&wideStats, 0, sizeof(wideStats));
             printf("wideon: %s game %d, margin %d\n", code, game, n);
         } else if (!strcmp(cmd, "widecheck")) {
+            char what[16] = {0};
+            sscanf(line, "%*s %15s", what);
             wideCheck = true;
+            wideCheckBattles = !strcmp(what, "all");
             memset(&wideStats, 0, sizeof(wideStats));
         } else if (!strcmp(cmd, "widestats")) {
             printf("wide: %d frames, %d battle, %d unverified (ambient edges), %d with torn sprite lists; centre checked on %d: "

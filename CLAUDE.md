@@ -501,7 +501,10 @@ OAM, never trusted alone). ASPECT has three values now, so the companion's row i
 strips are **ambient edges** (a glow from the game's own edge pixels), crossfaded with the map strips; look at transition
 changes with `widerec` + `scripts/wide_gif.py --sheet` (boot and a scripted wild battle, both games), not by guessing.
 **Battles are wide** (BG3 is 512 px in VRAM): drawn like a wider PPU, with per-scanline registers from a hook on mGBA's
-`drawScanline`; check battle changes with `layers 0x18` + `widecheck` (BG3 + OBJ only: the middle must match exactly).
+`drawScanline`; check battle changes with `layers 0x18` + `widecheck all` (BG3 + OBJ only: the middle must match exactly).
+The map uses those per-line registers too (windows, scroll, layer enables - Flash caves, transition wedges); weather
+sprites are repeated 256 px into the margins. A change to drawing gets the sweep (docs/DEVELOPMENT.md's WIDE section):
+warps to caves, gyms, weather routes on both games with BG0 off, every map frame exact.
 **SHADERS** (a sub-page of SETTINGS on either screen; `EmulatorView.FrameRenderer`, shaders in
 `ScreenShaders.kt`): FILTER (`Prefs.screenFilter`: NONE / LCD / LCD PAPER / SCANLINES / CRT), GRID (`Prefs.gridStrength`: SOFT /
 MEDIUM default / STRONG, for LCD and LCD PAPER - the `uGrid` uniform from `ScreenShaders.gridFor`, greyed out on

@@ -792,6 +792,24 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   before that HBlank's DMA writes the next line's values). Checked like the map: captured with only BG3 + OBJ on
   (`layers 0x18`), the rebuild of the middle matched every battle frame of both games pixel for pixel - intro slide,
   send-out, menu, RUN, exit.
+- **Line by line, on the map too.** The map rebuild draws each scanline with its own registers (the `drawScanline`
+  hook): layer enables, windows and scroll (a line scrolled apart from the latched value - a transition's slices - is
+  that much further along the map), and the camera score samples them the same way. So battle-start wedges and
+  Flash's dark circle are drawn as the game draws them, and a pixel the windows leave without a map layer is a hole
+  that continues the row's edge pixel (dark caves stay dark to the screen's edges). Sprites: affine ones are drawn
+  (mGBA's transform), and screen-space sprites (not following the camera) wrap like OAM's 9 / 8-bit positions.
+  Blending and brightness are done on the widened 8-bit colour, as mGBA's 32-bit renderer does, so they round alike.
+- **Weather** is screen-space sprites (`GFXTAG_*` 0x1201-0x1206: fog, ash, sandstorm, bubbles, rain) laid only over the
+  game's 240 px - fog / ash / sandstorm as 64 px grids, rain at random - so each is drawn again 256 px either way, in
+  the margins only: it goes on seamlessly however wide the screen.
+- **The sweep** (both games, `mgba_dump` with BG0 off so text boxes and popups don't count): warp in with the game's
+  own `warp` script command (`0x39 group num warpId x y`), walk a loop with `widecheck` on. Pixel-exact on every map
+  frame in towns, forests, lit and Flash-dark caves, gyms, fog (Lost Cave), shade (Berry Forest, Abandoned Ship),
+  ash (Route 113, Mt. Chimney), rain (Routes 119, 120), sandstorm route, Seafoam, Meteor Falls. Known leftovers, all
+  in the middle and never seen in the margins: a door's opening animation (drawn into VRAM, not the map data -
+  arriving by warp shows one), the Pokémon Mansion's top line while the camera is at the map's top edge (the game's
+  own stale tile row), a diving bubble a pixel off underwater, and Granite Cave B1F's Flash circle for the frames it
+  fades back in after a battle.
 - **Transitions, recorded**: `mgba_dump`'s `widerec` records every wide frame; `scripts/wide_gif.py` makes a GIF or a
   contact sheet. Checked on both games: boot (intro, title, Continue, FireRed's recap) to the map, and map -> a
   scripted wild battle (`setwildbattle` / `dowildbattle` / `end` poked at `0x0203FF00`, `call
