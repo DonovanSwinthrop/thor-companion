@@ -65,6 +65,7 @@ One command per line:
 | `widecheck` | Also rebuild the middle 240x160 every frame and compare it with the real frame pixel for pixel - how WIDE's rebuild was checked: it must match wherever it says the field checks out |
 | `widestats` | Print WIDE's tally: frames, unverified ones (margins faded), torn sprite lists, centre checks exact / worst, and its time per frame (frames over 2 ms are also printed as they happen) |
 | `wideshot FILE` | Write the last wide frame (`240 + 2 * MARGIN` x 160) as a PPM |
+| `widecentre FILE` | Write the last frame's rebuild of the middle 240x160 (with `widecheck` on) as a PPM, to diff against `shot` |
 | `widerec FILE N` | Run N frames (keys as `keys` holds them) recording every wide frame into FILE - `scripts/wide_gif.py FILE out.gif` makes an animation (or a contact sheet) of it |
 | `romcheck ROMFILE` | Compare the ROM with the file three ways: the raw bus, the bus through `pk_cheats_overlay` (what the Poller hashes) and swapped (what RetroAchievements hashes) |
 

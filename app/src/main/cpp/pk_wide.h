@@ -34,6 +34,7 @@ enum {
     PK_WIDE_LAYER_SHIFT,       // the layer type's bits: 29 (FireRed) / 12 (Emerald)
     PK_WIDE_LAYER_MASK,        // 3 / 0xF
     PK_WIDE_BORDER_SIZED,      // 1: MapLayout.borderWidth / Height at +0x18 / +0x19 (FireRed); 0: Emerald's 2x2
+    PK_WIDE_GMAIN,             // gMain: inBattle is bit 1 of +0x439
     PK_WIDE_CONFIG_SIZE
 };
 
@@ -55,6 +56,10 @@ void pk_wide_reset(void);
  * strips is the map, 0..256 (the rest is the glow).
  */
 int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int margin, uint32_t* centre);
+
+/** What the last frame's strips showed: nothing drawn (the glow), the map, or a battle. */
+enum { PK_WIDE_MODE_NONE, PK_WIDE_MODE_MAP, PK_WIDE_MODE_BATTLE };
+int pk_wide_last_mode(void);
 
 /** How the last frame went, for logs and mgba_dump: tilemap match 0..1000, -1 if none was tried. */
 int pk_wide_last_score(void);

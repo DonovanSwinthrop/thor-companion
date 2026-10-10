@@ -780,6 +780,18 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   smoothed over frames so text passing the edge doesn't flicker it. It follows whatever the game shows (the title's
   flames, a battle's sky, flashes and fades) and invents nothing. Back on the map it crossfades to the map strips.
   The map strips also take BLDCNT's brightness fades (BLDY), not only palette ones.
+- **Battles are wide too.** The battle background (BG3, `battle_bg.c`'s template: char base 2, screen base 26, a
+  64x32 tilemap) is 512 px wide in VRAM - sky, terrain and both platforms all the way across - so with
+  `gMain.inBattle` (bit 1 of `gMain + 0x439`) set and BG3 in that layout, the strips are what a wider PPU would draw:
+  BG3 from VRAM, the frame's real OAM where sprites reach past the edges (affine ones too, with mGBA's own transform
+  math: the battlers), windows continued past the edges (the opening band spans the whole width), blending and
+  brightness. BG0-2 (text, menus, animations) aren't drawn past 240; where BG3 is transparent (the text box rows)
+  the strip goes on with the game's own edge pixel of that row - the solid dark band the text box and menus sit on
+  (the glow there looked muddy, the user's call). Per-scanline registers: games rewrite scroll / windows between lines (the intro's sliding
+  halves), so a hook on mGBA's `drawScanline` copies DISPCNT..BLDY as each line is drawn (it runs at HBlank's start,
+  before that HBlank's DMA writes the next line's values). Checked like the map: captured with only BG3 + OBJ on
+  (`layers 0x18`), the rebuild of the middle matched every battle frame of both games pixel for pixel - intro slide,
+  send-out, menu, RUN, exit.
 - **Transitions, recorded**: `mgba_dump`'s `widerec` records every wide frame; `scripts/wide_gif.py` makes a GIF or a
   contact sheet. Checked on both games: boot (intro, title, Continue, FireRed's recap) to the map, and map -> a
   scripted wild battle (`setwildbattle` / `dowildbattle` / `end` poked at `0x0203FF00`, `call

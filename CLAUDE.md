@@ -500,6 +500,8 @@ captures of both games, never by eye. Retail FireRed rev 1 / Emerald only (`Wide
 OAM, never trusted alone). ASPECT has three values now, so the companion's row is an `OptionSelector`. Off the map the
 strips are **ambient edges** (a glow from the game's own edge pixels), crossfaded with the map strips; look at transition
 changes with `widerec` + `scripts/wide_gif.py --sheet` (boot and a scripted wild battle, both games), not by guessing.
+**Battles are wide** (BG3 is 512 px in VRAM): drawn like a wider PPU, with per-scanline registers from a hook on mGBA's
+`drawScanline`; check battle changes with `layers 0x18` + `widecheck` (BG3 + OBJ only: the middle must match exactly).
 **SHADERS** (a sub-page of SETTINGS on either screen; `EmulatorView.FrameRenderer`, shaders in
 `ScreenShaders.kt`): FILTER (`Prefs.screenFilter`: NONE / LCD / LCD PAPER / SCANLINES / CRT), GRID (`Prefs.gridStrength`: SOFT /
 MEDIUM default / STRONG, for LCD and LCD PAPER - the `uGrid` uniform from `ScreenShaders.gridFor`, greyed out on

@@ -38,6 +38,7 @@
 //                        frame, pixel for pixel, printing frames that differ; `widestats` prints
 //                        the tally since
 //   wideshot FILE      - write the last wide frame as a PPM
+//   widecentre FILE    - write the last rebuild of the middle 240x160 (widecheck on) as a PPM
 //   widerec FILE N     - run N frames, recording every wide frame into FILE (scripts/wide_gif.py)
 //   layers MASK        - draw only the video layers in MASK from the next frame on
 //                        (bit 0-3 = BG0-BG3, bit 4 = OBJ; 0x1F = all, the default)
@@ -124,7 +125,7 @@ static bool wideOn, wideCheck;
 static int wideMargin;
 static uint32_t wideOut[(PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H];
 static uint32_t wideCentre[PK_WIDE_W * PK_WIDE_H];
-static struct { int frames, checked, exact, unverified, torn, worst, worstFrame; double ns, maxNs; } wideStats;
+static struct { int frames, checked, exact, unverified, battle, torn, worst, worstFrame; double ns, maxNs; } wideStats;
 
 static void wideAfterFrame(void) {
     if (!wideOn) return;
@@ -138,10 +139,11 @@ static void wideAfterFrame(void) {
     if (ns > 2e6) printf("wide: frame %u took %.1f ms (score %d)\n", core->frameCounter(core), ns / 1e6, pk_wide_last_score());
     wideStats.frames++;
     if (pk_wide_last_torn()) wideStats.torn++;
-    if (pk_wide_last_score() < 900) {
+    if (pk_wide_last_mode() == PK_WIDE_MODE_NONE) {
         wideStats.unverified++;
         return;
     }
+    if (pk_wide_last_mode() == PK_WIDE_MODE_BATTLE) wideStats.battle++;
     if (!wideCheck) return;
     // The rebuild of the middle against the real frame, pixel for pixel (RGB).
     int miss = 0;
@@ -149,7 +151,8 @@ static void wideAfterFrame(void) {
         miss += ((wideCentre[i] ^ (uint32_t) video[(i / PK_WIDE_W) * videoW + i % PK_WIDE_W]) & 0xFFFFFF) != 0;
     wideStats.checked++;
     if (!miss) wideStats.exact++;
-    else printf("widecheck: frame %u: %d px differ\n", core->frameCounter(core), miss);
+    else printf("widecheck: frame %u (%s): %d px differ\n", core->frameCounter(core),
+                pk_wide_last_mode() == PK_WIDE_MODE_BATTLE ? "battle" : "map", miss);
     if (miss > wideStats.worst) {
         wideStats.worst = miss;
         wideStats.worstFrame = (int) core->frameCounter(core);
@@ -729,11 +732,23 @@ int main(int argc, char** argv) {
             wideCheck = true;
             memset(&wideStats, 0, sizeof(wideStats));
         } else if (!strcmp(cmd, "widestats")) {
-            printf("wide: %d frames, %d unverified (ambient edges), %d with torn sprite lists; centre checked on %d: "
+            printf("wide: %d frames, %d battle, %d unverified (ambient edges), %d with torn sprite lists; centre checked on %d: "
                    "%d exact, worst %d px (frame %d); %.0f us a frame on average, %.0f at most%s\n", wideStats.frames,
-                   wideStats.unverified, wideStats.torn, wideStats.checked, wideStats.exact, wideStats.worst,
+                   wideStats.battle, wideStats.unverified, wideStats.torn, wideStats.checked, wideStats.exact, wideStats.worst,
                    wideStats.worstFrame, wideStats.frames ? wideStats.ns / wideStats.frames / 1000 : 0,
                    wideStats.maxNs / 1000, wideCheck ? " (with the centre check)" : "");
+        } else if (!strcmp(cmd, "widecentre")) {
+            // The last frame's rebuild of the middle 240x160 (widecheck on) as a PPM, to diff with `shot`.
+            sscanf(line, "%*s %255s", arg1);
+            FILE* f = fopen(arg1, "wb");
+            if (f) {
+                fprintf(f, "P6\n%d %d\n255\n", PK_WIDE_W, PK_WIDE_H);
+                for (int i = 0; i < PK_WIDE_W * PK_WIDE_H; i++) {
+                    uint8_t rgb[3] = { (uint8_t) wideCentre[i], (uint8_t) (wideCentre[i] >> 8), (uint8_t) (wideCentre[i] >> 16) };
+                    fwrite(rgb, 1, 3, f);
+                }
+                fclose(f);
+            }
         } else if (!strcmp(cmd, "widerec")) {
             // N frames (keys as `keys` holds them), every wide frame's RGB appended to FILE after a
             // u32 width, height, count header - scripts/wide_gif.py turns it into an animation.
