@@ -48,8 +48,10 @@ object MgbaCore {
     external fun pkSetKeys(mask: Int)
     external fun pkRunFrame()
 
-    /** WIDE ([WideScreen]): which game's tables pk_wide.c uses ([WideScreen.gameFor]; 0 = off). Emu thread. */
-    external fun pkWideConfigure(game: Int)
+    /** WIDE ([WideScreen]): draw the game whose ROM has this CRC32 ([WideScreen.gameFor]; 0 = off). Emu thread. */
+    external fun pkWideConfigure(crc: Int)
+    /** WIDE: whether pk_wide.c has tables for the ROM with this CRC32 (pk_wide_games.h). Any thread. */
+    external fun pkWideKnows(crc: Int): Boolean
     /** WIDE: GBA pixels to draw beside the game, per side ([WideScreen.marginFor]; 0 = none). Any thread. */
     external fun pkWideSetMargin(margin: Int)
     /** Direct buffer over the wide frame (room for [WideScreen.MAX_MARGIN]); null for a Game Boy core. */

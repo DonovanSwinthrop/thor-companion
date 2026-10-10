@@ -85,6 +85,7 @@
 #include <mgba/core/blip_buf.h>
 #include <mgba/core/log.h>
 #include <mgba-util/vfs.h>
+#include <mgba-util/crc32.h>
 #include <mgba/internal/arm/arm.h>
 #include <mgba/internal/arm/isa-inlines.h>
 #include <mgba/internal/gba/gba.h>
@@ -743,14 +744,16 @@ int main(int argc, char** argv) {
 #ifdef HAVE_PK_WIDE
         } else if (!strcmp(cmd, "wideon")) {
             sscanf(line, "%*s %d", &n);
-            char code[5] = {0};
-            for (int i = 0; i < 4; i++) code[i] = (char) core->busRead8(core, 0x080000AC + i);
-            int game = pk_wide_game_for_header(code, core->busRead8(core, 0x080000BC));
-            pk_wide_configure(game);
-            wideOn = game != PK_WIDE_OFF;
+            // The game by its ROM's CRC32, as the app picks it (pk_wide_games.h).
+            size_t size = core->romSize(core);
+            uint8_t* bytes = malloc(size);
+            for (size_t i = 0; bytes && i < size; i++) bytes[i] = (uint8_t) core->busRead8(core, 0x08000000u + (uint32_t) i);
+            uint32_t crc = bytes ? doCrc32(bytes, size) : 0;
+            free(bytes);
+            wideOn = pk_wide_configure(crc);
             wideMargin = n;
             memset(&wideStats, 0, sizeof(wideStats));
-            printf("wideon: %s game %d, margin %d\n", code, game, n);
+            printf("wideon: ROM %08x %s, margin %d\n", crc, wideOn ? "known" : "NOT KNOWN (WIDE off)", n);
         } else if (!strcmp(cmd, "widecheck")) {
             char what[16] = {0};
             sscanf(line, "%*s %15s", what);

@@ -130,7 +130,8 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
   HOTKEYS) to play the last ~20 seconds backwards. It never touches your save file.
 - **Status bar** (optional): game, location, money, clock and battery above the game.
 - **Aspect**: the GBA's own 3:2, stretched to fill a 16:9 top screen, or **WIDE**: the overworld drawn past the
-  GBA's edges, so a wide screen shows more of the map with the pixels kept square (FireRed and Emerald for now).
+  GBA's edges, so a wide screen shows more of the map with the pixels kept square (FireRed, LeafGreen and Emerald, every
+  language and revision, for now).
   The extra strips are rebuilt every frame from the game's own map, tiles and sprites. Battles are wide too: their
   scenery runs on past the edges and Pokémon, trainers and healthboxes slide in from off screen. Fog, ash and rain
   reach the screen's edges, and dark caves stay dark around Flash's light. On the title

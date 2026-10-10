@@ -76,7 +76,7 @@ static struct {
     // drawn: the screen shows `video`). The margin comes from the UI thread (the view's size).
     uint32_t* wide;
     int wideW;
-    int wideGame;
+    uint32_t wideCrc;                   // the game WIDE draws (its ROM's CRC32; 0 = off)
     volatile int wideMargin;
 } g;
 
@@ -145,8 +145,8 @@ static void pkTeardown(void) {
     g.video = NULL;
     g.vw = g.vh = 0;
     g.audioAvail = 0;
-    pk_wide_configure(PK_WIDE_OFF);
-    g.wideGame = PK_WIDE_OFF;
+    pk_wide_configure(0);
+    g.wideCrc = 0;
     g.wideW = 0;
     free(g.wide);
     g.wide = NULL;
@@ -340,7 +340,7 @@ Java_com_pokedaisy_app_MgbaCore_pkRunFrame(JNIEnv* env, jobject thiz) {
     pkDrainAudio();
     // WIDE: only with a game it knows and room beside the game. 32-bit colour, like the screen's upload.
     int margin = g.wideMargin;
-    if (g.wide && g.wideGame != PK_WIDE_OFF && margin > 0 && sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H) {
+    if (g.wide && g.wideCrc && margin > 0 && sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H) {
         if (margin > PK_WIDE_MAX_MARGIN) margin = PK_WIDE_MAX_MARGIN;
         pk_wide_frame(g.core, (const uint32_t*) g.video, g.wide, margin, NULL);
         g.wideW = PK_WIDE_W + 2 * margin;
@@ -349,12 +349,18 @@ Java_com_pokedaisy_app_MgbaCore_pkRunFrame(JNIEnv* env, jobject thiz) {
     }
 }
 
-// WIDE: which game's tables to use (PK_WIDE_*, WideScreen.kt; 0 = off). Emu thread.
+// WIDE: draw the game whose ROM has this CRC32 (pk_wide_games.h; 0 = off). Emu thread.
 JNIEXPORT void JNICALL
-Java_com_pokedaisy_app_MgbaCore_pkWideConfigure(JNIEnv* env, jobject thiz, jint game) {
-    if (game == g.wideGame) return;
-    g.wideGame = pk_is_gba(g.core) ? game : PK_WIDE_OFF;
-    pk_wide_configure(g.wideGame);
+Java_com_pokedaisy_app_MgbaCore_pkWideConfigure(JNIEnv* env, jobject thiz, jint crc) {
+    uint32_t want = pk_is_gba(g.core) ? (uint32_t) crc : 0;
+    if (want == g.wideCrc) return;
+    g.wideCrc = pk_wide_configure(want) ? want : 0;
+}
+
+// WIDE: whether it has tables for the ROM with this CRC32. Any thread, no core needed.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideKnows(JNIEnv* env, jobject thiz, jint crc) {
+    return pk_wide_knows((uint32_t) crc) ? JNI_TRUE : JNI_FALSE;
 }
 
 // WIDE: GBA pixels to draw beside the game per side (the view's spare width); any thread.

@@ -104,7 +104,7 @@ private fun AspectChoice(
             when (aspect) {
                 GameAspect.ORIGINAL -> tr("The GBA's 3:2, bars at the sides")
                 GameAspect.STRETCH -> tr("Fills the screen, drawn wider")
-                GameAspect.WIDE -> tr("More of the map at the sides (FireRed, Emerald)")
+                GameAspect.WIDE -> tr("More of the map at the sides (FireRed, LeafGreen, Emerald)")
             },
             OptionColors.muted, OptionColors.mutedShadow, small, maxLines = 3,
         )
