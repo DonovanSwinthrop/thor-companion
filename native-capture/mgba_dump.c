@@ -125,6 +125,7 @@ static unsigned videoW, videoH;
 #ifdef HAVE_PK_WIDE
 // WIDE (the app's pk_wide.c): run after every frame once `wideon`, as the app does.
 static bool wideOn, wideCheck, wideCheckBattles;
+static int wideDumped;   // misses saved as images since the last widecheck
 static int wideMargin;
 static uint32_t wideOut[(PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H];
 static uint32_t wideCentre[PK_WIDE_W * PK_WIDE_H];
@@ -159,13 +160,12 @@ static void wideAfterFrame(void) {
         printf("widecheck: frame %u (%s): %d px differ\n", core->frameCounter(core),
                pk_wide_last_mode() == PK_WIDE_MODE_BATTLE ? "battle" : "map", miss);
         // The first few as images: the real frame, then the rebuild, side by side.
-        static int dumped;
-        if (dumped < 4) {
+        if (wideDumped < 4) {
             char path[64];
             snprintf(path, sizeof(path), "/work/miss_%u.ppm", core->frameCounter(core));
             FILE* f = fopen(path, "wb");
             if (f) {
-                dumped++;
+                wideDumped++;
                 fprintf(f, "P6\n%d %d\n255\n", 2 * PK_WIDE_W, PK_WIDE_H);
                 for (int y = 0; y < PK_WIDE_H; y++)
                     for (int x = 0; x < 2 * PK_WIDE_W; x++) {
@@ -759,6 +759,7 @@ int main(int argc, char** argv) {
             sscanf(line, "%*s %15s", what);
             wideCheck = true;
             wideCheckBattles = !strcmp(what, "all");
+            wideDumped = 0;   // each widecheck saves its own first few misses
             memset(&wideStats, 0, sizeof(wideStats));
         } else if (!strcmp(cmd, "widestats")) {
             printf("wide: %d frames, %d battle, %d unverified (ambient edges), %d with torn sprite lists; centre checked on %d: "
@@ -794,6 +795,16 @@ int main(int argc, char** argv) {
                     }
                 }
                 fclose(f);
+            }
+        } else if (!strcmp(cmd, "wideinfo")) {
+            // How the last frame went: its mode (0 glow, 1 map, 2 battle), tilemap score (0..1000, -1 untried), torn.
+            printf("wideinfo: frame %u mode %d score %d torn %d\n", core->frameCounter(core), pk_wide_last_mode(),
+                   pk_wide_last_score(), pk_wide_last_torn());
+            sscanf(line, "%*s %255s", arg1);
+            if (!strcmp(arg1, "lines")) {   // `wideinfo lines`: BG1's scroll per line as drawn, and as latched
+                printf("wideinfo: latched BG1 %d,%d; per line:", G->memory.io[0x14 >> 1] & 0x1FF, G->memory.io[0x16 >> 1] & 0x1FF);
+                for (int y = 0; y < PK_WIDE_H; y++) printf(" %d,%d", lineRegs(y)[0x14 >> 1] & 0x1FF, lineRegs(y)[0x16 >> 1] & 0x1FF);
+                printf("\n");
             }
         } else if (!strcmp(cmd, "wideshot")) {
             sscanf(line, "%*s %255s", arg1);

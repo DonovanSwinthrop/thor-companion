@@ -35,7 +35,7 @@
 
 #define MAP_OFFSET 7
 #define MAX_MAP_DATA 0x2800        // MAX_MAP_DATA_SIZE, both games (u16 cells)
-#define NUM_METATILES_TOTAL 1024
+#define NUM_METATILES_TOTAL 2048   // SoulGold's 11-bit ids; vanilla's are 1024
 #define LAYER_NORMAL 0
 #define LAYER_COVERED 1
 #define LAYER_SPLIT 2
@@ -51,12 +51,14 @@
 
 // Each engine's layout.
 static const int32_t FAMILIES[][PK_WIDE_CONFIG_SIZE - PK_WIDE_ADDRS] = {
-    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4 },    // u32 attributes, layer in bits 29-30; sized border
-    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4 },  // u16 attributes, layer in bits 12-15; 2x2 border
+    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 4 },    // u32 attributes, layer in bits 29-30; sized border
+    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 4 },  // u16 attributes, layer in bits 12-15; 2x2 border
     // Emerald's map; a static SaveBlock1, a longer gMain, 16-bit subsprite offsets.
-    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8 },
+    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8, 4 },
     // Japanese Ruby / Sapphire: the static SaveBlock1, but gMain's inBattle and 8-bit subsprites as later games.
-    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4 },
+    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4, 4 },
+    // pokeemerald-expansion: Emerald's map and sprites, ObjectEvent.spriteId at +0x23.
+    [PK_WIDE_FAMILY_EX] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 0x23 },
 };
 
 static const struct PkWideRom* lookup(uint32_t crc) {
@@ -116,6 +118,7 @@ struct Conn {
 struct Snap {
     bool ok;
     int posX, posY, xTile, yTile;
+    int href, vref;                // BG1-3's scroll as the camera sets it (field_camera.c), before any line effect
     int vw, vh;
     int width, height;             // the map itself
     uint32_t border, primary, secondary;
@@ -141,6 +144,11 @@ static void take(struct Snap* s) {
     uint32_t co = (uint32_t) C[PK_WIDE_CAMERA_OFFSET];
     s->xTile = (int) r8(co + 2);
     s->yTile = (int) r8(co + 3);
+    // FieldUpdateBgTilemapScroll: HOFS = xPixelOffset + sHorizontalCameraPan, VOFS = yPixelOffset +
+    // sVerticalCameraPan + 8 (the pans follow the offset struct).
+    uint32_t pan = (uint32_t) ((int32_t) co + C[PK_WIDE_PAN_OFF]);
+    s->href = ((int) r8(co) + s16(pan)) & 0x1FF;
+    s->vref = ((int) r8(co + 1) + s16(pan + 2) + 8) & 0x1FF;
     uint32_t vm = (uint32_t) C[PK_WIDE_VMAP];
     s->vw = s32(vm);
     s->vh = s32(vm + 4);
@@ -172,7 +180,8 @@ static void take(struct Snap* s) {
         uint32_t c = arr + 12 * (uint32_t) i;   // struct MapConnection { u8 direction; s32 offset; u8 mapGroup, mapNum; }
         int dir = (int) r8(c), off = s32(c + 4);
         if (dir < 1 || dir > 4) continue;       // DIVE / EMERGE aren't beside the map
-        uint32_t chdr = r32(r32((uint32_t) C[PK_WIDE_MAP_GROUPS] + 4 * r8(c + 8)) + 4 * r8(c + 9));
+        uint32_t group = r32((uint32_t) C[PK_WIDE_MAP_GROUPS] + 4 * r8(c + 8)) ^ (uint32_t) C[PK_WIDE_MAP_GROUPS_XOR];
+        uint32_t chdr = r32(group + 4 * r8(c + 9));
         uint32_t clay = r32(chdr);
         struct Conn* k = &s->conn[s->nconn];
         k->w = s32(clay);
@@ -213,13 +222,19 @@ static const uint16_t* metatile(const struct Snap* s, int mid, int bg) {
     }
     if (mid > NUM_METATILES_TOTAL) mid = 0;     // DrawMetatileAt's own clamp
     if (!mtDone[mid]) {
-        int prim = C[PK_WIDE_PRIMARY_METATILES];
+        int prim = C[PK_WIDE_PRIMARY_OVERRIDE] ? C[PK_WIDE_PRIMARY_OVERRIDE] : C[PK_WIDE_PRIMARY_METATILES];
         uint32_t ts = mid < prim ? s->primary : s->secondary;
         int i = mid < prim ? mid : mid - prim;
         uint32_t attrs = r32(ts + (uint32_t) C[PK_WIDE_ATTR_OFFSET]);
         uint32_t attr = C[PK_WIDE_ATTR_SIZE] == 4 ? r32(attrs + 4 * (uint32_t) i) : r16(attrs + 2 * (uint32_t) i);
         int layer = (int) ((attr >> C[PK_WIDE_LAYER_SHIFT]) & (uint32_t) C[PK_WIDE_LAYER_MASK]);
-        uint32_t tiles = r32(ts + 0xC) + 16 * (uint32_t) i;
+        uint32_t tiles = r32(ts + 0xC) + (uint32_t) C[PK_WIDE_METATILE_SIZE] * (uint32_t) i;
+        if (C[PK_WIDE_METATILE_SIZE] == 24) {   // triple-layer: every metatile has all three BGs' tiles
+            for (int k = 0; k < 4; k++)
+                for (int b = 0; b < 3; b++) mtTiles[mid][b][k] = (uint16_t) r16(tiles + 2 * (uint32_t) (4 * (2 - b) + k));
+            mtDone[mid] = 1;
+            return mtTiles[mid][bg - 1];
+        }
         uint16_t lo[4], hi[4];
         for (int k = 0; k < 4; k++) {
             lo[k] = (uint16_t) r16(tiles + 2 * (uint32_t) k);
@@ -231,7 +246,7 @@ static const uint16_t* metatile(const struct Snap* s, int mid, int bg) {
             } else if (layer == LAYER_COVERED) {
                 mtTiles[mid][0][k] = 0; mtTiles[mid][1][k] = hi[k]; mtTiles[mid][2][k] = lo[k];
             } else {   // NORMAL; BG3 gets the game's own "garbage" entry
-                mtTiles[mid][0][k] = hi[k]; mtTiles[mid][1][k] = lo[k]; mtTiles[mid][2][k] = 0x3014;
+                mtTiles[mid][0][k] = hi[k]; mtTiles[mid][1][k] = lo[k]; mtTiles[mid][2][k] = (uint16_t) C[PK_WIDE_NORMAL_BG3];
             }
         }
         mtDone[mid] = 1;
@@ -242,7 +257,7 @@ static const uint16_t* metatile(const struct Snap* s, int mid, int bg) {
 // MapGridGetMetatileIdAt in VMap coordinates; past VMap, a connected map's own cell where the
 // game would have used the border (it never shows those: they're past its 7-metatile copy).
 static int block(const struct Snap* s, int x, int y) {
-    uint32_t b = 0x3FF;
+    uint32_t mask = (uint32_t) C[PK_WIDE_METATILE_MASK], b = mask;
     if (x >= 0 && x < s->vw && y >= 0 && y < s->vh) {
         b = s->vmap[x + s->vw * y];
     } else {
@@ -257,11 +272,11 @@ static int block(const struct Snap* s, int x, int y) {
             }
         }
     }
-    if ((b & 0x3FF) != 0x3FF) return (int) (b & 0x3FF);
-    if (!C[PK_WIDE_BORDER_SIZED]) return (int) (r16(s->border + 2 * (uint32_t) (((x + 1) & 1) + (((y + 1) & 1) << 1))) & 0x3FF);
+    if ((b & mask) != mask) return (int) (b & mask);
+    if (!C[PK_WIDE_BORDER_SIZED]) return (int) (r16(s->border + 2 * (uint32_t) (((x + 1) & 1) + (((y + 1) & 1) << 1))) & mask);
     int xp = (x - MAP_OFFSET + 8 * s->bw) % s->bw;
     int yp = (y - MAP_OFFSET + 8 * s->bh) % s->bh;
-    return (int) (r16(s->border + 2 * (uint32_t) (xp + yp * s->bw)) & 0x3FF);
+    return (int) (r16(s->border + 2 * (uint32_t) (xp + yp * s->bw)) & mask);
 }
 
 // --- what the frame was drawn with ----------------------------------------------------------------
@@ -358,13 +373,17 @@ static int score(const struct Snap* s, int cx, int cy, int hofs, int vofs) {
     const uint8_t* vram = (const uint8_t*) G->video.vram;
     int hit = 0, n = 0, missLimit = 30 * 20 * 3 / 10;   // stop once it can't reach 90%
     for (int sy = 4; sy < 160; sy += 8) {
-        // A line scrolled apart from the rest (a transition's slices) is that much further along the map.
+        // A line scrolled apart from the rest (a transition's slices) shows the ring wrapped around: the camera's
+        // view where the ring holds it, leftover tiles past it (not sampled).
         const uint16_t* l = lineRegs(sy);
         int lh = l[0x14 >> 1] & 0x1FF, lv = l[0x16 >> 1] & 0x1FF;
-        int dx = signed9(lh - hofs), dy = signed9(lv - vofs);
-        int ry = ((lv + sy) >> 3) & 31, my = cy + dy + sy;
+        int oy = (signed9(lv - vofs) + sy + 256) & 0xFF;
+        if (oy >= PK_WIDE_H) continue;
+        int ry = ((lv + sy) >> 3) & 31, my = cy + oy;
         for (int sx = 4; sx < 240; sx += 8) {
-            int rx = ((lh + sx) >> 3) & 31, mx = cx + dx + sx;
+            int ox = (signed9(lh - hofs) + sx + 256) & 0xFF;
+            if (ox >= PK_WIDE_W) continue;
+            int rx = ((lh + sx) >> 3) & 31, mx = cx + ox;
             int mid = block(s, mx >> 4, my >> 4);
             int q = ((my >> 3) & 1) * 2 + ((mx >> 3) & 1);
             for (int b = 1; b <= 3; b++) {
@@ -375,7 +394,7 @@ static int score(const struct Snap* s, int cx, int cy, int hofs, int vofs) {
             }
         }
     }
-    return hit * 1000 / n;
+    return n ? hit * 1000 / n : 0;
 }
 
 // --- drawing ---------------------------------------------------------------------------------------
@@ -456,6 +475,17 @@ static struct Piece pieces[2][256];
 static int npieces[2] = { 0, 0 };
 static int shown = 0;   // pieces[shown]: the list drawn (the last one the frame's OAM agreed with)
 
+/** Where the PPU shows a piece the game put in OAM at a position past its 9 / 8 bits: y wraps at 256 (once
+ * the box reaches past 255 it shows at the top), x as a signed 9-bit value - used wherever that puts it on
+ * the real screen (Unbound's snow lives in world space and relies on it). */
+static void hardwareWrap(struct Piece* p) {
+    int bw = p->rot == 3 ? 2 * p->w : p->w, bh = p->rot == 3 ? 2 * p->h : p->h;
+    int y = p->y & 0xFF;
+    p->y = y + bh > 255 ? y - 256 : y;
+    int x = ((p->x + 256) & 0x1FF) - 256;
+    if (x != p->x && x < PK_WIDE_W && x + bw > 0) p->x = x;
+}
+
 /** The OAM entries the game would build if the screen were wider, front first (BuildOamBuffer +
  * AddSubspritesToOamBuffer), positions kept as s16 instead of OAM's 9 / 8 bits. */
 static int buildPieces(const struct Snap* s, struct Piece* out) {
@@ -463,7 +493,8 @@ static int buildPieces(const struct Snap* s, struct Piece* out) {
     for (int i = 0; i < 16; i++) {
         const uint8_t* oe = s->objects + 0x24 * i;
         uint32_t flags = (uint32_t) oe[0] | (uint32_t) oe[1] << 8;
-        if ((flags & 1) && (flags & (1 << 14)) && !(flags & (1 << 13)) && oe[4] < 64) offscreen[oe[4]] = true;
+        int id = oe[C[PK_WIDE_SPRITE_ID_OFF]];
+        if ((flags & 1) && (flags & (1 << 14)) && !(flags & (1 << 13)) && id < 64) offscreen[id] = true;
     }
     int n = 0;
     for (int k = 0; k < 64 && n < 256; k++) {
@@ -478,7 +509,9 @@ static int buildPieces(const struct Snap* s, struct Piece* out) {
         int cvx = (signed char) sp[0x28], cvy = (signed char) sp[0x29];
         int x = (int16_t) le16(sp + 0x20) + (int16_t) le16(sp + 0x24) + cvx;
         int y = (int16_t) le16(sp + 0x22) + (int16_t) le16(sp + 0x26) + cvy;
-        if (fl & 2) {   // coordOffsetEnabled: a sprite in the world, kept where the world puts it
+        bool world = fl & 2;   // coordOffsetEnabled: a sprite in the world, kept where the world puts it
+        bool revealed = offscreen[id] && (fl & 4);   // hidden by the game, shown by us: never wrapped
+        if (world) {
             x += s->coordX;
             y += s->coordY;
         } else {        // a sprite in screen space (weather, effects) relies on OAM's 9 / 8-bit wrap
@@ -502,6 +535,7 @@ static int buildPieces(const struct Snap* s, struct Piece* out) {
             out[n].y = y;
             out[n].w = OBJ_DIMS[a0 >> 14][a1 >> 14][0];
             out[n].h = OBJ_DIMS[a0 >> 14][a1 >> 14][1];
+            if (world && !revealed) hardwareWrap(&out[n]);
             n++;
             uint32_t tmpl = (uint32_t) sp[0x14] | (uint32_t) sp[0x15] << 8 | (uint32_t) sp[0x16] << 16 | (uint32_t) sp[0x17] << 24;
             uint32_t tag = !(fl & 2) && tmpl ? r16(tmpl) : 0;   // struct SpriteTemplate starts with tileTag
@@ -534,6 +568,7 @@ static int buildPieces(const struct Snap* s, struct Piece* out) {
             out[n].h = h;
             out[n].tile = base.tile + (int) ((v >> 4) & 0x3FF);
             if (mode != 2) out[n].prio = (int) (v >> 14);
+            if (world && !revealed) hardwareWrap(&out[n]);
             n++;
         }
     }
@@ -578,10 +613,11 @@ static uint32_t blend(uint32_t top, uint32_t bottom, int layer) {
 }
 
 static uint8_t holeBuf[PK_WIDE_H][PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN];
+static const uint32_t* realFrame;   // the core's 240x160 frame this call draws beside
 
-static void drawRegion(const struct Snap* s, int cx, int cy, int x0, int x1, uint32_t* dst, int stride, uint32_t alpha) {
+static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref, int x0, int x1, uint32_t* dst, int stride,
+                       uint32_t alpha) {
     int w = x1 - x0;
-    int href = G->memory.io[0x14 >> 1] & 0x1FF, vref = G->memory.io[0x16 >> 1] & 0x1FF;
     for (int y = 0; y < PK_WIDE_H; y++) {
         // This line as the PPU drew it: its layers, windows and scroll (a line scrolled apart from the
         // latched value is that much further along the map).
@@ -594,7 +630,23 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int x0, int x1, uin
             // Windowed out (Flash's darkness, a transition's wedge): nothing of the map here. A hole -
             // the strips go on with the game's own edge pixel of that row.
             holeBuf[y][x] = !enabled;
-            if (enabled) ci = mapPixel(s, cx + dx + x0 + x, cy + dy + y, enabled, &prio, &layer);
+            // On the real screen a line scrolled apart (a transition's slices) shows the 256x256 ring wrapped around:
+            // the map where the ring holds the camera's view, past that the ring's leftover tiles - which the game may
+            // have redrawn since (VRAM after a frame already has the next one's new row / column), so those pixels are
+            // the real frame's own. The margins go on with the map itself, that much further along.
+            int sx = x0 + x, mx = dx + sx, my = dy + y;
+            if (sx >= 0 && sx < PK_WIDE_W) {
+                mx = (mx + 256) & 0xFF;
+                my = (my + 256) & 0xFF;
+                if (enabled && (mx >= PK_WIDE_W || my >= PK_WIDE_H)) {
+                    dst[y * stride + x] = below[y][x] = (realFrame[y * PK_WIDE_W + sx] & 0xFFFFFF) | alpha;
+                    prioBuf[y][x] = 0;
+                    layerBuf[y][x] = 5;
+                    takenBuf[y][x] = 0;
+                    continue;
+                }
+            }
+            if (enabled) ci = mapPixel(s, cx + mx, cy + my, enabled, &prio, &layer);
             uint16_t c = G->video.palette[ci];
             uint32_t c32 = color(c, alpha);
             dst[y * stride + x] = wl & 0x20 ? brightness(c32, layer) : c32;
@@ -860,6 +912,7 @@ static inline uint32_t lerp(uint32_t a, uint32_t b, int t) {
 }
 
 int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int margin, uint32_t* centre) {
+    realFrame = frame;
     if (margin < 0) margin = 0;
     if (margin > PK_WIDE_MAX_MARGIN) margin = PK_WIDE_MAX_MARGIN;
     int ow = PK_WIDE_W + 2 * margin;
@@ -881,26 +934,30 @@ int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int 
     // (and pos +-1 metatile) reproduce the frame's own tilemaps best.
     lastScore = -1;
     lastTorn = 0;
-    int best = -1, bestCx = 0, bestCy = 0, bestSnap = -1;
+    int best = -1, bestCx = 0, bestCy = 0, bestH = 0, bestV = 0, bestSnap = -1;
     if (fieldDisplay()) {
         readBgs();
-        int hofs = io(0x14) & 0x1FF, vofs = io(0x16) & 0x1FF;
         const int tryOrder[2] = { prev, cur };
-        for (int t = 0; t < 2; t++) {
+        for (int t = 0; t < 2 && best < 1000; t++) {
             int si = tryOrder[t];
             if (si < 0 || !snaps[si].ok) continue;
             const struct Snap* s = &snaps[si];
-            for (int d = 0; d < 9; d++) {
-                int dx = (int[]) { 0, -1, 1, 0, 0, -1, 1, -1, 1 }[d], dy = (int[]) { 0, 0, 0, -1, 1, -1, -1, 1, 1 }[d];
-                int cx = (s->posX + dx) * 16 + signed8(hofs - s->xTile * 8);
-                int cy = (s->posY + dy) * 16 + signed8(vofs - s->yTile * 8);
-                int sc = score(s, cx, cy, hofs, vofs);
-                if (sc > best) {
-                    best = sc; bestCx = cx; bestCy = cy; bestSnap = si;
+            // The base scroll: as last written (the drawn frame's, unless a transition rewrote it per line - then
+            // the last line's), or as the camera in RAM has it (a transition that slides lines both ways).
+            for (int b = 0; b < 2 && best < 1000; b++) {
+                int hofs = b ? s->href : io(0x14) & 0x1FF, vofs = b ? s->vref : io(0x16) & 0x1FF;
+                if (b && hofs == (io(0x14) & 0x1FF) && vofs == (io(0x16) & 0x1FF)) break;
+                for (int d = 0; d < 9; d++) {
+                    int dx = (int[]) { 0, -1, 1, 0, 0, -1, 1, -1, 1 }[d], dy = (int[]) { 0, 0, 0, -1, 1, -1, -1, 1, 1 }[d];
+                    int cx = (s->posX + dx) * 16 + signed8(hofs - s->xTile * 8);
+                    int cy = (s->posY + dy) * 16 + signed8(vofs - s->yTile * 8);
+                    int sc = score(s, cx, cy, hofs, vofs);
+                    if (sc > best) {
+                        best = sc; bestCx = cx; bestCy = cy; bestH = hofs; bestV = vofs; bestSnap = si;
+                    }
+                    if (sc == 1000) break;
                 }
-                if (sc == 1000) break;
             }
-            if (best == 1000) break;
         }
         lastScore = best;
     }
@@ -921,11 +978,11 @@ int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int 
         const struct Snap* s = &snaps[bestSnap];
         for (int side = 0; side < 2 && margin > 0; side++) {
             int x0 = side ? PK_WIDE_W : -margin;
-            drawRegion(s, bestCx, bestCy, x0, x0 + margin, &raw[0][side * margin], 2 * PK_WIDE_MAX_MARGIN, alpha);
+            drawRegion(s, bestCx, bestCy, bestH, bestV, x0, x0 + margin, &raw[0][side * margin], 2 * PK_WIDE_MAX_MARGIN, alpha);
             for (int y = 0; y < PK_WIDE_H; y++)
                 for (int x = 0; x < margin; x++) rawHole[y][side * margin + x] = holeBuf[y][x];
         }
-        if (centre) drawRegion(s, bestCx, bestCy, 0, PK_WIDE_W, centre, PK_WIDE_W, alpha);
+        if (centre) drawRegion(s, bestCx, bestCy, bestH, bestV, 0, PK_WIDE_W, centre, PK_WIDE_W, alpha);
     } else if (battle) {
         for (int side = 0; side < 2 && margin > 0; side++) {
             int x0 = side ? PK_WIDE_W : -margin;

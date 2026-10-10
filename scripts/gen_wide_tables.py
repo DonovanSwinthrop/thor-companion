@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WIDE (pk_wide.c) for every retail release the user owns: maps the English references' addresses
+"""WIDE (pk_wide.c) for every retail release the user owns, and the ROM hacks in HACKS: maps the English references' addresses
 into each ROM and writes app/src/main/cpp/pk_wide_games.h, a table keyed by the ROM's CRC32.
 
     scripts/gen_wide_tables.py <roms dir> [<more roms dirs>...]
@@ -30,7 +30,7 @@ OUT_JSON = os.path.join(ROOT, "build", "wide", "wide.json")
 
 # pk_wide.h's PK_WIDE_* address slots, in order.
 SLOTS = ["VMAP", "MAP_HEADER", "MAP_GROUPS", "SAVE_BLOCK1_PTR", "CAMERA_OFFSET", "OBJECT_EVENTS", "SPRITES",
-         "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN"]
+         "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN", "MAP_GROUPS_XOR", "NORMAL_BG3", "METATILE_SIZE", "METATILE_MASK", "PRIMARY_OVERRIDE", "PAN_OFF"]
 
 # The references: what was mapped onto retail from the decomp ELFs and checked headless (pk_wide.c's
 # history), plus ScriptContext_SetupScript for the checks' scripted warps and battles.
@@ -50,6 +50,46 @@ REFERENCES = {
         CAMERA_OFFSET=0x03000590, OBJECT_EVENTS=0x030048A0, SPRITES=0x02020004, COORD_OFFSET=0x030024D0,
         COORD_OFFSET_Y=0x030027E0, SPRITE_ORDER=0x03002410, GMAIN=0x03001770)),
 }
+# The slots that aren't addresses, as retail has them.
+CONSTANTS = dict(MAP_GROUPS_XOR=0, NORMAL_BG3=0x3014, METATILE_SIZE=16, METATILE_MASK=0x3FF, PRIMARY_OVERRIDE=0, PAN_OFF=8)
+
+# ROM hacks, by SHA-1. A CFRU hack keeps FireRed rev 0's RAM and most of its code, so its addresses are mapped
+# through the literal pools like a retail port's (`mapped`), then `a` overrides what the hack moved; a hack on
+# its own build (pokeemerald-expansion, gcc) gives every address in `a`. `save` is its scripts/host_roms.conf name.
+HACKS = [
+    dict(name="Unbound v2.1.1.1", sha1="b4776b82a4c7915d0fadeaa27e013523f99dfd94", family="FR", mapped=True,
+         save="unbound", a=dict(MAP_GROUPS=0x08B70498, MAP_GROUPS_XOR=0x00B749DE, NORMAL_BG3=0)),
+    dict(name="Unbound v2.1.1.1 FR", sha1="0ce2a880aa097f1dce4e1db8ee513d0e82d15859", family="FR", mapped=True,
+         save="unbound_fr", a=dict(MAP_GROUPS=0x08B70498, MAP_GROUPS_XOR=0x00B749DE, NORMAL_BG3=0)),
+    dict(name="Radical Red v4.1", sha1="964f951a0fdaf209e4ea1344883ef0d557bb3a80", family="FR", mapped=True,
+         save="radical_red", a=dict(MAP_GROUPS=0x083526A8)),
+    # pokeemerald-expansion builds: scripts/find_wide_addrs.py's dumps (gMapHeader, gSaveBlock1Ptr and gMapGroups from
+    # the app's NativeConfig / GuideTables), ScriptContext_SetupScript from their battle fixtures' READMEs.
+    dict(name="Lazarus v2.0", sha1="7dcdc7e280bc4631487e13dd37e6e0cea04adea6", family="EX", save="lazarus_srm",
+         boot=["press B", "wait 30"] * 3, script=0x0820B2B0, a=dict(
+             VMAP=0x03002468, MAP_HEADER=0x0200B06C, MAP_GROUPS=0x08FAF098, SAVE_BLOCK1_PTR=0x03003664,
+             CAMERA_OFFSET=0x030023F8, OBJECT_EVENTS=0x0200566C, SPRITES=0x0203B5CC, COORD_OFFSET=0x0203CAD8,
+             COORD_OFFSET_Y=0x0203CADA, SPRITE_ORDER=0x0203C710, GMAIN=0x030014B8, METATILE_SIZE=24)),
+    dict(name="SoulGold v1.1.4", sha1="ea5d369cc8a31cbf1cfacb7c9470ea670f08957b", family="EX", save="soulgold",
+         boot=["press B", "wait 30"] * 3, script=0x0823647C, a=dict(
+             VMAP=0x03002F58, MAP_HEADER=0x02003828, MAP_GROUPS=0x09587364, SAVE_BLOCK1_PTR=0x030040C4,
+             CAMERA_OFFSET=0x03000CB8, OBJECT_EVENTS=0x02003314, SPRITES=0x0203BF38, COORD_OFFSET=0x0203BAB2,
+             COORD_OFFSET_Y=0x0203BAB4, SPRITE_ORDER=0x0203BA70, GMAIN=0x030055C0, PAN_OFF=-4, METATILE_SIZE=24,
+             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024)),
+    # v1.2's two builds: the same RAM, 8 bytes on from v1.1.4's sprite globals; their own ROM data.
+    dict(name="SoulGold v1.2", sha1="805d880ee229fb6dc3ce03d7b03baf48f0d759d0", family="EX", save="soulgold_v12",
+         boot=["press B", "wait 30"] * 3, script=0x08236D5C, a=dict(
+             VMAP=0x03002F58, MAP_HEADER=0x02003828, MAP_GROUPS=0x09592634, SAVE_BLOCK1_PTR=0x030040C4,
+             CAMERA_OFFSET=0x03000CB8, OBJECT_EVENTS=0x02003314, SPRITES=0x0203BF40, COORD_OFFSET=0x0203BABA,
+             COORD_OFFSET_Y=0x0203BABC, SPRITE_ORDER=0x0203BA78, GMAIN=0x030055C0, PAN_OFF=-4, METATILE_SIZE=24,
+             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024)),
+    dict(name="SoulGold v1.2 (second build)", sha1="5d6a036260fdbde96f85b5c1b92d0256d3aebafb", family="EX",
+         save="soulgold_v12b", boot=["press B", "wait 30"] * 3, script=0x08236CC4, a=dict(
+             VMAP=0x03002F58, MAP_HEADER=0x02003828, MAP_GROUPS=0x09592590, SAVE_BLOCK1_PTR=0x030040C4,
+             CAMERA_OFFSET=0x03000CB8, OBJECT_EVENTS=0x02003314, SPRITES=0x0203BF40, COORD_OFFSET=0x0203BABA,
+             COORD_OFFSET_Y=0x0203BABC, SPRITE_ORDER=0x0203BA78, GMAIN=0x030055C0, PAN_OFF=-4, METATILE_SIZE=24,
+             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024)),
+]
 FAMILY = {"BPR": "FR", "BPG": "FR", "BPE": "EM", "AXV": "RS", "AXP": "RS"}
 KOTLIN = os.path.join(ROOT, "app", "src", "main", "kotlin", "com", "pokedaisy", "app")
 
@@ -95,7 +135,8 @@ def main():
     if not dirs:
         sys.exit(__doc__)
     retail = retail_sha1s()
-    found = {}
+    hacks = {h["sha1"]: h for h in HACKS}
+    found, hacked = {}, {}
     for path in roms(dirs):
         with open(path, "rb") as f:
             head = f.read(0xC0)
@@ -103,8 +144,11 @@ def main():
         if code[:3] not in FAMILY:
             continue
         data = open(path, "rb").read()
-        if hashlib.sha1(data).hexdigest() in retail:
+        sha1 = hashlib.sha1(data).hexdigest()
+        if sha1 in retail:
             found.setdefault(zlib.crc32(data), path)   # the same dump in two dirs once
+        elif sha1 in hacks:
+            hacked.setdefault(zlib.crc32(data), (path, hacks[sha1]))
     refs = {}
     for fam, r in REFERENCES.items():
         ref = next((p for p in found.values() if open(p, "rb").read(0xC0)[0xAC:0xB0].decode() == r["code"]
@@ -113,27 +157,40 @@ def main():
             sys.exit(f"the {fam} reference ({r['code']} rev {r['rev']}) isn't in the dirs")
         refs[fam] = Rom(ref)
     out, report = [], []
-    for crc, path in sorted(found.items(), key=lambda kv: kv[1]):
+    jobs = [(crc, path, None) for crc, path in sorted(found.items(), key=lambda kv: kv[1])]
+    jobs += [(crc, path, hack) for crc, (path, hack) in sorted(hacked.items(), key=lambda kv: kv[1][0])]
+    for crc, path, hack in jobs:
         dst = Rom(path)
-        fam = FAMILY[dst.code[:3]]
-        src, ref = refs[fam], REFERENCES[fam]
+        fam = hack["family"] if hack else FAMILY[dst.code[:3]]
+        src, ref = refs.get(fam), REFERENCES.get(fam)
         if fam == "RS" and dst.lang == "J":
             fam = "RS_JA"   # mapped from English Ruby, but its own engine variant (pk_wide.c's FAMILIES)
         addrs, votes, missing = {}, {}, []
         for slot in SLOTS:
-            if dst.d == src.d:
+            if hack and slot in hack["a"]:
+                val, n = hack["a"][slot], "hack"
+            elif slot in CONSTANTS:
+                val, n = CONSTANTS[slot], "-"
+            elif hack and not hack.get("mapped"):
+                val, n = None, 0
+            elif dst.d == src.d:
                 val, n = ref["a"][slot], "ref"
             else:
                 val, n = map_literal(src, dst, ref["a"][slot])
             if val is None:
                 missing.append(slot)
             addrs[slot], votes[slot] = val, n
-        if addrs["MAP_GROUPS"] is not None and map_shapes(dst, addrs["MAP_GROUPS"]) != map_shapes(src, ref["a"]["MAP_GROUPS"]):
+        if not hack and addrs["MAP_GROUPS"] is not None and map_shapes(dst, addrs["MAP_GROUPS"]) != map_shapes(src, ref["a"]["MAP_GROUPS"]):
             missing.append("MAP_GROUPS (its maps don't match the reference's)")
-        script = ref["script"] if dst.d == src.d else map_code(src, dst, ref["script"] | 1)
+        if hack and "script" in hack:
+            script = hack["script"]
+        else:
+            script = ref["script"] if dst.d == src.d else map_code(src, dst, ref["script"] | 1)
         entry = dict(file=os.path.basename(path), path=path, crc=f"{crc:08x}", code=dst.code, rev=dst.rev, family=fam,
                      addrs={k: (f"{v:#010x}" if v is not None else None) for k, v in addrs.items()}, votes=votes,
-                     script=f"{script:#010x}" if script else None, missing=missing)
+                     script=f"{script:#010x}" if script else None, missing=missing, save=hack["save"] if hack else None,
+                     boot=hack.get("boot", []) if hack else [],
+                     name=hack["name"] if hack else None)
         report.append(entry)
         if missing:
             print(f"left out {entry['file']}: no {', '.join(missing)}")
@@ -145,7 +202,7 @@ def main():
     json.dump(report, open(OUT_JSON, "w"), indent=1)
     lines = [
         "// Generated by scripts/gen_wide_tables.py from the user's own ROMs - don't edit by hand.",
-        "// WIDE's addresses per retail release, by ROM CRC32 (pk_wide.c looks them up).",
+        "// WIDE's addresses per release (retail and the hacks it knows), by ROM CRC32 (pk_wide.c looks them up).",
         "#pragma once",
         "",
         "static const struct PkWideRom {",
@@ -156,7 +213,7 @@ def main():
     ]
     for e in out:
         vals = ", ".join(e["addrs"][s] for s in SLOTS)
-        lines.append(f"    {{ 0x{e['crc']}, PK_WIDE_FAMILY_{e['family']}, {{ {vals} }} }},   // {e['code']} rev {e['rev']}: {e['file']}")
+        lines.append(f"    {{ 0x{e['crc']}, PK_WIDE_FAMILY_{e['family']}, {{ {vals} }} }},   // {e['name'] or f"{e['code']} rev {e['rev']}"}: {e['file']}")
     lines += ["};", ""]
     open(OUT_H, "w").write("\n".join(lines))
     print(f"{len(out)} ROMs -> {os.path.relpath(OUT_H, ROOT)}; {len(report) - len(out)} left out")

@@ -827,8 +827,28 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   (u16 x, y + the bits, padded to 4 by agbcc - the menu cursor's RAM table showed it); Japanese R/S keep
   FireRed / Emerald's gMain and 4-byte subsprites (`PK_WIDE_FAMILY_RS_JA`). Kotlin asks native (`WideScreen.gameFor` -> `pkWideKnows`); a game WIDE doesn't know shows
   as ORIGINAL (the companion's pick-list tags WIDE NOT YET). `scripts/verify_wide.py` boots every ROM in the table
-  headless with its save and checks a walk (BG0 off) and a scripted battle (BG3 + OBJ) frame by frame - all 47 pass
+  headless with its save and checks a walk (BG0 off) and a scripted battle (BG3 + OBJ) frame by frame - all 54 pass
   (build/wide/verify.md). Rerun both after touching pk_wide.c.
+- **ROM hacks** (`HACKS` in `gen_wide_tables.py`, by SHA-1, each with its host_roms.conf save and any boot presses):
+  - *CFRU* (Unbound, its French build, Radical Red) keep FireRed rev 0's RAM and code, so their addresses map through the
+    literal pools like a retail port's; only `gMapGroups` is overridden (the app's GuideTables value - Unbound repoints it
+    and XORs its entries with 0x00B749DE: `MAP_GROUPS_XOR`). Unbound's DrawMetatile writes 0 to BG3 under a NORMAL
+    metatile where retail writes 0x3014 (`NORMAL_BG3`), and its snow lives in world space, relying on OAM's 9 / 8-bit wrap
+    (a flake at y -232 shows at 24): world sprites are wrapped like the PPU does wherever that lands on the real screen
+    (`hardwareWrap`), except NPCs we show past the edge on purpose.
+  - *pokeemerald-expansion* (Lazarus, SoulGold's three builds; `PK_WIDE_FAMILY_EX`): gcc builds share no code with retail,
+    so `scripts/find_wide_addrs.py` finds each address in headless dumps (boot, a step right, a step down: VMap by the
+    layout's size, the camera by HOFS / tile offsets, gSprites by the OAM, the coord offsets from the player's sprite,
+    sSpriteOrder as a permutation). Expansion moved `ObjectEvent.spriteId` to +0x23 (graphicsId is a u16). Both hacks use
+    triple-layer metatiles - 24 bytes, BG3 / BG2 / BG1 (`METATILE_SIZE`) - and SoulGold 11-bit metatile ids with 1024
+    primary metatiles (`METATILE_MASK`, `PRIMARY_OVERRIDE`). gcc places the camera pans where it likes (`PAN_OFF`: +8 in
+    agbcc builds and Lazarus, -4 in SoulGold).
+- **Transitions that slide lines** (Unbound's wild battle start): the latched scroll is only the last line's, and the
+  lines slide both ways around the camera, so the camera's own scroll is also taken from RAM (sFieldCameraOffset +
+  sHorizontal / sVerticalCameraPan + 8, as FieldUpdateBgTilemapScroll writes it) and scored as a candidate. On the real
+  screen a slid line shows the 256-px ring wrapped around (the map where it holds the camera's view, leftover tiles past
+  it - which the next frame may already have redrawn, so those pixels are the real frame's); the margins show the map
+  slid along. `mgba_dump`'s `wideinfo lines` prints each line's scroll.
 - **Width**: `WideScreen.marginFor` - as many GBA px per side as fit with the game at the view's full height
   (`EmulatorView.onWideMargin` -> `pkWideSetMargin`), up to 96. The core writes the wide frame next to its own
   (`pkWideBuffer` / `pkWideWidth`); `EmulatorView` uploads whichever the last frame was, resizing its texture when

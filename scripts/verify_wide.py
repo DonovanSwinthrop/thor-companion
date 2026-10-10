@@ -34,25 +34,27 @@ SAVES = {**SAVES, "BPE": "emerald_vanilla"}
 BOOTS = {**BOOTS, "BPE": "default.txt"}
 AFTER_BOOT = {**AFTER_BOOT, "BPE": "wait 120\n"}
 SCRIPT_RAM = 0x0203FF00
-BATTLE = [0xB6, 0x10, 0x00, 0x05, 0x00, 0x00, 0xB7, 0x02]   # setwildbattle SPECIES 16, 5, ITEM_NONE; dowildbattle; end
+# setwildbattle SPECIES 16, 5, ITEM_NONE; dowildbattle; end. Expansion's setwildbattle takes a second mon (SoulGold's
+# more): the zeros cover those, and are nops where it doesn't.
+BATTLE = [0xB6, 0x10, 0x00, 0x05] + [0x00] * 12 + [0xB7, 0x02]
 WALK = [("DOWN", 24), ("B,LEFT", 48), ("B,UP", 48), ("B,RIGHT", 96), ("B,DOWN", 48), ("LEFT", 48), ("UP", 64), ("B,RIGHT", 64)]
 
 
-def boot_lines(code):
+def boot_lines(code, extra=()):
     text = open(os.path.join(ROOT, "native-capture", "boot", BOOTS[code[:3]])).read() + AFTER_BOOT.get(code[:3], "")
-    return [l for l in text.splitlines() if l.strip() and not l.startswith(("#", "shot"))]
+    return [l for l in text.splitlines() if l.strip() and not l.startswith(("#", "shot"))] + list(extra)
 
 
-def map_run(code, margin):
-    out = [f"wideon {margin}", "layers 0x1E"] + boot_lines(code) + ["widecheck"]
+def map_run(code, margin, extra=()):
+    out = [f"wideon {margin}", "layers 0x1E"] + boot_lines(code, extra) + ["widecheck"]
     for k, n in WALK:
         out += [f"keys {k}", f"wait {n}"]
     return out + ["keys NONE", "widestats"]
 
 
-def battle_run(code, script, margin):
+def battle_run(code, script, margin, extra=()):
     slow = code[:3] in ("BPE", "AXV", "AXP")   # Emerald and Ruby / Sapphire print their battle text slower
-    out = [f"wideon {margin}"] + boot_lines(code) + ["wait 60", "layers 0x18", "wait 2", "widecheck all"]
+    out = [f"wideon {margin}"] + boot_lines(code, extra) + ["wait 60", "layers 0x18", "wait 2", "widecheck all"]
     out += [f"poke8 {SCRIPT_RAM + i:#x} {b:#x}" for i, b in enumerate(BATTLE)]
     out += [f"call {script} {SCRIPT_RAM:#x}", f"wait {520 if slow else 420}", "press A", f"wait {480 if slow else 330}",
             "press RIGHT", "wait 12", "press DOWN", "wait 12", "press A", "wait 90", "press A", "wait 300", "widestats"]
@@ -87,16 +89,16 @@ def main():
         work = os.path.join(OUT, "runs", e["crc"])
         os.makedirs(work, exist_ok=True)
         shutil.copy(e["path"], os.path.join(work, "rom.gba"))
-        shutil.copy(conf(OWN_SAVES.get(e["code"], SAVES[e["code"][:3]])), os.path.join(work, "save.sav"))
+        shutil.copy(conf(e.get("save") or OWN_SAVES.get(e["code"], SAVES[e["code"][:3]])), os.path.join(work, "save.sav"))
         shutil.copy(tool, os.path.join(work, "mgba_dump"))
-        mm, moff = run(work, map_run(e["code"], margin))
-        bm, boff = run(work, battle_run(e["code"], e["script"], margin)) if e["script"] else (None, [])
+        mm, moff = run(work, map_run(e["code"], margin, e.get("boot", [])))
+        bm, boff = run(work, battle_run(e["code"], e["script"], margin, e.get("boot", []))) if e["script"] else (None, [])
         # The map run checks map frames only; the battle run (BG3 + sprites) checks its battle frames.
         maps = f"{mm.group(5)}/{mm.group(4)}" if mm else "?"
         battle_off = [l for l in boff if "(battle)" in l]
         battles = f"{int(bm.group(2)) - len(battle_off)}/{bm.group(2)}" if bm else "?"
         ok = mm and int(mm.group(4)) > 100 and not moff and bm and int(bm.group(2)) > 100 and not battle_off
-        line = f"| {e['file']} | {e['crc']} | {maps} | {battles} | {'ok' if ok else 'CHECK'} |"
+        line = f"| {e.get('name') or e['file']} | {e['crc']} | {maps} | {battles} | {'ok' if ok else 'CHECK'} |"
         print(line, flush=True)
         rows.append(line)
     open(os.path.join(OUT, "verify.md"), "w").write("\n".join(rows) + "\n")

@@ -113,7 +113,7 @@ internal val trSettings: Map<String, Tr> = mapOf(
     // ASPECT picker
     "Fills the screen, drawn wider" to Tr(ja = "がめん いっぱい、 よこに のばして ひょうじ", fr = "Remplit l'écran, image élargie", de = "Füllt den Bildschirm, breiter gezeichnet", it = "Riempie lo schermo, più largo", es = "Llena la pantalla, más ancho"),
     "The GBA's 3:2, bars at the sides" to Tr(ja = "GBAの 3:2、 りょうがわに くろい おび", fr = "Le 3:2 de la GBA, bandes sur les côtés", de = "Das 3:2 des GBA, Balken an den Seiten", it = "Il 3:2 del GBA, bande ai lati", es = "El 3:2 de la GBA, franjas a los lados"),
-    "More of the map at the sides (original games only)" to Tr(ja = "まわりの マップも みえる(もとの ゲームのみ)", fr = "Plus de carte sur les côtés (jeux originaux)", de = "Mehr Karte an den Seiten (nur Originalspiele)", it = "Più mappa ai lati (solo giochi originali)", es = "Más mapa a los lados (solo juegos originales)"),
+    "More of the map at the sides (not every game yet)" to Tr(ja = "まわりの マップも みえる(まだ いちぶの ゲームのみ)", fr = "Plus de carte sur les côtés (pas encore tous les jeux)", de = "Mehr Karte an den Seiten (noch nicht alle Spiele)", it = "Più mappa ai lati (non ancora tutti i giochi)", es = "Más mapa a los lados (aún no todos los juegos)"),
 
     // Footer
     "POKéDAISY {0}  ·  by {1}" to Tr(ja = "POKéDAISY {0}  ·  さくしゃ {1}", fr = "POKéDAISY {0}  ·  par {1}", de = "POKéDAISY {0}  ·  von {1}", it = "POKéDAISY {0}  ·  di {1}", es = "POKéDAISY {0}  ·  por {1}"),
