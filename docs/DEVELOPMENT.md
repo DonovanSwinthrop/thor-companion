@@ -772,9 +772,18 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   from the BG scroll registers the frame was drawn with (mGBA's `memory.io`: write-only, open bus on a bus read)
   plus the ring's anchor from RAM, and every candidate (both snapshots, pos +-1 metatile) is scored against the
   frame's own BG1-3 tilemaps in VRAM; the sprite list must match the frame's OAM, else the last good one is kept.
-- **Fallback**: anything that doesn't check out - not mode 0 with BG1-3 on, windows hiding a layer at the screen's
-  edges (a Flash-dark cave, a battle transition), under 90% of the tilemap matching (battles, menu screens) - fades
-  the strips to black over 8 frames, and back when it checks out again.
+- **Off the map: ambient edges.** Anything that doesn't check out - not mode 0 with BG1-3 on, windows hiding a layer
+  at the screen's edges (a Flash-dark cave, a battle transition), under 90% of the tilemap matching (title, menu
+  screens, battles) - crossfades the strips (16 frames) from the last map strips, frozen, to a glow spread from the
+  game's own edge columns (`ambientEdges`): each strip column takes its row's colour from the 12-px edge band,
+  blurred over more rows the further out it is, from full brightness at the game's edge to ~47% at the screen's,
+  smoothed over frames so text passing the edge doesn't flicker it. It follows whatever the game shows (the title's
+  flames, a battle's sky, flashes and fades) and invents nothing. Back on the map it crossfades to the map strips.
+  The map strips also take BLDCNT's brightness fades (BLDY), not only palette ones.
+- **Transitions, recorded**: `mgba_dump`'s `widerec` records every wide frame; `scripts/wide_gif.py` makes a GIF or a
+  contact sheet. Checked on both games: boot (intro, title, Continue, FireRed's recap) to the map, and map -> a
+  scripted wild battle (`setwildbattle` / `dowildbattle` / `end` poked at `0x0203FF00`, `call
+  ScriptContext_SetupScript`: FireRed rev 1 `0x08069AF9`, Emerald `0x08098EF9`) -> RUN -> map.
 - **Games**: a table per build in `pk_wide.c` (`PK_WIDE_*`), picked in Kotlin by ROM CRC32 (`WideScreen.gameFor`):
   retail FireRed rev 1 and Emerald. The QoL builds move every address; a game WIDE doesn't know shows as ORIGINAL
   (the companion's pick-list tags WIDE NOT YET). Addresses came from the decomp ELFs mapped onto retail through the

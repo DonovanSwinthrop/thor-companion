@@ -18,7 +18,8 @@
 // step's row redraw runs the main loop past VBlank, a snapshot is caught mid-update (pos moved,
 // the ring offsets not yet): every camera candidate (both snapshots, pos +-1 metatile) is
 // checked against the frame's own BG tilemaps in VRAM, and the sprite list against the frame's
-// OAM. Anything that doesn't check out (battles, menu screens, transitions) fades the margins.
+// OAM. Anything that doesn't check out (battles, menu screens, transitions) crossfades the strips
+// to an ambient glow spread from the game's own edges (ambientEdges), and back to the map after.
 //
 // Worked out and checked pixel for pixel headless first (scripts/widescreen_proto.py), then
 // this port against the same captures (native-capture/mgba_dump's `wide` / `widecheck`).
@@ -38,7 +39,8 @@
 #define LAYER_COVERED 1
 #define LAYER_SPLIT 2
 #define MIN_SCORE 900              // per mille of the screen's tilemap entries a camera must match
-#define FADE_STEP 32               // margins fade over 8 frames
+#define MIX_STEP 16                // map strips <-> ambient edges crossfade over 16 frames
+#define AMBIENT_BAND 12            // the game's edge columns the ambient glow is spread from
 
 // Retail addresses: the decomp ELFs' (built QoL-patched, so mapped onto retail through the literal
 // pools - only FireRed's VMap and gSaveBlock1Ptr differ from them), checked headless frame by frame.
@@ -331,6 +333,23 @@ static int score(const struct Snap* s, int cx, int cy, int hofs, int vofs) {
 
 // --- drawing ---------------------------------------------------------------------------------------
 
+/** BLDCNT's brightness effects (fades to white / black done with BLDY rather than the palette), for
+ * a pixel whose top layer is `layer` (0-3 BG, 4 OBJ, 5 backdrop) if BLDCNT makes it a first target. */
+static uint16_t brightness(uint16_t c, int layer) {
+    uint16_t cnt = io(0x50);
+    int mode = (cnt >> 6) & 3;
+    if (mode < 2 || !(cnt & (1 << layer))) return c;
+    int y = io(0x54) & 0x1F;
+    if (y > 16) y = 16;
+    uint16_t out = 0;
+    for (int sh = 0; sh <= 10; sh += 5) {
+        int v = (c >> sh) & 31;
+        v = mode == 2 ? v + (31 - v) * y / 16 : v - v * y / 16;
+        out |= (uint16_t) (v << sh);
+    }
+    return out;
+}
+
 static inline uint32_t color(uint16_t c, uint32_t alpha) {
     uint32_t v = (uint32_t) (c & 0x1F) << 3 | (uint32_t) ((c >> 5) & 0x1F) << 11 | (uint32_t) ((c >> 10) & 0x1F) << 19;
     return v | ((v >> 5) & 0x070707) | alpha;   // mGBA's mColorFrom555
@@ -484,7 +503,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int x0, int x1, uin
         for (int x = 0; x < w; x++) {
             int prio, layer;
             int ci = mapPixel(s, cx + x0 + x, cy + y, &prio, &layer);
-            dst[y * stride + x] = color(G->video.palette[ci], alpha);
+            dst[y * stride + x] = color(brightness(G->video.palette[ci], layer), alpha);
             prioBuf[y][x] = (uint8_t) prio;
             layerBuf[y][x] = (uint8_t) layer;
             below[y][x] = G->video.palette[ci];
@@ -514,8 +533,62 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int x0, int x1, uin
                 takenBuf[Y][X] = 1;
                 if (p[i].prio > prioBuf[Y][X]) continue;
                 uint16_t c = G->video.palette[256 + p[i].pal * 16 + ci];
-                if (p[i].mode == 1) c = blend(c, below[Y][X], layerBuf[Y][X]);
+                c = p[i].mode == 1 ? blend(c, below[Y][X], layerBuf[Y][X]) : brightness(c, 4);
                 dst[Y * stride + X] = color(c, alpha);
+            }
+        }
+    }
+}
+
+// --- ambient edges -----------------------------------------------------------------------------------
+
+// Off the map (title, menus, battles, transitions) the strips are a glow spread from the game's own
+// edge pixels: each strip column takes its row's colour from the edge band, blurred over more rows the
+// further out it is and dimmed towards the screen's edge, so it follows whatever the game shows (its
+// flames, a battle's sky, a flash, a fade) without inventing anything.
+
+static int32_t edgeAcc[2][PK_WIDE_H][3];   // each side's edge-band colour per row, x16, smoothed over frames
+static bool edgeAccOk;
+
+static void ambientEdges(const uint32_t* frame, int margin, uint32_t alpha, uint32_t* dst, int stride) {
+    int32_t pre[2][PK_WIDE_H + 1][3];
+    for (int side = 0; side < 2; side++) {
+        int x0 = side ? PK_WIDE_W - AMBIENT_BAND : 0;
+        for (int c = 0; c < 3; c++) pre[side][0][c] = 0;
+        for (int y = 0; y < PK_WIDE_H; y++) {
+            int32_t sum[3] = { 0, 0, 0 };
+            for (int x = x0; x < x0 + AMBIENT_BAND; x++) {
+                uint32_t v = frame[y * PK_WIDE_W + x];
+                sum[0] += v & 0xFF;
+                sum[1] += (v >> 8) & 0xFF;
+                sum[2] += (v >> 16) & 0xFF;
+            }
+            for (int c = 0; c < 3; c++) {
+                int32_t now = sum[c] * 16 / AMBIENT_BAND;
+                // Half the step each frame: text and sprites passing the edge don't flicker the glow.
+                edgeAcc[side][y][c] = edgeAccOk ? (edgeAcc[side][y][c] + now) / 2 : now;
+                pre[side][y + 1][c] = pre[side][y][c] + edgeAcc[side][y][c];
+            }
+        }
+    }
+    edgeAccOk = true;
+    for (int d = 1; d <= margin; d++) {   // d: GBA pixels out from the game's edge
+        int r = 2 + d * 3 / 4;                           // the glow spreads as it goes out
+        int bright = 256 - 136 * (d - 1) / (margin > 1 ? margin - 1 : 1);   // 1.0 at the game's edge -> ~0.47
+        int seam = d >= 4 ? 256 : d * 64;                // the first pixels lean on the edge column itself
+        for (int side = 0; side < 2; side++) {
+            int col = side ? margin + d - 1 : margin - d;   // in dst: the left strip, then the right one
+            int edgeX = side ? PK_WIDE_W - 1 : 0;
+            for (int y = 0; y < PK_WIDE_H; y++) {
+                int lo = y - r < 0 ? 0 : y - r, hi = y + r >= PK_WIDE_H ? PK_WIDE_H - 1 : y + r;
+                uint32_t exact = frame[y * PK_WIDE_W + edgeX], v = 0;
+                for (int c = 0; c < 3; c++) {
+                    int32_t blur = (pre[side][hi + 1][c] - pre[side][lo][c]) / (hi - lo + 1) / 16;
+                    int32_t e = (exact >> (8 * c)) & 0xFF;
+                    int32_t mixd = (e * (256 - seam) + blur * seam) >> 8;
+                    v |= (uint32_t) ((mixd * bright) >> 8) << (8 * c);
+                }
+                dst[y * stride + col] = v | alpha;
             }
         }
     }
@@ -523,11 +596,12 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int x0, int x1, uin
 
 // --- the frame ---------------------------------------------------------------------------------------
 
-static int fade;                    // 0..256, the margins' brightness
+static int mix;                     // 0..256: how much of the strips is the map (the rest is the ambient glow)
 static int lastScore = -1;
 static int lastTorn;
 static int rawMargin = -1;          // the margin raw[] was drawn for (-1 = nothing yet)
-static uint32_t raw[PK_WIDE_H][2 * PK_WIDE_MAX_MARGIN];   // the last good margins, at full brightness
+static uint32_t raw[PK_WIDE_H][2 * PK_WIDE_MAX_MARGIN];   // the last map strips that checked out
+static uint32_t amb[PK_WIDE_H][2 * PK_WIDE_MAX_MARGIN];   // this frame's ambient strips
 
 void pk_wide_configure(int game) {
     configured = game > PK_WIDE_OFF && game < (int) (sizeof(GAMES) / sizeof(GAMES[0]));
@@ -546,18 +620,22 @@ void pk_wide_reset(void) {
     prev = -1;
     npieces[0] = npieces[1] = 0;
     shown = 0;
-    fade = 0;
+    mix = 0;
     rawMargin = -1;
     lastScore = -1;
+    edgeAccOk = false;
 }
 
 int pk_wide_last_score(void) { return lastScore; }
 int pk_wide_last_torn(void) { return lastTorn; }
 
-static inline uint32_t dim(uint32_t c, int f) {
-    if (f >= 256) return c;
-    uint32_t rb = ((c & 0xFF00FF) * (uint32_t) f >> 8) & 0xFF00FF, g = ((c & 0x00FF00) * (uint32_t) f >> 8) & 0x00FF00;
-    return (c & 0xFF000000) | rb | g;
+/** a * (256 - t) + b * t, per channel, keeping a's alpha. */
+static inline uint32_t lerp(uint32_t a, uint32_t b, int t) {
+    if (t <= 0) return a;
+    if (t >= 256) return b;
+    uint32_t rb = (((a & 0xFF00FF) * (uint32_t) (256 - t) + (b & 0xFF00FF) * (uint32_t) t) >> 8) & 0xFF00FF;
+    uint32_t g = (((a & 0x00FF00) * (uint32_t) (256 - t) + (b & 0x00FF00) * (uint32_t) t) >> 8) & 0x00FF00;
+    return (a & 0xFF000000) | rb | g;
 }
 
 int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int margin, uint32_t* centre) {
@@ -622,17 +700,19 @@ int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int 
         }
         if (centre) drawRegion(s, bestCx, bestCy, 0, PK_WIDE_W, centre, PK_WIDE_W, alpha);
         rawMargin = margin;
-        fade = fade + FADE_STEP > 256 ? 256 : fade + FADE_STEP;
+        mix = mix + MIX_STEP > 256 ? 256 : mix + MIX_STEP;
     } else {
-        fade = fade - FADE_STEP < 0 ? 0 : fade - FADE_STEP;
+        mix = mix - MIX_STEP < 0 ? 0 : mix - MIX_STEP;   // the last map strips, frozen, dissolve into the glow
     }
-    if (rawMargin != margin) fade = 0;   // nothing drawn at this width yet
+    if (rawMargin != margin) mix = 0;   // no map drawn at this width yet
+    if (mix < 256) ambientEdges(frame, margin, alpha, &amb[0][0], 2 * PK_WIDE_MAX_MARGIN);
+    else edgeAccOk = false;            // the glow starts from the edges as they are when it's next needed
     for (int y = 0; y < PK_WIDE_H; y++) {
         for (int x = 0; x < margin; x++) {
-            out[y * ow + x] = fade ? dim(raw[y][x], fade) : alpha;
-            out[y * ow + margin + PK_WIDE_W + x] = fade ? dim(raw[y][margin + x], fade) : alpha;
+            out[y * ow + x] = lerp(amb[y][x], raw[y][x], mix);
+            out[y * ow + margin + PK_WIDE_W + x] = lerp(amb[y][margin + x], raw[y][margin + x], mix);
         }
     }
     prev = cur;
-    return fade;
+    return mix;
 }

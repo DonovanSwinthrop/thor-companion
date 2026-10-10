@@ -497,7 +497,9 @@ section has how and why). The ground rule it was built on: **the rebuild of the 
 frame pixel for pixel** - check any change with `mgba_dump`'s `wideon 22` + `widecheck` + `widestats` on walking
 captures of both games, never by eye. Retail FireRed rev 1 / Emerald only (`WideScreen.gameFor`, a table per build in
 `pk_wide.c`); RAM after frame N-1 is what frame N shows, and a snapshot can be torn (checked against VRAM tilemaps /
-OAM, never trusted alone). ASPECT has three values now, so the companion's row is an `OptionSelector`.
+OAM, never trusted alone). ASPECT has three values now, so the companion's row is an `OptionSelector`. Off the map the
+strips are **ambient edges** (a glow from the game's own edge pixels), crossfaded with the map strips; look at transition
+changes with `widerec` + `scripts/wide_gif.py --sheet` (boot and a scripted wild battle, both games), not by guessing.
 **SHADERS** (a sub-page of SETTINGS on either screen; `EmulatorView.FrameRenderer`, shaders in
 `ScreenShaders.kt`): FILTER (`Prefs.screenFilter`: NONE / LCD / LCD PAPER / SCANLINES / CRT), GRID (`Prefs.gridStrength`: SOFT /
 MEDIUM default / STRONG, for LCD and LCD PAPER - the `uGrid` uniform from `ScreenShaders.gridFor`, greyed out on

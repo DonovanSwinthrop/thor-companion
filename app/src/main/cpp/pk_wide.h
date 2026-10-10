@@ -48,10 +48,11 @@ void pk_wide_reset(void);
 
 /**
  * Emu thread, after each frame: `out` ((240 + 2 * margin) x 160) gets `frame` (the core's
- * 240 x 160) in the middle and the rebuilt overworld beside it, faded to black wherever it
- * can't be checked (battles, menus, transitions). With `centre` set (headless checks), the
- * rebuild of the middle 240 x 160 goes there too, sprites included. Returns the margins'
- * brightness, 0..256.
+ * 240 x 160) in the middle and the rebuilt overworld beside it - or, wherever that can't be
+ * checked (title, battles, menus, transitions), a glow spread from the frame's own edges,
+ * crossfaded. With `centre` set (headless checks), the
+ * rebuild of the middle 240 x 160 goes there too, sprites included. Returns how much of the
+ * strips is the map, 0..256 (the rest is the glow).
  */
 int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int margin, uint32_t* centre);
 

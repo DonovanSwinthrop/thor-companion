@@ -131,8 +131,9 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
 - **Status bar** (optional): game, location, money, clock and battery above the game.
 - **Aspect**: the GBA's own 3:2, stretched to fill a 16:9 top screen, or **WIDE**: the overworld drawn past the
   GBA's edges, so a wide screen shows more of the map with the pixels kept square (FireRed and Emerald for now).
-  The extra strips are rebuilt every frame from the game's own map, tiles and sprites, and fade out in battles and
-  menus. Settings shows a preview of each.
+  The extra strips are rebuilt every frame from the game's own map, tiles and sprites; on the title screen, in
+  menus and battles they glow with the colours at the game's edges, crossfading as you go in and out.
+  Settings shows a preview of each.
 - **Shaders** (optional): an LCD grid (plain or on paper), scanlines or a CRT look, and the colours as the GBA's own screen
   showed them - on the game and, if you like, the companion screen too.
 - **Controls**: remap every GBA button and hotkey, or turn hotkeys off. X and Y

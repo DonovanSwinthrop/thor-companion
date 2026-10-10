@@ -38,6 +38,7 @@
 //                        frame, pixel for pixel, printing frames that differ; `widestats` prints
 //                        the tally since
 //   wideshot FILE      - write the last wide frame as a PPM
+//   widerec FILE N     - run N frames, recording every wide frame into FILE (scripts/wide_gif.py)
 //   layers MASK        - draw only the video layers in MASK from the next frame on
 //                        (bit 0-3 = BG0-BG3, bit 4 = OBJ; 0x1F = all, the default)
 //   shot FILE          - write the current frame to FILE as a binary PPM (P6) -
@@ -728,11 +729,28 @@ int main(int argc, char** argv) {
             wideCheck = true;
             memset(&wideStats, 0, sizeof(wideStats));
         } else if (!strcmp(cmd, "widestats")) {
-            printf("wide: %d frames, %d unverified (margins faded), %d with torn sprite lists; centre checked on %d: "
+            printf("wide: %d frames, %d unverified (ambient edges), %d with torn sprite lists; centre checked on %d: "
                    "%d exact, worst %d px (frame %d); %.0f us a frame on average, %.0f at most%s\n", wideStats.frames,
                    wideStats.unverified, wideStats.torn, wideStats.checked, wideStats.exact, wideStats.worst,
                    wideStats.worstFrame, wideStats.frames ? wideStats.ns / wideStats.frames / 1000 : 0,
                    wideStats.maxNs / 1000, wideCheck ? " (with the centre check)" : "");
+        } else if (!strcmp(cmd, "widerec")) {
+            // N frames (keys as `keys` holds them), every wide frame's RGB appended to FILE after a
+            // u32 width, height, count header - scripts/wide_gif.py turns it into an animation.
+            sscanf(line, "%*s %255s %d", arg1, &n);
+            FILE* f = fopen(arg1, "wb");
+            if (f) {
+                uint32_t hdr[3] = { (uint32_t) (PK_WIDE_W + 2 * wideMargin), PK_WIDE_H, (uint32_t) n };
+                fwrite(hdr, 4, 3, f);
+                for (int k = 0; k < n; k++) {
+                    runFrame();
+                    for (uint32_t i = 0; i < hdr[0] * PK_WIDE_H; i++) {
+                        uint8_t rgb[3] = { (uint8_t) wideOut[i], (uint8_t) (wideOut[i] >> 8), (uint8_t) (wideOut[i] >> 16) };
+                        fwrite(rgb, 1, 3, f);
+                    }
+                }
+                fclose(f);
+            }
         } else if (!strcmp(cmd, "wideshot")) {
             sscanf(line, "%*s %255s", arg1);
             FILE* f = fopen(arg1, "wb");
