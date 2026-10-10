@@ -2,6 +2,7 @@ package com.pokedaisy.app
 
 import android.content.Context
 import com.pokedaisy.app.companion.FfMode
+import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.GridStrength
 import com.pokedaisy.app.companion.ScreenFilter
 import com.pokedaisy.app.companion.FfMusicMode
@@ -171,10 +172,12 @@ class Prefs(context: Context) {
         get() = p.getBoolean("status_bar_on_companion", false)
         set(v) = p.edit().putBoolean("status_bar_on_companion", v).apply()
 
-    /** Whether the game is stretched to fill the top screen (16:9) instead of kept at the GBA's 3:2. */
-    var stretchGame: Boolean
-        get() = p.getBoolean("stretch_game", false)
-        set(v) = p.edit().putBoolean("stretch_game", v).apply()
+    /** How the game sits on the top screen: the GBA's 3:2, stretched to fill it, or WIDE (more of the
+     * map at the sides). Before WIDE this was a boolean, "stretch_game", which still picks STRETCH. */
+    var gameAspect: GameAspect
+        get() = GameAspect.entries.firstOrNull { it.name == p.getString("game_aspect", null) }
+            ?: if (p.getBoolean("stretch_game", false)) GameAspect.STRETCH else GameAspect.ORIGINAL
+        set(v) = p.edit().putString("game_aspect", v.name).remove("stretch_game").apply()
 
     /** Whether the game's colours are shown as the GBA's own LCD showed them ([ScreenShaders.GBA_COLOR]). */
     var gbaColors: Boolean

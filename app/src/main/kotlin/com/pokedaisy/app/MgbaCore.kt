@@ -48,6 +48,15 @@ object MgbaCore {
     external fun pkSetKeys(mask: Int)
     external fun pkRunFrame()
 
+    /** WIDE ([WideScreen]): which game's tables pk_wide.c uses ([WideScreen.gameFor]; 0 = off). Emu thread. */
+    external fun pkWideConfigure(game: Int)
+    /** WIDE: GBA pixels to draw beside the game, per side ([WideScreen.marginFor]; 0 = none). Any thread. */
+    external fun pkWideSetMargin(margin: Int)
+    /** Direct buffer over the wide frame (room for [WideScreen.MAX_MARGIN]); null for a Game Boy core. */
+    external fun pkWideBuffer(): ByteBuffer?
+    /** The last frame's wide width ([pkWideBuffer] holds that x 160), or 0 if it wasn't drawn wide. Emu thread. */
+    external fun pkWideWidth(): Int
+
     /** REWIND: keep [entries] states, one every 2 frames (0 = off, its memory freed). Emu thread. */
     external fun pkSetRewind(entries: Int)
 

@@ -752,6 +752,43 @@ ON, imported ones OFF. `Prefs.cheatsEnabled` is the master switch (off by defaul
 - **Savestates** don't carry cheats (`SAVESTATE_CHEATS` isn't in the flags); a state made with a
   cheat on does carry the memory it wrote, like any emulator.
 
+## WIDE (ASPECT)
+
+SETTINGS > ASPECT > WIDE fills a wide screen with the game at full height and square pixels: the middle is the
+game's own 240x160 frame, the strips beside it (22 GBA px per side on the Thor's 1920x1080) are the overworld,
+rebuilt every frame from the game's memory by `app/src/main/cpp/pk_wide.c`. A wider PPU can't do it: the field
+only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would be wrap-around garbage.
+
+- **What it draws from**: the map grid in `VMap` (the map + 7 metatiles of stitched connections per side); past
+  that, the connected maps' own cells from the ROM (`gMapHeader.connections`, the inverse of `fieldmap.c`'s
+  `Fill*Connection`), else the border. Metatiles from the layout's tilesets (ROM), drawn as `DrawMetatile` does
+  (BG1 top / BG2 middle / BG3 bottom by layer type; FireRed names its buffers misleadingly: `gBGTilemapBuffers2`
+  is BG1). Pixels from VRAM and palette RAM, so animated tiles and fades are the game's. Sprites: `gSprites` in
+  `gSpriteOrder` with subsprites and semi-transparent blending, like `BuildOamBuffer`; NPCs the game hid only for
+  being more than 16 px off screen (`ObjectEvent.offScreen`) are shown - they stay loaded ~2 metatiles out.
+- **Timing**: the main loop computes frame N while N-1 is on screen and the VBlank handler uploads it, so the RAM
+  after frame N-1 describes the frame now drawn: `pk_wide.c` keeps that snapshot. When a step's row redraw runs the
+  main loop past VBlank, a snapshot is caught mid-update (pos moved, the ring offsets not yet). So the camera comes
+  from the BG scroll registers the frame was drawn with (mGBA's `memory.io`: write-only, open bus on a bus read)
+  plus the ring's anchor from RAM, and every candidate (both snapshots, pos +-1 metatile) is scored against the
+  frame's own BG1-3 tilemaps in VRAM; the sprite list must match the frame's OAM, else the last good one is kept.
+- **Fallback**: anything that doesn't check out - not mode 0 with BG1-3 on, windows hiding a layer at the screen's
+  edges (a Flash-dark cave, a battle transition), under 90% of the tilemap matching (battles, menu screens) - fades
+  the strips to black over 8 frames, and back when it checks out again.
+- **Games**: a table per build in `pk_wide.c` (`PK_WIDE_*`), picked in Kotlin by ROM CRC32 (`WideScreen.gameFor`):
+  retail FireRed rev 1 and Emerald. The QoL builds move every address; a game WIDE doesn't know shows as ORIGINAL
+  (the companion's pick-list tags WIDE NOT YET). Addresses came from the decomp ELFs mapped onto retail through the
+  literal pools (the ELFs in `$DECOMPS` are QoL builds: only FireRed's `VMap` / `gSaveBlock1Ptr` differ).
+- **Width**: `WideScreen.marginFor` - as many GBA px per side as fit with the game at the view's full height
+  (`EmulatorView.onWideMargin` -> `pkWideSetMargin`), up to 96. The core writes the wide frame next to its own
+  (`pkWideBuffer` / `pkWideWidth`); `EmulatorView` uploads whichever the last frame was, resizing its texture when
+  the width changes. Savestate thumbnails stay the 240x160 frame.
+- **Checks**: `scripts/widescreen_proto.py` is the Python original (reads `mgba_dump` captures). The C is checked
+  headless with `mgba_dump`'s `wideon` / `widecheck` / `widestats` (`native-capture/README.md`): it rebuilds the
+  middle 240x160 too and compares it with the real frame. Walking, running and NPCs moving, every frame matched
+  pixel for pixel on both games (2026-10-09). Not covered yet: weather drawn over the field (rain sprites, fog on
+  BG0) stops at the GBA's edges; scanline effects aren't extended.
+
 ## Build
 
 ```bash

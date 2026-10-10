@@ -38,7 +38,7 @@ class GameStageLayout(
             requestLayout()
         }
 
-    /** Fill the area instead of fitting [aspect] in it - see [Prefs.stretchGame]. */
+    /** Fill the area instead of fitting [aspect] in it: ASPECT > STRETCH or WIDE ([Prefs.gameAspect]). */
     var stretch = false
         set(v) {
             if (field == v) return

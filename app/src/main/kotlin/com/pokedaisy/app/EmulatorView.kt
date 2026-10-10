@@ -12,7 +12,9 @@ import javax.microedition.khronos.opengles.GL10
 
 /**
  * Draws the mGBA RGBA framebuffer as an aspect-fit (or, with [stretch], view-filling)
- * nearest-filtered quad, optionally through [gbaColors] and a screen effect.
+ * nearest-filtered quad, optionally through [gbaColors] and a screen effect. With [wide]
+ * (SETTINGS > ASPECT > WIDE) it draws the wide frame instead whenever the core made one: the
+ * game with the overworld rebuilt beside it ([WideScreen]), as wide as the view has room for.
  * Continuous render mode. The GL thread never reads the core's own buffer, which the emu
  * thread draws into line by line: each finished frame is copied out ([publishFrame]) and
  * that copy is what's uploaded. Uploading the live buffer showed a frame half drawn - the
@@ -27,7 +29,7 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
         get() = renderer.holdFrame
         set(v) { renderer.holdFrame = v }
 
-    /** Fill the whole view instead of keeping the GBA's 3:2 ([Prefs.stretchGame]). */
+    /** Fill the whole view instead of keeping the GBA's 3:2 (ASPECT > STRETCH, [Prefs.gameAspect]). */
     var stretch: Boolean = false
         set(v) {
             if (field == v) return
@@ -35,6 +37,25 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
             renderer.setStretch(v)
             reportGamePixel()
         }
+
+    /**
+     * WIDE ([WideScreen]): asks the core for as many GBA pixels beside the game as this view has
+     * room for ([onWideMargin]); frames the core then draws wide are shown at that width.
+     */
+    var wide: Boolean = false
+        set(v) {
+            if (field == v) return
+            field = v
+            reportWideMargin()
+            reportGamePixel()
+        }
+
+    /** Called (UI thread) with the GBA pixels per side WIDE should draw for this view (0 = none). */
+    var onWideMargin: ((Int) -> Unit)? = null
+
+    private fun reportWideMargin() {
+        onWideMargin?.invoke(if (wide) WideScreen.marginFor(width, height) else 0)
+    }
 
     /** Called (UI thread) with one GBA pixel's height on screen, in view px, whenever it changes -
      * SHADERS on the companion draw their grid at that size ([CompanionColors]). */
@@ -44,13 +65,15 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
 
     private fun reportGamePixel() {
         if (frameW == 0 || width == 0 || height == 0) return
-        // As FrameRenderer.recomputeQuad: the game's height on screen, letterboxed or stretched.
-        val h = if (stretch) height.toFloat() else minOf(height.toFloat(), width * frameH.toFloat() / frameW)
+        // As FrameRenderer.recomputeQuad: the game's height on screen, letterboxed or stretched
+        // (WIDE's frame is never wider than the view, so it's always the view's height).
+        val h = if (stretch || wide) height.toFloat() else minOf(height.toFloat(), width * frameH.toFloat() / frameW)
         onGamePixel?.invoke(h / frameH)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        reportWideMargin()
         reportGamePixel()
     }
 
@@ -122,16 +145,17 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
     // thread that has already exited - a bind or unbind sent then was lost (and
     // the next GL thread could read a freed buffer). See PokeDaisyActivity.arrangeScreens.
 
-    /** Called once after the core is up. */
-    fun bindCore(buffer: ByteBuffer, width: Int, height: Int) {
-        renderer.bind(buffer, width, height)
+    /** Called once after the core is up; [wideBuffer] is [MgbaCore.pkWideBuffer] (null: no WIDE for this core). */
+    fun bindCore(buffer: ByteBuffer, wideBuffer: ByteBuffer?, width: Int, height: Int) {
+        renderer.bind(buffer, wideBuffer, width, height)
         frameW = width
         frameH = height
         post { reportGamePixel() }
     }
 
-    /** Emu thread, right after a frame has run: hands the finished frame to the GL thread. */
-    fun publishFrame() = renderer.publish()
+    /** Emu thread, right after a frame has run: hands the finished frame to the GL thread - the
+     * wide one when the core drew it ([MgbaCore.pkWideWidth]). */
+    fun publishFrame() = renderer.publish(MgbaCore.pkWideWidth())
 
     /**
      * GL thread, once per draw: in RENDERMODE_CONTINUOUSLY the previous swap has just
@@ -176,10 +200,16 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
     private class FrameRenderer : Renderer {
         /** The core's own frame buffer, read only by [publish] (the emu thread). */
         private var buffer: ByteBuffer? = null
-        /** The last finished frame, copied out of [buffer]; what the GL thread uploads. */
+        /** The core's WIDE frame buffer ([MgbaCore.pkWideBuffer]), read only by [publish]; null without WIDE. */
+        private var wideBuffer: ByteBuffer? = null
+        /** The last finished frame, copied out of [buffer] or [wideBuffer]; what the GL thread uploads. */
         private var ready: ByteBuffer? = null
         /** [ready] holds a frame the texture doesn't have yet. */
         private var fresh = false
+        /** The core's frame size, and [ready]'s width (wider when it holds a WIDE frame). Under [frameLock]. */
+        private var frameW = 0
+        private var frameH = 0
+        private var readyW = 0
         private var texW = 0
         private var texH = 0
         private var surfaceW = 0
@@ -231,12 +261,16 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
         /** Guards [ready] / [fresh] only, so a copy never waits on a whole draw (taken after [lock]). */
         private val frameLock = Any()
 
-        fun bind(buf: ByteBuffer, w: Int, h: Int) = synchronized(lock) {
+        fun bind(buf: ByteBuffer, wide: ByteBuffer?, w: Int, h: Int) = synchronized(lock) {
             synchronized(frameLock) {
                 buffer = buf.also { it.order(ByteOrder.nativeOrder()) }
+                wideBuffer = wide?.also { it.order(ByteOrder.nativeOrder()) }
                 // A new one each time: a restarted core mustn't show the last game's frame first.
-                ready = ByteBuffer.allocateDirect(buf.capacity()).order(ByteOrder.nativeOrder())
+                ready = ByteBuffer.allocateDirect(maxOf(buf.capacity(), wide?.capacity() ?: 0)).order(ByteOrder.nativeOrder())
                 fresh = false
+                frameW = w
+                frameH = h
+                readyW = w
             }
             texW = w
             texH = h
@@ -244,13 +278,19 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
             dirtyGeometry = true
         }
 
-        /** Emu thread, between frames (so [buffer] is whole): copies it into [ready]. */
-        fun publish() = synchronized(frameLock) {
-            val src = buffer ?: return
+        /** Emu thread, between frames (so [buffer] is whole): copies it - or, [wideW] > 0, the
+         * WIDE frame that wide - into [ready]. */
+        fun publish(wideW: Int) = synchronized(frameLock) {
+            val wideSrc = wideBuffer?.takeIf { wideW > 0 }
+            val src = wideSrc ?: buffer ?: return
             val dst = ready ?: return
+            val w = if (wideSrc != null) wideW else frameW
             src.position(0)
+            src.limit(minOf(src.capacity(), w * frameH * 4))
             dst.position(0)
             dst.put(src)
+            src.limit(src.capacity())
+            readyW = w
             fresh = true
             (frameLock as Object).notifyAll()
         }
@@ -335,6 +375,12 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
             // is held only for the copy into GL, not the passes below.
             synchronized(frameLock) {
                 val buf = ready ?: return  // set with buffer by bind
+                if (readyW != texW) {
+                    // WIDE came on or off, or the view's width changed it: a texture of the new size.
+                    texW = readyW
+                    texAllocated = false
+                    recomputeQuad()
+                }
                 if (!texAllocated) {
                     // The last frame published (a new GL context after SWAP SCREENS has none yet).
                     buf.position(0)

@@ -24,6 +24,7 @@
 
 #include "pk_cheats.h"
 #include "pk_rewind.h"
+#include "pk_wide.h"
 
 #define LOG_TAG "pokedaisy/jni"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -71,6 +72,12 @@ static struct {
     int rewindEntries;
     int rewindTick;
     bool rewinding;
+    // WIDE (pk_wide.c): the frame with the rebuilt overworld beside it, wideW wide (0 = not
+    // drawn: the screen shows `video`). The margin comes from the UI thread (the view's size).
+    uint32_t* wide;
+    int wideW;
+    int wideGame;
+    volatile int wideMargin;
 } g;
 
 #define PK_REWIND_INTERVAL 2
@@ -138,6 +145,11 @@ static void pkTeardown(void) {
     g.video = NULL;
     g.vw = g.vh = 0;
     g.audioAvail = 0;
+    pk_wide_configure(PK_WIDE_OFF);
+    g.wideGame = PK_WIDE_OFF;
+    g.wideW = 0;
+    free(g.wide);
+    g.wide = NULL;
     pthread_rwlock_unlock(&pk_coreLock);
 }
 
@@ -252,6 +264,9 @@ Java_com_pokedaisy_app_MgbaCore_pkInit(JNIEnv* env, jobject thiz,
     g.vh = h;
     g.saveVf = saveVf;
     g.audioAvail = 0;
+    if (pk_is_gba(core)) {
+        g.wide = calloc((size_t) (PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H, sizeof(uint32_t));
+    }
     pthread_rwlock_unlock(&pk_coreLock);
 
     LOGI("core up: %ux%u, freq %d Hz, sample rate %d", w, h, core->frequency(core), PK_SAMPLE_RATE);
@@ -323,6 +338,44 @@ Java_com_pokedaisy_app_MgbaCore_pkRunFrame(JNIEnv* env, jobject thiz) {
     }
     g.core->runFrame(g.core);
     pkDrainAudio();
+    // WIDE: only with a game it knows and room beside the game. 32-bit colour, like the screen's upload.
+    int margin = g.wideMargin;
+    if (g.wide && g.wideGame != PK_WIDE_OFF && margin > 0 && sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H) {
+        if (margin > PK_WIDE_MAX_MARGIN) margin = PK_WIDE_MAX_MARGIN;
+        pk_wide_frame(g.core, (const uint32_t*) g.video, g.wide, margin, NULL);
+        g.wideW = PK_WIDE_W + 2 * margin;
+    } else {
+        g.wideW = 0;
+    }
+}
+
+// WIDE: which game's tables to use (PK_WIDE_*, WideScreen.kt; 0 = off). Emu thread.
+JNIEXPORT void JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideConfigure(JNIEnv* env, jobject thiz, jint game) {
+    if (game == g.wideGame) return;
+    g.wideGame = pk_is_gba(g.core) ? game : PK_WIDE_OFF;
+    pk_wide_configure(g.wideGame);
+}
+
+// WIDE: GBA pixels to draw beside the game per side (the view's spare width); any thread.
+JNIEXPORT void JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideSetMargin(JNIEnv* env, jobject thiz, jint margin) {
+    g.wideMargin = margin < 0 ? 0 : margin > PK_WIDE_MAX_MARGIN ? PK_WIDE_MAX_MARGIN : margin;
+}
+
+// The wide frame buffer (room for the widest margin; the last frame is pkWideWidth() x 160).
+JNIEXPORT jobject JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideBuffer(JNIEnv* env, jobject thiz) {
+    if (!g.wide) {
+        return NULL;
+    }
+    return (*env)->NewDirectByteBuffer(env, g.wide, (jlong) (PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H * sizeof(uint32_t));
+}
+
+// The last frame's wide width, or 0 when it wasn't drawn wide (the screen shows pkVideoBuffer). Emu thread.
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideWidth(JNIEnv* env, jobject thiz) {
+    return g.wideW;
 }
 
 // REWIND: keep [entries] states (0 = off, the buffer freed). Emu thread, like pkRunFrame.
@@ -702,6 +755,7 @@ Java_com_pokedaisy_app_MgbaCore_pkLoadState(JNIEnv* env, jobject thiz, jstring j
     }
     bool ok = mCoreLoadStateNamed(g.core, vf, SAVESTATE_SAVEDATA | SAVESTATE_RTC);
     vf->close(vf);
+    pk_wide_reset();   // the RAM it kept from the last frame is another moment's
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 

@@ -36,6 +36,7 @@ import com.pokedaisy.app.companion.ui.AchievementBadges
 import com.pokedaisy.app.companion.BatteryStatus
 import com.pokedaisy.app.companion.DeviceBattery
 import com.pokedaisy.app.companion.FfMode
+import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.GridStrength
 import com.pokedaisy.app.companion.ScreenFilter
 import com.pokedaisy.app.companion.FfMusicMode
@@ -123,6 +124,8 @@ class PokeDaisyActivity : Activity() {
     /** Opened by a frontend through [LaunchActivity] (see [exitGame]). */
     private var fromFrontend = false
     private var romKey: String = ""      // ROM CRC32, for per-ROM prefs
+    /** WIDE's native tables for this ROM ([WideScreen.gameFor]); OFF for a game it doesn't know. */
+    private var wideGame = WideScreen.OFF
     private var states: SaveStates? = null
 
     private val telemetry = TelemetryStore()
@@ -389,11 +392,12 @@ class PokeDaisyActivity : Activity() {
             Prefs(this@PokeDaisyActivity).statusBarOnCompanion = on
             runOnUiThread { syncGameScreen() }
         }
-        override val stretchGame get() = Prefs(this@PokeDaisyActivity).stretchGame
-        override fun setStretchGame(on: Boolean) {
-            Prefs(this@PokeDaisyActivity).stretchGame = on
+        override val gameAspect get() = Prefs(this@PokeDaisyActivity).gameAspect
+        override fun setGameAspect(aspect: com.pokedaisy.app.companion.GameAspect) {
+            Prefs(this@PokeDaisyActivity).gameAspect = aspect
             runOnUiThread { syncGameScreen() }
         }
+        override val wideSupported get() = wideGame != WideScreen.OFF
         override val gbaColors get() = Prefs(this@PokeDaisyActivity).gbaColors
         override fun setGbaColors(on: Boolean) {
             Prefs(this@PokeDaisyActivity).gbaColors = on
@@ -517,6 +521,8 @@ class PokeDaisyActivity : Activity() {
         view.onVsync = { if (::engine.isInitialized) engine.onVsync() else 0L }
         // SHADERS on the companion: its grid at the game's own pixel size, so both screens match.
         view.onGamePixel = CompanionColors::setCell
+        // WIDE: as many GBA pixels beside the game as this view has room for.
+        view.onWideMargin = { MgbaCore.pkWideSetMargin(it) }
         if (debugMirror) view.setZOrderMediaOverlay(true) // see EmulatorView's z-order note
         hud = TextView(this).apply {
             setTextColor(Color.WHITE)
@@ -648,6 +654,7 @@ class PokeDaisyActivity : Activity() {
         // GBA art fingerprints, FireRed's region_map.c); its click is borrowed.
         val gameBoy = RomIdentity.isGameBoy(r)
         romIsGameBoy = gameBoy
+        wideGame = if (gameBoy) WideScreen.OFF else WideScreen.gameFor(crc)
         // FireRed / Emerald party-menu art and region maps come from the ROM
         // itself, once per ROM (see RomArt) - nothing of the game is bundled.
         if (!gameBoy) RomArt.prefetch(filesDir, crc, r) else com.pokedaisy.app.companion.data.Gen1Art.prefetch(filesDir, r)
@@ -688,7 +695,7 @@ class PokeDaisyActivity : Activity() {
                     runOnUiThread {
                         stage.aspect = w.toFloat() / h   // 3:2, or a Game Boy's 10:9
                         touchControls.shoulders = !gameBoy
-                        view.bindCore(buf, w, h)
+                        view.bindCore(buf, MgbaCore.pkWideBuffer(), w, h)
                     }
                 }
             }
@@ -1030,8 +1037,8 @@ class PokeDaisyActivity : Activity() {
         setContentView(view)
     }
 
-    /** Show the status bar above the game per SETTINGS > STATUS BAR, fit or
-     * stretch the game per SETTINGS > ASPECT, and draw it through SETTINGS > SHADERS. */
+    /** Show the status bar above the game per SETTINGS > STATUS BAR, fit, stretch or widen
+     * the game per SETTINGS > ASPECT, and draw it through SETTINGS > SHADERS. */
     private fun syncGameScreen() {
         if (!::statusBar.isInitialized) return
         val prefs = Prefs(this)
@@ -1039,8 +1046,13 @@ class PokeDaisyActivity : Activity() {
         statusBar.visibility = if (prefs.statusBar && !prefs.statusBarOnCompanion) View.VISIBLE else View.GONE
         performance.visibility = if (prefs.showPerformance) View.VISIBLE else View.GONE
         com.pokedaisy.app.companion.ui.CompanionStatusBar.shown = prefs.statusBar && prefs.statusBarOnCompanion
-        (statusBar.parent as? GameStageLayout)?.stretch = prefs.stretchGame
-        view.stretch = prefs.stretchGame
+        // WIDE on a game it doesn't know is ORIGINAL; otherwise the game takes the whole area and
+        // the core draws the overworld into the room beside it.
+        val aspect = prefs.gameAspect.let { if (it == GameAspect.WIDE && wideGame == WideScreen.OFF) GameAspect.ORIGINAL else it }
+        (statusBar.parent as? GameStageLayout)?.stretch = aspect != GameAspect.ORIGINAL
+        view.stretch = aspect == GameAspect.STRETCH
+        view.wide = aspect == GameAspect.WIDE
+        if (::engine.isInitialized) engine.wideGame = if (aspect == GameAspect.WIDE) wideGame else WideScreen.OFF
         view.gbaColors = prefs.gbaColors
         CompanionColors.set(
             prefs.gbaColors && prefs.companionShaders,

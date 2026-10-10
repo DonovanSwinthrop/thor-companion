@@ -491,6 +491,13 @@ the top screen - `EmulatorView.stretch` drops the quad's letterbox and `GameStag
 game all the space under the status bar. The bottom screen flips it in place; the top-screen Settings opens
 `AspectPicker` (both choices drawn as the top screen in miniature, with the newest savestate thumbnail, else a
 drawn stand-in) and the game picks it up on resume (`syncGameScreen`).
+**ASPECT > WIDE** (`GameAspect`, `Prefs.gameAspect` - it replaced the `stretch_game` boolean, which still reads
+as STRETCH): the overworld rebuilt past the GBA's edges by `pk_wide.c` every frame (docs/DEVELOPMENT.md's "WIDE"
+section has how and why). The ground rule it was built on: **the rebuild of the middle 240x160 must equal the real
+frame pixel for pixel** - check any change with `mgba_dump`'s `wideon 22` + `widecheck` + `widestats` on walking
+captures of both games, never by eye. Retail FireRed rev 1 / Emerald only (`WideScreen.gameFor`, a table per build in
+`pk_wide.c`); RAM after frame N-1 is what frame N shows, and a snapshot can be torn (checked against VRAM tilemaps /
+OAM, never trusted alone). ASPECT has three values now, so the companion's row is an `OptionSelector`.
 **SHADERS** (a sub-page of SETTINGS on either screen; `EmulatorView.FrameRenderer`, shaders in
 `ScreenShaders.kt`): FILTER (`Prefs.screenFilter`: NONE / LCD / LCD PAPER / SCANLINES / CRT), GRID (`Prefs.gridStrength`: SOFT /
 MEDIUM default / STRONG, for LCD and LCD PAPER - the `uGrid` uniform from `ScreenShaders.gridFor`, greyed out on

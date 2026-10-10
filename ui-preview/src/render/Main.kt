@@ -153,9 +153,9 @@ class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>
     private var bar = false
     override val statusBar get() = bar
     override fun setStatusBar(on: Boolean) { bar = on }
-    private var stretch = false
-    override val stretchGame get() = stretch
-    override fun setStretchGame(on: Boolean) { stretch = on }
+    private var aspect = com.pokedaisy.app.companion.GameAspect.ORIGINAL
+    override val gameAspect get() = aspect
+    override fun setGameAspect(aspect: com.pokedaisy.app.companion.GameAspect) { this.aspect = aspect }
     private var colors = false
     override val gbaColors get() = colors
     override fun setGbaColors(on: Boolean) { colors = on }
@@ -474,12 +474,12 @@ fun withApiKey(make: () -> androidx.activity.ComponentActivity): androidx.activi
     return make()
 }
 
-/** [make] with ASPECT = [stretch] and the STATUS BAR on, plus a savestate thumbnail for the
+/** [make] with ASPECT = [aspect] and the STATUS BAR on, plus a savestate thumbnail for the
  * ASPECT preview when a game frame is around: native-capture/menu-shots/thor/top.png (untracked -
  * the Thor's top screen, `adb exec-out screencap`, cropped to the game and scaled to 240x160). */
-fun withAspect(stretch: Boolean, make: () -> androidx.activity.ComponentActivity): androidx.activity.ComponentActivity {
+fun withAspect(aspect: com.pokedaisy.app.companion.GameAspect, make: () -> androidx.activity.ComponentActivity): androidx.activity.ComponentActivity {
     val ctx = android.content.Context()
-    Prefs(ctx).stretchGame = stretch
+    Prefs(ctx).gameAspect = aspect
     Prefs(ctx).statusBar = true
     val shot = File("../../../../native-capture/menu-shots/thor/top.png")
     if (shot.isFile) shot.copyTo(File(ctx.filesDir, "states/0badcafe/ss1.png").apply { parentFile.mkdirs() }, overwrite = true)
@@ -544,7 +544,7 @@ fun activity(make: () -> androidx.activity.ComponentActivity): () -> (@Composabl
     prefs.hiddenRoms = emptySet()
     prefs.hotkeysEnabled = true
     prefs.savesDirOverride = null
-    prefs.stretchGame = false
+    prefs.gameAspect = com.pokedaisy.app.companion.GameAspect.ORIGINAL
     prefs.statusBar = false
     // The default theme (PokéDaisy); a shot that wants another sets it in its make().
     prefs.appTheme = com.pokedaisy.app.companion.ui.theme.DAISY_THEME_ID
@@ -775,6 +775,10 @@ fun main(args: Array<String>) {
         // GAME BUTTONS' subtitle, further down the list.
         Shot("$g-settings-subtitles", bw, bh, bd, companion("SETTINGS")) { onNodeWithText("TWEAKS").performScrollTo() },
         Shot("$g-settings-ffmusic", bw, bh, bd, companion("SETTINGS")) { onAllNodesWithText("FF MUSIC").onFirst().performClick() },
+        // ASPECT's pick-list: WIDE tagged NOT YET (the preview's settings know no game).
+        Shot("$g-settings-aspect", bw, bh, bd, companion("SETTINGS")) {
+            onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        },
         Shot("$g-settings-hotkeys", bw, bh, bd, companion("SETTINGS")) {
             onNodeWithText("HOTKEYS").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         },
@@ -1017,7 +1021,10 @@ fun main(args: Array<String>) {
         Shot("library-hidden", tw, th, td, activity { withHidden { LibraryActivity() } }),
         // ASPECT's picker: the drawn stand-in (no savestates), then a real frame with the status bar.
         Shot("settings-aspect", tw, th, td, activity { SettingsActivity() }) { onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) },
-        Shot("settings-aspect-stretch", tw, th, td, activity { withAspect(true) { SettingsActivity() } }) {
+        Shot("settings-aspect-stretch", tw, th, td, activity { withAspect(com.pokedaisy.app.companion.GameAspect.STRETCH) { SettingsActivity() } }) {
+            onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        },
+        Shot("settings-aspect-wide", tw, th, td, activity { withAspect(com.pokedaisy.app.companion.GameAspect.WIDE) { SettingsActivity() } }) {
             onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         },
         Shot("settings-shaders", tw, th, td, activity { SettingsActivity() }) {

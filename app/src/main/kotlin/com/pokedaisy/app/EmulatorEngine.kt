@@ -66,6 +66,9 @@ class EmulatorEngine(
     /** REWIND (Settings): states kept for the rewind hotkey, 0 = off. Picked up on the emu thread. */
     @Volatile var rewindEntries = 0
 
+    /** WIDE's native tables for this game ([WideScreen.gameFor]), or [WideScreen.OFF]; applied between frames. */
+    @Volatile var wideGame = WideScreen.OFF
+
     /** What fast-forward sounds like (Settings: STEADY / SPED-UP / OFF). */
     @Volatile var ffMusicMode = FfMusicMode.STEADY
     /** SMART: 1x while a menu screen or the region map is up ([FfMenuWatch], [RegionMapWatch]). */
@@ -480,6 +483,7 @@ class EmulatorEngine(
         var vsyncMode = false
         val silence = ShortArray(bufferFrames * 2)
         var rewindApplied = -1   // pkInit dropped any buffer: set it again for this core
+        var wideApplied = WideScreen.OFF   // pkInit starts with WIDE off
         var frame = 0L
         try {
             while (running) {
@@ -489,6 +493,11 @@ class EmulatorEngine(
                 if (rewindWanted != rewindApplied) {
                     MgbaCore.pkSetRewind(rewindWanted)
                     rewindApplied = rewindWanted
+                }
+                val wideWanted = wideGame
+                if (wideWanted != wideApplied) {
+                    MgbaCore.pkWideConfigure(wideWanted)
+                    wideApplied = wideWanted
                 }
                 val rewinding = rewindHeld && rewindWanted > 0
                 MgbaCore.pkSetRewinding(rewinding)

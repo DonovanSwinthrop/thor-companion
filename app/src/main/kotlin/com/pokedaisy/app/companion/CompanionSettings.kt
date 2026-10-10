@@ -119,10 +119,12 @@ interface CompanionSettings {
     val showPerformance: Boolean get() = false
     fun setShowPerformance(on: Boolean) {}
 
-    /** Whether the game is stretched to fill the top screen instead of kept at
-     * 3:2 - see [Prefs.stretchGame]. */
-    val stretchGame: Boolean
-    fun setStretchGame(on: Boolean)
+    /** How the game sits on the top screen: 3:2, stretched or WIDE - see [Prefs.gameAspect]. */
+    val gameAspect: GameAspect
+    fun setGameAspect(aspect: GameAspect)
+
+    /** Whether WIDE knows the running game (WideScreen.gameFor); it shows as ORIGINAL otherwise. */
+    val wideSupported: Boolean get() = false
 
     /** The GBA LCD's colours on the game - see [Prefs.gbaColors]. */
     val gbaColors: Boolean
@@ -206,6 +208,18 @@ enum class FfMode(val label: String) {
     NORMAL(tk("NORMAL")),
 }
 
+
+/** SETTINGS > ASPECT: how the game sits on its screen, in the order the pickers list them.
+ * [label] stays English; the rows translate it. */
+enum class GameAspect(val label: String) {
+    /** The GBA's 3:2, bars at the sides. */
+    ORIGINAL(tk("ORIGINAL")),
+    /** The game stretched to fill the screen. */
+    STRETCH(tk("STRETCH")),
+    /** The overworld drawn past the GBA's edges, rebuilt from the game's own memory (WideScreen,
+     * pk_wide.c); the games it doesn't know yet show as ORIGINAL. */
+    WIDE(tk("WIDE")),
+}
 
 /** SETTINGS > SHADERS > FILTER: the screen effect drawn over the game (EmulatorView, ScreenShaders),
  * in the order the selector lists them. [label] stays English; the rows translate it. */

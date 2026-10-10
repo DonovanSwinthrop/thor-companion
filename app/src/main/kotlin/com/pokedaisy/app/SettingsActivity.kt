@@ -275,8 +275,8 @@ class SettingsActivity : ComponentActivity() {
                     }
                 }
                 AspectPicker(
-                    prefs.stretchGame, gameScreenAspect(), prefs.statusBar && !prefs.statusBarOnCompanion, shot, m,
-                    onPick = { prefs.stretchGame = it; aspectPicker = false; revision++ },
+                    prefs.gameAspect, gameScreenAspect(), prefs.statusBar && !prefs.statusBarOnCompanion, shot, m,
+                    onPick = { prefs.gameAspect = it; aspectPicker = false; revision++ },
                     onDismiss = { aspectPicker = false },
                 )
             }
@@ -427,8 +427,8 @@ class SettingsActivity : ComponentActivity() {
                     prefs.statusBar = i > 0
                 }
             },
-            // The game at 3:2 or stretched to fill the screen; picked by preview.
-            SettingRow(tk("ASPECT"), aspectLabel(prefs.stretchGame)) { aspectPicker = true },
+            // The game at 3:2, stretched to fill the screen, or WIDE (more of the map); picked by preview.
+            SettingRow(tk("ASPECT"), aspectLabel(prefs.gameAspect)) { aspectPicker = true },
             // FILTER (LCD / LCD PAPER / SCANLINES / CRT) and GBA COLORS, on their own page.
             SettingRow(tk("SHADERS"), prefs.screenFilter.label) { screen = Screen.SHADERS },
             // One screen held upright: the companion along the bottom, or right under the game (the touch pad below it).

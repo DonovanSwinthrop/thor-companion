@@ -41,12 +41,14 @@ One command per line:
 
 | Command | Effect |
 |---|---|
-| `wait N` | Advance N frames with no keys held |
+| `wait N` | Advance N frames with no keys held (unless `keys` holds some) |
+| `keys KEYS` | Hold KEYS from now on, through every `wait`; `keys NONE` lets go. For frame-by-frame captures - `hold KEYS 1` runs two frames, since it lets go for one |
 | `press KEYS` | Hold KEYS for one frame, release | `KEYS` is comma-separated: `A,B,SELECT,START,UP,DOWN,LEFT,RIGHT,L,R` |
 | `hold KEYS N` | Hold KEYS for N frames, release |
 | `dump DIR` | Write `DIR/ewram.bin` + `DIR/iwram.bin` (DIR must already exist) |
 | `shot FILE` | Write the current frame to `FILE` as a binary PPM (convert with PIL) — for checking what the game actually shows (e.g. party-menu icons) |
-| `vdump DIR` | Write `DIR/{vram,pal,oam,io}.bin` — VRAM, palette RAM, OAM and I/O registers, i.e. what the PPU draws from (how the CFRU party-slot graphics were traced back to the ROM) |
+| `layers MASK` | Draw only these video layers from the next frame on (bit 0-3 = BG0-BG3, bit 4 = OBJ; `0x1F` = all) - e.g. `0x0E` for the overworld's map layers alone, no sprites or text |
+| `vdump DIR` | Write `DIR/{vram,pal,oam,io}.bin` — VRAM, palette RAM, OAM and I/O registers, i.e. what the PPU draws from (how the CFRU party-slot graphics were traced back to the ROM) — plus `iolatch.bin`, the registers as last written: write-only ones (the BG scroll offsets) read back as open bus in `io.bin` |
 | `poke8/poke16/poke32 ADDR VAL` | Write RAM (hex or decimal) — e.g. force a party mon fainted/asleep/an egg before opening the party menu |
 | `peek32 ADDR` | Print a word to stdout |
 | `poke8p PTR OFF VAL` / `peek8p PTR OFF` | Write / print the byte at `*(u32 *)PTR + OFF` — save-block fields (Emerald moves its save blocks on every load), e.g. `poke8p 0x030057D8 0x2951 0` clears a caught flag in TMT2 |
@@ -59,6 +61,10 @@ One command per line:
 | `wav FILE N` | Run N frames and write what the APU played to `FILE` as a 16-bit stereo WAV — e.g. `call <m4aSongNumStart> 0`, `wait 20`, `call <m4aSongNumStart> 5`, `wav click.wav 45` renders SE_SELECT alone, the app's click sound |
 | `cheat TYPE CODE` | Add a cheat (TYPE `auto` / `cb` / `gs` / `ar`, CODE's lines joined by `+`) and load every cheat added so far into the core the way the app does - it compiles in the app's own `app/src/main/cpp/pk_cheats.c`, so only when built with the repo mounted (see below). Prints the directive mGBA settled on and which lines it read |
 | `cheatclear` | Take every cheat out again (the ROM goes back to the file's bytes) |
+| `wideon MARGIN` | Run the app's WIDE (`app/src/main/cpp/pk_wide.c`) after every frame from now on, MARGIN GBA px per side, for the game the ROM header names (retail FireRed rev 1 / Emerald). Repo builds only, like `cheat` |
+| `widecheck` | Also rebuild the middle 240x160 every frame and compare it with the real frame pixel for pixel - how WIDE's rebuild was checked: it must match wherever it says the field checks out |
+| `widestats` | Print WIDE's tally: frames, unverified ones (margins faded), torn sprite lists, centre checks exact / worst, and its time per frame (frames over 2 ms are also printed as they happen) |
+| `wideshot FILE` | Write the last wide frame (`240 + 2 * MARGIN` x 160) as a PPM |
 | `romcheck ROMFILE` | Compare the ROM with the file three ways: the raw bus, the bus through `pk_cheats_overlay` (what the Poller hashes) and swapped (what RetroAchievements hashes) |
 
 Lines starting with `#`, and blank lines, are ignored.
@@ -90,7 +96,7 @@ Lines starting with `#`, and blank lines, are ignored.
 
 ## Cheats
 
-`cheat` / `cheatclear` / `romcheck` need the app's `pk_cheats.c`, so build from the repo root
+`cheat` / `cheatclear` / `romcheck` (and `wideon` & co., `pk_wide.c`) need the app's `pk_cheats.c`, so build from the repo root
 (the capture scripts mount `native-capture/` alone and get a build without them):
 
 ```sh

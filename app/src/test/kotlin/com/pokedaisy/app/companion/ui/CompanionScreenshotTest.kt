@@ -1279,8 +1279,8 @@ object SampleCompanion {
         override fun setClickSound(on: Boolean) {}
         override val statusBar = false
         override fun setStatusBar(on: Boolean) {}
-        override val stretchGame = false
-        override fun setStretchGame(on: Boolean) {}
+        override val gameAspect = com.pokedaisy.app.companion.GameAspect.ORIGINAL
+        override fun setGameAspect(aspect: com.pokedaisy.app.companion.GameAspect) {}
         override val gbaColors = false
         override fun setGbaColors(on: Boolean) {}
         override val screenFilter = com.pokedaisy.app.companion.ScreenFilter.NONE

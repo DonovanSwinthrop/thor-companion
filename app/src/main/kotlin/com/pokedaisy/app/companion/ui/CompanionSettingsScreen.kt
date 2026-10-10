@@ -35,6 +35,7 @@ import com.pokedaisy.app.Hotkeys
 import com.pokedaisy.app.companion.COMPANION_TABS
 import com.pokedaisy.app.companion.CompanionSettings
 import com.pokedaisy.app.companion.FfMode
+import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.hasGrid
 import com.pokedaisy.app.companion.next
 import com.pokedaisy.app.companion.FfMusicMode
@@ -317,6 +318,10 @@ private fun setTabs(s: CompanionSettings, tabs: List<String>, changed: (List<Str
     changed(ordered)
 }
 
+/** WIDE on a game it doesn't know yet (it shows as ORIGINAL there). */
+private fun wideBadge(s: CompanionSettings, aspect: GameAspect): String? =
+    if (aspect == GameAspect.WIDE && !s.wideSupported) tk("NOT YET") else null
+
 /** A pick-one list for a multi-choice setting; [options] are display labels. */
 private class Selector(
     val title: String,
@@ -394,8 +399,17 @@ private fun homeRows(
                 s.setStatusBar(i > 0)
             })
         },
-        // The game at the GBA's 3:2, or stretched to fill the top screen; flips in place.
-        SettingRow(tk("ASPECT"), aspectLabel(s.stretchGame)) { s.setStretchGame(!s.stretchGame); changed() },
+        // The game at the GBA's 3:2, stretched to fill the top screen, or WIDE (the overworld drawn past
+        // its edges); WIDE is tagged NOT YET on a game it doesn't know (which shows it as ORIGINAL).
+        SettingRow(tk("ASPECT"), aspectLabel(s.gameAspect), wideBadge(s, s.gameAspect)) {
+            val aspects = GameAspect.entries
+            select(
+                Selector(
+                    tk("ASPECT"), aspects.map { it.label }, s.gameAspect.label,
+                    badge = { l -> wideBadge(s, aspects.first { it.label == l }) },
+                ) { l -> s.setGameAspect(aspects.first { it.label == l }) },
+            )
+        },
         // FILTER (LCD / LCD PAPER / SCANLINES / CRT) and GBA COLORS, on their own page.
         SettingRow(tk("SHADERS"), s.screenFilter.label) { navigate(Page.SHADERS) },
         // The game's frames per second and the app's CPU share, in the game's corner.

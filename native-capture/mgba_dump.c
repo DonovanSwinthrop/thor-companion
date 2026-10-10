@@ -17,7 +17,9 @@
 // sampling are two different execution contexts).
 //
 // stdin commands, one per line:
-//   wait N            - advance N frames with no keys held
+//   wait N            - advance N frames (no keys held, unless `keys` holds some)
+//   keys KEYS          - hold KEYS from now on, through every `wait` (NONE releases them) -
+//                        for frame-by-frame captures: `hold KEYS 1` runs 2 frames (it releases)
 //   press KEYS        - press KEYS for one frame then release (comma-separated:
 //                        A,B,SELECT,START,UP,DOWN,LEFT,RIGHT,L,R)
 //   hold KEYS N        - hold KEYS for N frames then release
@@ -25,9 +27,19 @@
 //                        a GB/GBC ROM writes DIR/wram.bin (C000-DFFF) + hram.bin (FF80-FFFE)
 //   vdump DIR          - write DIR/{vram,pal,oam,io}.bin (video memory, palette
 //                        RAM, OAM and the first 0x400 I/O registers) - what the
-//                        PPU is drawing from, for pulling a screen's graphics
+//                        PPU is drawing from, for pulling a screen's graphics - and
+//                        iolatch.bin, the registers as last written (write-only
+//                        ones like the BG scroll offsets read back as open bus)
 //   poke8/poke16/poke32 ADDR VAL - write RAM (hex or decimal), e.g. to put a
 //                        party mon into a state worth screenshotting
+//   wideon MARGIN      - run the app's WIDE (pk_wide.c) after every frame from now on, MARGIN
+//                        GBA px per side, for the game the ROM header names (repo builds only)
+//   widecheck          - also rebuild the middle 240x160 each frame and compare it with the real
+//                        frame, pixel for pixel, printing frames that differ; `widestats` prints
+//                        the tally since
+//   wideshot FILE      - write the last wide frame as a PPM
+//   layers MASK        - draw only the video layers in MASK from the next frame on
+//                        (bit 0-3 = BG0-BG3, bit 4 = OBJ; 0x1F = all, the default)
 //   shot FILE          - write the current frame to FILE as a binary PPM (P6) -
 //                        no PNG dependency; `python3 -c 'from PIL import Image;
 //                        Image.open("x.ppm").save("x.png")'` converts it
@@ -52,9 +64,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <stdarg.h>
 
+// The library's build flags, before any mGBA header: struct mCore has fields under
+// USE_DEBUGGERS etc., and without them every member past those (enableVideoLayer, ...)
+// is read at the wrong offset.
+#if defined(__has_include)
+#if __has_include(<mgba/flags.h>)
+#include <mgba/flags.h>
+#endif
+#endif
 #include <mgba/core/core.h>
 #include <mgba/core/config.h>
 #include <mgba/core/blip_buf.h>
@@ -62,6 +83,7 @@
 #include <mgba-util/vfs.h>
 #include <mgba/internal/arm/arm.h>
 #include <mgba/internal/arm/isa-inlines.h>
+#include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gb/gb.h>
 #include <mgba/internal/gb/io.h>
 #include <mgba/internal/sm83/sm83.h>
@@ -73,6 +95,10 @@
 #if __has_include("../app/src/main/cpp/pk_cheats.c")
 #include "../app/src/main/cpp/pk_cheats.c"
 #define HAVE_PK_CHEATS 1
+#endif
+#if __has_include("../app/src/main/cpp/pk_wide.c")
+#include "../app/src/main/cpp/pk_wide.c"
+#define HAVE_PK_WIDE 1
 #endif
 #endif
 
@@ -90,6 +116,52 @@ enum {
 static struct mCore* core;
 static color_t* video;
 static unsigned videoW, videoH;
+
+#ifdef HAVE_PK_WIDE
+// WIDE (the app's pk_wide.c): run after every frame once `wideon`, as the app does.
+static bool wideOn, wideCheck;
+static int wideMargin;
+static uint32_t wideOut[(PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H];
+static uint32_t wideCentre[PK_WIDE_W * PK_WIDE_H];
+static struct { int frames, checked, exact, unverified, torn, worst, worstFrame; double ns, maxNs; } wideStats;
+
+static void wideAfterFrame(void) {
+    if (!wideOn) return;
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    pk_wide_frame(core, (const uint32_t*) video, wideOut, wideMargin, wideCheck ? wideCentre : NULL);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double ns = (t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec);
+    wideStats.ns += ns;
+    if (ns > wideStats.maxNs) wideStats.maxNs = ns;
+    if (ns > 2e6) printf("wide: frame %u took %.1f ms (score %d)\n", core->frameCounter(core), ns / 1e6, pk_wide_last_score());
+    wideStats.frames++;
+    if (pk_wide_last_torn()) wideStats.torn++;
+    if (pk_wide_last_score() < 900) {
+        wideStats.unverified++;
+        return;
+    }
+    if (!wideCheck) return;
+    // The rebuild of the middle against the real frame, pixel for pixel (RGB).
+    int miss = 0;
+    for (int i = 0; i < PK_WIDE_W * PK_WIDE_H; i++)
+        miss += ((wideCentre[i] ^ (uint32_t) video[(i / PK_WIDE_W) * videoW + i % PK_WIDE_W]) & 0xFFFFFF) != 0;
+    wideStats.checked++;
+    if (!miss) wideStats.exact++;
+    else printf("widecheck: frame %u: %d px differ\n", core->frameCounter(core), miss);
+    if (miss > wideStats.worst) {
+        wideStats.worst = miss;
+        wideStats.worstFrame = (int) core->frameCounter(core);
+    }
+}
+#else
+static void wideAfterFrame(void) {}
+#endif
+
+static void runFrame(void) {
+    core->runFrame(core);
+    wideAfterFrame();
+}
 
 // mGBA's default logger is noisy (every unmapped I/O register write, DMA,
 // etc, straight to stdout/stderr) - fine for interactive debugging, useless
@@ -230,6 +302,14 @@ static void cmdVdump(const char* outDir) {
     dumpRegion(0x07000000, 0x400, path);
     snprintf(path, sizeof(path), "%s/io.bin", outDir);
     dumpRegion(0x04000000, 0x400, path);
+    // The registers as last written, write-only ones included (a bus read of BGxHOFS etc.
+    // is open bus): mGBA keeps every write in memory.io, so this is what the PPU drew with.
+    snprintf(path, sizeof(path), "%s/iolatch.bin", outDir);
+    FILE* f = fopen(path, "wb");
+    if (f) {
+        fwrite(((struct GBA*) core->board)->memory.io, 1, 0x400, f);
+        fclose(f);
+    }
     fprintf(stderr, "mgba_dump: dumped vram+pal+oam+io to %s (frame %u)\n", outDir, core->frameCounter(core));
 }
 
@@ -539,21 +619,24 @@ int main(int argc, char** argv) {
 
         if (!strcmp(cmd, "wait")) {
             sscanf(line, "%*s %d", &n);
-            for (int i = 0; i < n; i++) core->runFrame(core);
+            for (int i = 0; i < n; i++) runFrame();
+        } else if (!strcmp(cmd, "keys")) {
+            sscanf(line, "%*s %255s", arg1);
+            core->setKeys(core, strcmp(arg1, "NONE") ? parseKeys(arg1) : 0);
         } else if (!strcmp(cmd, "press")) {
             sscanf(line, "%*s %255s", arg1);
             uint32_t mask = parseKeys(arg1);
             core->setKeys(core, mask);
-            core->runFrame(core);
+            runFrame();
             core->setKeys(core, 0);
-            core->runFrame(core);
+            runFrame();
         } else if (!strcmp(cmd, "hold")) {
             sscanf(line, "%*s %255s %d", arg1, &n);
             uint32_t mask = parseKeys(arg1);
             core->setKeys(core, mask);
-            for (int i = 0; i < n; i++) core->runFrame(core);
+            for (int i = 0; i < n; i++) runFrame();
             core->setKeys(core, 0);
-            core->runFrame(core);
+            runFrame();
         } else if (!strcmp(cmd, "dump")) {
             sscanf(line, "%*s %255s", arg1);
             cmdDump(arg1);
@@ -630,6 +713,44 @@ int main(int argc, char** argv) {
             sscanf(line, "%*s %255[^\n]", arg1);
             cmdRomCheck(arg1);
 #endif
+#ifdef HAVE_PK_WIDE
+        } else if (!strcmp(cmd, "wideon")) {
+            sscanf(line, "%*s %d", &n);
+            char code[5] = {0};
+            for (int i = 0; i < 4; i++) code[i] = (char) core->busRead8(core, 0x080000AC + i);
+            int game = pk_wide_game_for_header(code, core->busRead8(core, 0x080000BC));
+            pk_wide_configure(game);
+            wideOn = game != PK_WIDE_OFF;
+            wideMargin = n;
+            memset(&wideStats, 0, sizeof(wideStats));
+            printf("wideon: %s game %d, margin %d\n", code, game, n);
+        } else if (!strcmp(cmd, "widecheck")) {
+            wideCheck = true;
+            memset(&wideStats, 0, sizeof(wideStats));
+        } else if (!strcmp(cmd, "widestats")) {
+            printf("wide: %d frames, %d unverified (margins faded), %d with torn sprite lists; centre checked on %d: "
+                   "%d exact, worst %d px (frame %d); %.0f us a frame on average, %.0f at most%s\n", wideStats.frames,
+                   wideStats.unverified, wideStats.torn, wideStats.checked, wideStats.exact, wideStats.worst,
+                   wideStats.worstFrame, wideStats.frames ? wideStats.ns / wideStats.frames / 1000 : 0,
+                   wideStats.maxNs / 1000, wideCheck ? " (with the centre check)" : "");
+        } else if (!strcmp(cmd, "wideshot")) {
+            sscanf(line, "%*s %255s", arg1);
+            FILE* f = fopen(arg1, "wb");
+            if (f) {
+                int w = PK_WIDE_W + 2 * wideMargin;
+                fprintf(f, "P6\n%d %d\n255\n", w, PK_WIDE_H);
+                for (int i = 0; i < w * PK_WIDE_H; i++) {
+                    uint8_t rgb[3] = { (uint8_t) wideOut[i], (uint8_t) (wideOut[i] >> 8), (uint8_t) (wideOut[i] >> 16) };
+                    fwrite(rgb, 1, 3, f);
+                }
+                fclose(f);
+            }
+#endif
+        } else if (!strcmp(cmd, "layers")) {
+            char m[64] = {0};
+            sscanf(line, "%*s %63s", m);
+            unsigned mask = (unsigned) strtoul(m, NULL, 0);
+            for (size_t i = 0; i < 5; i++) core->enableVideoLayer(core, i, (mask >> i) & 1);
         } else if (!strcmp(cmd, "shot")) {
             sscanf(line, "%*s %255s", arg1);
             cmdShot(arg1);
