@@ -51,8 +51,12 @@
 
 // Each engine's layout.
 static const int32_t FAMILIES[][PK_WIDE_CONFIG_SIZE - PK_WIDE_ADDRS] = {
-    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1 },    // u32 attributes, layer in bits 29-30; sized border
-    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0 },  // u16 attributes, layer in bits 12-15; 2x2 border
+    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4 },    // u32 attributes, layer in bits 29-30; sized border
+    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4 },  // u16 attributes, layer in bits 12-15; 2x2 border
+    // Emerald's map; a static SaveBlock1, a longer gMain, 16-bit subsprite offsets.
+    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8 },
+    // Japanese Ruby / Sapphire: the static SaveBlock1, but gMain's inBattle and 8-bit subsprites as later games.
+    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4 },
 };
 
 static const struct PkWideRom* lookup(uint32_t crc) {
@@ -131,7 +135,7 @@ static int prev = -1;              // snaps[prev]: the RAM after the frame befor
 static void take(struct Snap* s) {
     badRead = false;
     s->ok = false;
-    uint32_t sb1 = r32((uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]);
+    uint32_t sb1 = C[PK_WIDE_SAVE_STATIC] ? (uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR] : r32((uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]);
     s->posX = s16(sb1);
     s->posY = s16(sb1 + 2);
     uint32_t co = (uint32_t) C[PK_WIDE_CAMERA_OFFSET];
@@ -189,7 +193,7 @@ static void take(struct Snap* s) {
     if ((p = mem((uint32_t) C[PK_WIDE_SPRITE_ORDER], sizeof(s->order)))) memcpy(s->order, p, sizeof(s->order));
     if ((p = mem((uint32_t) C[PK_WIDE_OBJECT_EVENTS], sizeof(s->objects)))) memcpy(s->objects, p, sizeof(s->objects));
     s->coordX = s16((uint32_t) C[PK_WIDE_COORD_OFFSET]);
-    s->coordY = s16((uint32_t) C[PK_WIDE_COORD_OFFSET] + 2);
+    s->coordY = s16((uint32_t) C[PK_WIDE_COORD_OFFSET_Y]);
     s->ok = !badRead;
 }
 
@@ -512,13 +516,15 @@ static int buildPieces(const struct Snap* s, struct Piece* out) {
         }
         int bx = x - cvx, by = y - cvy;
         int cnt = (int) r8(table);
+        int ss = C[PK_WIDE_SUBSPRITE_SIZE];   // 4: s8 x, y; 8 (Ruby / Sapphire): u16 x, y, read as s16, + 2 bytes' padding
         for (int j = 0; j < cnt && n < 256; j++) {
-            const uint8_t* sub = mem(subs + 4 * (uint32_t) j, 4);
+            const uint8_t* sub = mem(subs + (uint32_t) (ss * j), (uint32_t) ss);
             if (!sub) break;
-            uint32_t v = le16(sub + 2);
+            uint32_t v = le16(sub + ss / 2);   // the shape / size / tile / priority bits
             if ((v & 3) > 2) continue;
             int w = OBJ_DIMS[v & 3][(v >> 2) & 3][0], h = OBJ_DIMS[v & 3][(v >> 2) & 3][1];
-            int sx = (signed char) sub[0], sy = (signed char) sub[1];
+            int sx = ss == 8 ? (int16_t) le16(sub) : (signed char) sub[0];
+            int sy = ss == 8 ? (int16_t) le16(sub + 2) : (signed char) sub[1];
             if (base.hflip) sx = -(sx + w);
             if (base.vflip) sy = -(sy + h);
             out[n] = base;
@@ -659,7 +665,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int x0, int x1, uin
 // (the dark band the text box and menus sit on), so the band simply goes on to the screen's edges.
 
 static bool inBattleScreen(void) {
-    if (!(r8((uint32_t) C[PK_WIDE_GMAIN] + 0x439) & 2)) return false;   // gMain.inBattle
+    if (!(r8((uint32_t) (C[PK_WIDE_GMAIN] + C[PK_WIDE_INBATTLE_OFF])) & 2)) return false;   // gMain.inBattle
     uint16_t disp = io(0), cnt = io(0x0E);
     return (disp & 7) == 0 && (disp & 0x0800) && ((cnt >> 2) & 3) == 2 && ((cnt >> 8) & 31) == 26 && (cnt >> 14) == 1;
 }

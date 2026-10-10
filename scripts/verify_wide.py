@@ -51,7 +51,7 @@ def map_run(code, margin):
 
 
 def battle_run(code, script, margin):
-    slow = code[:3] == "BPE"   # Emerald prints its battle text slower
+    slow = code[:3] in ("BPE", "AXV", "AXP")   # Emerald and Ruby / Sapphire print their battle text slower
     out = [f"wideon {margin}"] + boot_lines(code) + ["wait 60", "layers 0x18", "wait 2", "widecheck all"]
     out += [f"poke8 {SCRIPT_RAM + i:#x} {b:#x}" for i, b in enumerate(BATTLE)]
     out += [f"call {script} {SCRIPT_RAM:#x}", f"wait {520 if slow else 420}", "press A", f"wait {480 if slow else 330}",

@@ -5,8 +5,8 @@ into each ROM and writes app/src/main/cpp/pk_wide_games.h, a table keyed by the 
     scripts/gen_wide_tables.py <roms dir> [<more roms dirs>...]
 
 Every retail .gba under the dirs (by SHA-1: the app's GameTitles / RetailPortsGen list - hacks and the QoL
-builds share the codes but aren't taken) whose game code is FireRed / LeafGreen (BPR / BPG) or Emerald (BPE) gets
-the English reference's addresses (FireRed rev 1, Emerald: checked frame by frame headless) mapped
+builds share the codes but aren't taken) whose game code is FireRed / LeafGreen (BPR / BPG), Emerald (BPE) or Ruby / Sapphire (AXV / AXP) gets
+the English reference's addresses (FireRed rev 1, Emerald, Ruby rev 1: checked frame by frame headless) mapped
 through the literal pools of the code that loads them (port_retail.py's map_literal: the word at the
 same place in the other ROM's code). A ROM with an address no pool maps is left out and reported.
 build/wide/wide.json keeps every address with its votes, for scripts/verify_wide.py, which boots
@@ -30,7 +30,7 @@ OUT_JSON = os.path.join(ROOT, "build", "wide", "wide.json")
 
 # pk_wide.h's PK_WIDE_* address slots, in order.
 SLOTS = ["VMAP", "MAP_HEADER", "MAP_GROUPS", "SAVE_BLOCK1_PTR", "CAMERA_OFFSET", "OBJECT_EVENTS", "SPRITES",
-         "COORD_OFFSET", "SPRITE_ORDER", "GMAIN"]
+         "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN"]
 
 # The references: what was mapped onto retail from the decomp ELFs and checked headless (pk_wide.c's
 # history), plus ScriptContext_SetupScript for the checks' scripted warps and battles.
@@ -38,13 +38,19 @@ REFERENCES = {
     "FR": dict(code="BPRE", rev=1, script=0x08069AF8, a=dict(
         VMAP=0x03005040, MAP_HEADER=0x02036DFC, MAP_GROUPS=0x08352718, SAVE_BLOCK1_PTR=0x03005008,
         CAMERA_OFFSET=0x03000E90, OBJECT_EVENTS=0x02036E38, SPRITES=0x0202063C, COORD_OFFSET=0x02021BC8,
-        SPRITE_ORDER=0x02021800, GMAIN=0x030030F0)),
+        COORD_OFFSET_Y=0x02021BCA, SPRITE_ORDER=0x02021800, GMAIN=0x030030F0)),
     "EM": dict(code="BPEE", rev=0, script=0x08098EF8, a=dict(
         VMAP=0x03005DC0, MAP_HEADER=0x02037318, MAP_GROUPS=0x08486578, SAVE_BLOCK1_PTR=0x03005D8C,
         CAMERA_OFFSET=0x03000E20, OBJECT_EVENTS=0x02037350, SPRITES=0x02020630, COORD_OFFSET=0x02021BBC,
-        SPRITE_ORDER=0x020217F4, GMAIN=0x030022C0)),
+        COORD_OFFSET_Y=0x02021BBE, SPRITE_ORDER=0x020217F4, GMAIN=0x030022C0)),
+    # pret/pokeruby's ruby_rev1 build is byte for byte retail Ruby rev 1: its ELF's symbols, as they are.
+    # SaveBlock1 is static there (no pointer), gSpriteCoordOffsetY isn't next to X.
+    "RS": dict(code="AXVE", rev=1, script=0x080655D8, a=dict(
+        VMAP=0x03004870, MAP_HEADER=0x0202E828, MAP_GROUPS=0x083085A0, SAVE_BLOCK1_PTR=0x02025734,
+        CAMERA_OFFSET=0x03000590, OBJECT_EVENTS=0x030048A0, SPRITES=0x02020004, COORD_OFFSET=0x030024D0,
+        COORD_OFFSET_Y=0x030027E0, SPRITE_ORDER=0x03002410, GMAIN=0x03001770)),
 }
-FAMILY = {"BPR": "FR", "BPG": "FR", "BPE": "EM"}
+FAMILY = {"BPR": "FR", "BPG": "FR", "BPE": "EM", "AXV": "RS", "AXP": "RS"}
 KOTLIN = os.path.join(ROOT, "app", "src", "main", "kotlin", "com", "pokedaisy", "app")
 
 
@@ -111,6 +117,8 @@ def main():
         dst = Rom(path)
         fam = FAMILY[dst.code[:3]]
         src, ref = refs[fam], REFERENCES[fam]
+        if fam == "RS" and dst.lang == "J":
+            fam = "RS_JA"   # mapped from English Ruby, but its own engine variant (pk_wide.c's FAMILIES)
         addrs, votes, missing = {}, {}, []
         for slot in SLOTS:
             if dst.d == src.d:
