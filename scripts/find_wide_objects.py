@@ -3,7 +3,10 @@
 and the save's templates) in a ROM hack with no symbols (a pokeemerald-expansion or other gcc build), from the ROM and
 one RAM dump of the game standing on a map (a fixture: app/src/test/resources/fixtures/<name>/{ewram,iwram}.bin).
 
-    scripts/find_wide_objects.py ROM FIXTURE --objects ADDR --sprites ADDR --save1 ADDR --header ADDR [--vanilla]
+    scripts/find_wide_objects.py ROM FIXTURE [FIXTURE...] --objects ADDR --sprites ADDR --save1 ADDR --header ADDR [--vanilla]
+
+A FIXTURE is a fixture's name or any directory holding ewram.bin / iwram.bin (mgba_dump's `dump DIR`): several of them
+(a walk dumped every few steps) give the votes more live objects than one.
 
 --objects / --sprites / --header / --save1 are gObjectEvents, gSprites, gMapHeader and gSaveBlock1Ptr
 (scripts/find_wide_addrs.py, the hack's NativeConfig). --vanilla: ObjectEvent as retail has it (spriteId +4, u8
@@ -33,7 +36,7 @@ ROOT = os.path.abspath(os.path.join(HERE, ".."))
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rom")
-    ap.add_argument("fixture")
+    ap.add_argument("fixture", nargs="+")
     ap.add_argument("--objects", type=lambda v: int(v, 0), required=True)
     ap.add_argument("--sprites", type=lambda v: int(v, 0), required=True)
     ap.add_argument("--save1", type=lambda v: int(v, 0), required=True)
@@ -41,15 +44,18 @@ def main():
     ap.add_argument("--vanilla", action="store_true")
     a = ap.parse_args()
     rom = open(a.rom, "rb").read()
-    fx = os.path.join(ROOT, "app", "src", "test", "resources", "fixtures", a.fixture)
-    ew = open(os.path.join(fx, "ewram.bin"), "rb").read()
-    iw = open(os.path.join(fx, "iwram.bin"), "rb").read()
+    dumps = []
+    for f in a.fixture:
+        fx = f if os.path.isdir(f) else os.path.join(ROOT, "app", "src", "test", "resources", "fixtures", f)
+        dumps.append((open(os.path.join(fx, "ewram.bin"), "rb").read(), open(os.path.join(fx, "iwram.bin"), "rb").read()))
+    ew, iw = dumps[0]
 
-    def mem(addr, n):
+    def mem(addr, n, d=None):
+        e, i = d or (ew, iw)
         if addr >> 24 == 2:
-            return ew[addr & 0x3FFFF:(addr & 0x3FFFF) + n]
+            return e[addr & 0x3FFFF:(addr & 0x3FFFF) + n]
         if addr >> 24 == 3:
-            return iw[addr & 0x7FFF:(addr & 0x7FFF) + n]
+            return i[addr & 0x7FFF:(addr & 0x7FFF) + n]
         return rom[addr - 0x08000000:addr - 0x08000000 + n]
 
     def u32(addr):
@@ -65,14 +71,21 @@ def main():
         if is_rom(w):
             words.setdefault(w, []).append(o + 0x08000000)
 
-    live = []   # (graphics id, sprite id)
-    for k in range(16):
-        oe = mem(a.objects + 0x24 * k, 0x24)
-        if oe[0] & 1:
-            live.append((oe[5], oe[4]) if a.vanilla else (struct.unpack_from("<H", oe, 4)[0], oe[0x23]))
+    live = []   # (graphics id, sprite id, dump), each distinct (id, images) once
+    seen = set()
+    for d in dumps:
+        for k in range(16):
+            oe = mem(a.objects + 0x24 * k, 0x24, d)
+            if not oe[0] & 1:
+                continue
+            gfx, sid = (oe[5], oe[4]) if a.vanilla else (struct.unpack_from("<H", oe, 4)[0], oe[0x23])
+            images = struct.unpack("<I", mem(a.sprites + 0x44 * sid + 0xC, 4, d))[0]
+            if (gfx, images) not in seen:
+                seen.add((gfx, images))
+                live.append((gfx, sid, d))
     votes = {}
-    for gfx, sid in live:
-        images = u32(a.sprites + 0x44 * sid + 0xC)
+    for gfx, sid, d in live:
+        images = struct.unpack("<I", mem(a.sprites + 0x44 * sid + 0xC, 4, d))[0]
         for ref in words.get(images, []):
             for p in words.get(ref - 0x1C, []):
                 votes[p - 4 * gfx] = votes.get(p - 4 * gfx, 0) + 1
@@ -114,15 +127,22 @@ def main():
     out["OBJ_PALETTES"] = best[0] + 0x08000000 if best[1] else None
     print(f"palettes: {best[1]} entries")
 
-    pairs = set()   # (OBJ palette slot, tag) of each live sprite
-    for gfx, sid in live:
-        if gfx < var_from and record(u32(table + 4 * gfx)):
-            slot = struct.unpack("<H", mem(a.sprites + 0x44 * sid + 4, 2))[0] >> 12
-            pairs.add((slot, struct.unpack("<H", mem(u32(table + 4 * gfx) + 2, 2))[0]))
-    tags = [base + o for buf, base in ((iw, 0x03000000), (ew, 0x02000000)) for o in range(0, len(buf) - 32, 2)
-            if pairs and all(struct.unpack_from("<H", buf, o + 2 * s)[0] == t for s, t in pairs)]
+    # sSpritePaletteTags: in each dump, the u16[16] whose slots hold that dump's live sprites' tags - one address all agree on.
+    tags = None
+    for d in dumps:
+        pairs = set()   # (OBJ palette slot, tag) of each live sprite
+        for gfx, sid, dd in live:
+            if dd is d and gfx < var_from and record(u32(table + 4 * gfx)):
+                slot = struct.unpack("<H", mem(a.sprites + 0x44 * sid + 4, 2, d))[0] >> 12
+                pairs.add((slot, struct.unpack("<H", mem(u32(table + 4 * gfx) + 2, 2))[0]))
+        if not pairs:
+            continue
+        here = {base + o for buf, base in ((d[1], 0x03000000), (d[0], 0x02000000)) for o in range(0, len(buf) - 32, 2)
+                if all(struct.unpack_from("<H", buf, o + 2 * s)[0] == t for s, t in pairs)}
+        tags = here if tags is None else tags & here
+    tags = sorted(tags or [])
     out["SPRITE_PAL_TAGS"] = tags[0] if len(tags) == 1 else None
-    print(f"palette tag lists: {[hex(t) for t in tags]} (from {len(pairs)} sprites)")
+    print(f"palette tag lists: {[hex(t) for t in tags]} (agreed by every dump with a sprite)")
 
     for name, pattern in (("ELEVATION_PRIO", "02020202010201020102010201000002"), ("OBJ_FACING", "01010102010304020103040101010302")):
         hits = [m.start() + 0x08000000 for m in re.finditer(re.escape(bytes.fromhex(pattern)), rom)]

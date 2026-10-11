@@ -156,11 +156,29 @@ static void wideAfterFrame(void) {
     // A battle's rebuild draws BG3 and sprites only: compare it only when asked (a capture with `layers 0x18`).
     if (!wideCheck || (pk_wide_last_mode() == PK_WIDE_MODE_BATTLE && !wideCheckBattles)) return;
     // The rebuild of the middle against the real frame, pixel for pixel (RGB).
-    int miss = 0;
-    for (int i = 0; i < PK_WIDE_W * PK_WIDE_H; i++)
-        miss += ((wideCentre[i] ^ (uint32_t) video[(i / PK_WIDE_W) * videoW + i % PK_WIDE_W]) & 0xFFFFFF) != 0;
+    int miss = 0, x0 = PK_WIDE_W, x1 = -1, y0 = PK_WIDE_H, y1 = -1;
+    for (int i = 0; i < PK_WIDE_W * PK_WIDE_H; i++) {
+        if (!(((wideCentre[i] ^ (uint32_t) video[(i / PK_WIDE_W) * videoW + i % PK_WIDE_W]) & 0xFFFFFF))) continue;
+        miss++;
+        int x = i % PK_WIDE_W, y = i / PK_WIDE_W;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+    }
+    // Every difference inside the partly shown tile column (row) at an edge the field is scrolled by: the game hasn't
+    // drawn that ring column into VRAM yet (Sword and Shield's "performance" builds wait for a whole tile) - its own
+    // stale tiles, not the rebuild's to match.
+    int hs = G->memory.io[0x14 >> 1] & 7, vs = G->memory.io[0x16 >> 1] & 7;   // BG1's scroll within a tile
+    bool staleEdge = miss && ((hs && ((x0 >= PK_WIDE_W - hs) || (x1 < 8 - hs))) || (vs && ((y0 >= PK_WIDE_H - vs) || (y1 < 8 - vs))));
     wideStats.checked++;
     if (!miss) wideStats.exact++;
+    else if (staleEdge && pk_wide_last_mode() == PK_WIDE_MODE_MAP) {
+        wideStats.checked--;
+        wideStats.unverified++;
+        printf("widecheck: frame %u: %d px differ in the scrolled-in edge tile (x %d-%d, y %d-%d), the game's stale ring (not counted)\n",
+               core->frameCounter(core), miss, x0, x1, y0, y1);
+    }
     else if (pk_wide_last_vram_torn()) {
         // VRAM written while the frame was drawn: its lines show two sets of tiles - not the rebuild's to match.
         wideStats.checked--;
@@ -864,6 +882,9 @@ int main(int argc, char** argv) {
             // The far-off objects the last snapshot holds (not spawned): box in VMap pixels, palette tag, whether it has colours.
             const struct Snap* s = prev >= 0 ? &snaps[prev] : NULL;
             printf("wideghosts: %d\n", s ? s->nghosts : -1);
+            for (int c = 0; s && c < s->nconn; c++)   // the maps they come from: where each sits in VMap cells
+                printf("wideghosts: conn %d.%d dir %d degree %d at %d,%d size %dx%d\n", s->conn[c].group, s->conn[c].num,
+                       s->conn[c].dir, s->conn[c].degree, s->conn[c].ox, s->conn[c].oy, s->conn[c].w, s->conn[c].h);
             for (int i = 0; s && i < s->nghosts; i++) {
                 uint32_t pal[16];
                 const struct Ghost* g = &s->ghosts[i];

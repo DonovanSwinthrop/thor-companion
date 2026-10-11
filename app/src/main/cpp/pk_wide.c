@@ -36,7 +36,7 @@
 
 #define MAP_OFFSET 7
 #define MAX_MAP_DATA 0x2800        // MAX_MAP_DATA_SIZE, both games (u16 cells)
-#define NUM_METATILES_TOTAL 2048   // SoulGold's 11-bit ids; vanilla's are 1024
+#define NUM_METATILES_TOTAL 4096   // R.O.W.E.'s 12-bit ids (SoulGold 11, vanilla 10)
 #define LAYER_NORMAL 0
 #define LAYER_COVERED 1
 #define LAYER_SPLIT 2
@@ -190,8 +190,10 @@ static uint32_t ghostInfo(uint32_t sb1, int gfx) {
         }
         int id = tables ? entry : gfx;   // CFRU: table 0's entry; else the whole id
         if (table == 0 || !tables) {
-            if (id >= from + 16) return 0;   // past the table (expansion's overworld Pokémon: their own graphics)
-            if (id >= from) {
+            bool isVar = id >= from && id < from + 16;
+            int count = C[PK_WIDE_OBJ_GFX_COUNT] ? C[PK_WIDE_OBJ_GFX_COUNT] : from + 16;
+            if (!isVar && id >= count) return 0;   // past the table (expansion's overworld Pokémon: their own graphics)
+            if (isVar) {
                 if (hop) return 0;
                 gfx = varGet(sb1, 0x4010 + id - from);   // VAR_OBJ_GFX_ID_*
                 continue;
@@ -209,12 +211,15 @@ static uint32_t ghostInfo(uint32_t sb1, int gfx) {
 /** One object template (at `t`, its x / y relative to a map whose (0, 0) is VMap cell (ox, oy)) as a ghost, unless
  * it's hidden by its flag: its sprite where SpawnObjectEvent would put it - the frame of the movement type's first
  * facing, the bottom of the box on the tile's bottom, centred on it. */
-static void addGhost(struct Snap* s, uint32_t sb1, uint32_t t, int ox, int oy) {
+static void addGhost(struct Snap* s, uint32_t sb1, uint32_t t, int ox, int oy, int mw, int mh) {
     if (s->nghosts >= MAX_GHOSTS) return;
     int flag = (int) r16(t + 0x14);
     if (flag && flagSet(sb1, flag)) return;   // hidden (picked up, beaten, moved on)
-    int kind = C[PK_WIDE_TEMPLATE_KIND];   // byte 3 then: graphicsId's high byte at +2; CFRU's table is +3
-    uint32_t info = ghostInfo(sb1, (int) (r8(t + 1) | (kind == 3 ? r8(t + 2) << 8 : C[PK_WIDE_OBJ_GFX_TABLES] ? r8(t + 3) << 8 : 0)));
+    // graphicsId: a u8 at +1 (CFRU: its table at +3); a u16 at +1 with the kind at +3 (expansion), at +2 with the kind
+    // at +1 (Rogue).
+    int kind = C[PK_WIDE_TEMPLATE_KIND];
+    int gfx = kind == 1 ? (int) r16(t + 2) : (int) (r8(t + 1) | (kind == 3 ? r8(t + 2) << 8 : C[PK_WIDE_OBJ_GFX_TABLES] ? r8(t + 3) << 8 : 0));
+    uint32_t info = ghostInfo(sb1, gfx);
     int w = s16(info + 8), h = s16(info + 0xA);
     if (!info || w <= 0 || h <= 0 || w > 64 || h > 64 || (w & 7) || (h & 7)) return;
     bool inanimate = r8(info + 0xC) & 0x40;
@@ -229,8 +234,9 @@ static void addGhost(struct Snap* s, uint32_t sb1, uint32_t t, int ox, int oy) {
         hflip = false;
         if (r16(images + 4) != bytes || !mem(img, bytes)) return;
     }
+    // Only inside its own map (mw x mh): objects parked off it are a script's (Too Many Types 2's moving trucks at y -1).
     int x = s16(t + 4), y = s16(t + 6);
-    if (x < -0x400 || x > 0x400 || y < -0x400 || y > 0x400) return;
+    if (x < 0 || y < 0 || x >= mw || y >= mh) return;
     struct Ghost* g = &s->ghosts[s->nghosts++];
     int cellX = x + ox, cellY = y + oy;
     g->x = cellX * 16 + 8 - w / 2;
@@ -263,7 +269,7 @@ static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
             const uint8_t* oe = s->objects + 0x24 * k;
             live = (oe[0] & 1) && oe[8] == localId && oe[9] == mapNum && oe[10] == mapGroup;
         }
-        if (!live) addGhost(s, sb1, t, MAP_OFFSET, MAP_OFFSET);
+        if (!live) addGhost(s, sb1, t, MAP_OFFSET, MAP_OFFSET, s->width, s->height);
     }
     for (int c = 0; c < s->nconn; c++) {
         const struct Conn* k = &s->conn[c];
@@ -279,7 +285,7 @@ static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
                 uint32_t ct = base + 0x18 * (uint32_t) m;
                 cloned = r8(ct + (uint32_t) C[PK_WIDE_TEMPLATE_KIND]) == 1 && (int) r8(ct + 8) == localId && (int) r16(ct + 0xC) == k->num && (int) r16(ct + 0xE) == k->group;
             }
-            if (!cloned) addGhost(s, sb1, t, k->ox, k->oy);
+            if (!cloned) addGhost(s, sb1, t, k->ox, k->oy, k->w, k->h);
         }
     }
     // Front first, as the sprites' order has it: the lower on the map, the nearer.
@@ -1072,7 +1078,7 @@ static uint32_t romPaletteFind(uint32_t tag) {
 /** How the game has tinted its loaded object palettes (day / night, a fade to black), per channel x256: palette RAM
  * against the ROM's colours for every slot holding an object palette. A ghost drawn from the ROM gets the same. */
 static int tint[3] = { 256, 256, 256 };
-static void measureTint(void) {
+static void measureTint(const struct Snap* snap) {
     tint[0] = tint[1] = tint[2] = 256;
     const uint8_t* tags = C[PK_WIDE_SPRITE_PAL_TAGS] ? mem((uint32_t) C[PK_WIDE_SPRITE_PAL_TAGS], 32) : NULL;
     int32_t rom[3] = { 0 }, ram[3] = { 0 };
@@ -1084,6 +1090,21 @@ static void measureTint(void) {
             for (int c = 0; c < 3; c++) {
                 rom[c] += (a >> (5 * c)) & 31;
                 ram[c] += (b >> (5 * c)) & 31;
+            }
+        }
+    }
+    // No object palette to go by (no tag list, or none loaded): the map's, which the game tints alike - BG palette RAM
+    // against the tilesets' own colours in ROM (the primary's first PRIMARY_PALS, the secondary's up to 13).
+    if (rom[0] + rom[1] + rom[2] < 192 && snap) {
+        for (int p = 0; p < 13; p++) {
+            uint32_t ts = p < C[PK_WIDE_PRIMARY_PALS] ? snap->primary : snap->secondary;
+            const uint8_t* q = ts ? mem(r32(ts + 8) + 32 * (uint32_t) p, 32) : NULL;
+            for (int i = 1; q && i < 16; i++) {
+                uint16_t a = (uint16_t) le16(q + 2 * i), b = G->video.palette[p * 16 + i];
+                for (int c = 0; c < 3; c++) {
+                    rom[c] += (a >> (5 * c)) & 31;
+                    ram[c] += (b >> (5 * c)) & 31;
+                }
             }
         }
     }
@@ -1115,7 +1136,7 @@ static bool ghostPalette(uint32_t tag, uint32_t alpha, uint32_t pal[16]) {
 static void drawGhosts(const struct Snap* s, int cx, int cy, int x0, int y0, int x1, int y1, uint32_t* dst, int stride,
                        uint32_t alpha) {
     int w = x1 - x0;
-    if (s->nghosts) measureTint();
+    if (s->nghosts) measureTint(s);
     for (int i = 0; i < s->nghosts; i++) {
         const struct Ghost* g = &s->ghosts[i];
         int gx = g->x - cx, gy = g->y - cy;   // on screen
@@ -1590,10 +1611,12 @@ int pk_wide_configure(uint32_t crc) {
     if (configured) {
         memcpy(C, rom->a, sizeof(rom->a));
         memcpy(C + PK_WIDE_ADDRS, FAMILIES[rom->family], sizeof(FAMILIES[0]));
+        if (C[PK_WIDE_TEMPLATE_KIND_AT]) C[PK_WIDE_TEMPLATE_KIND] = C[PK_WIDE_TEMPLATE_KIND_AT];
         if (C[PK_WIDE_SB1_OFFSETS]) {   // a hack's own SaveBlock1: flags follow the 64 templates, then the vars
             C[PK_WIDE_SB1_TEMPLATES] = C[PK_WIDE_SB1_OFFSETS] & 0xFFFF;
             C[PK_WIDE_SB1_FLAGS] = C[PK_WIDE_SB1_TEMPLATES] + 64 * 0x18;
             C[PK_WIDE_SB1_VARS] = (C[PK_WIDE_SB1_OFFSETS] >> 16) & 0xFFFF;
+            if (C[PK_WIDE_SB1_FLAGS_AT]) C[PK_WIDE_SB1_FLAGS] = C[PK_WIDE_SB1_FLAGS_AT];
         }
     }
     mtPrimary = mtSecondary = 0;

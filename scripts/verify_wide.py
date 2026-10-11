@@ -82,7 +82,7 @@ def main():
     subprocess.run(["docker", "image", "inspect", IMAGE], capture_output=True, check=True)
     tool = os.path.join(OUT, "mgba_dump")
     subprocess.run(["docker", "run", "--rm", "-v", f"{ROOT}:/repo", "-v", f"{OUT}:/out", "-w", "/repo/native-capture", IMAGE,
-                    "-c", "gcc -O2 -Wall -o /out/mgba_dump mgba_dump.c -I/usr/include -L/usr/lib/aarch64-linux-gnu -lmgba -lm"],
+                    "-c", "gcc -O2 -Wall -DPK_WIDE_PENDING -o /out/mgba_dump mgba_dump.c -I/usr/include -L/usr/lib/aarch64-linux-gnu -lmgba -lm"],
                    check=True)
     rows = ["| ROM | CRC | map frames exact | battle frames exact | |", "|---|---|---|---|---|"]
     for e in roms:

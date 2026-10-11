@@ -64,6 +64,12 @@ enum {
     PK_WIDE_SB1_POS,           // not an address: where SaveBlock1's pos and location sit (0; Quetzal 0x470)
     PK_WIDE_LAYOUT_VERSIONED,  // not an address: 1 = MapLayout's byte 0x18 is a version, and a 0 (an Emerald layout) keeps
                                // the engine's primary split instead of PRIMARY_OVERRIDE (Heart and Soul)
+    PK_WIDE_OBJ_GFX_COUNT,     // not an address: the graphics table's length - an id past it (a follower, another table's
+                               // data) isn't drawn; 0 = the table ends 16 past OBJ_GFX_VAR_FROM
+    PK_WIDE_TEMPLATE_KIND_AT,  // not an address: a hack's own template layout - its kind byte, 1 (Rogue: graphicsId a u16 at
+                               // +2); 0 = the engine's (PK_WIDE_TEMPLATE_KIND)
+    PK_WIDE_SB1_FLAGS_AT,      // not an address: a hack's SaveBlock1.flags where they don't follow its templates (Recharged
+                               // Yellow 0xEFB); 0 = SB1_OFFSETS' templates + 0x600
     PK_WIDE_ADDRS,
     PK_WIDE_PRIMARY_METATILES = PK_WIDE_ADDRS,   // 640 FireRed, 512 Emerald
     PK_WIDE_ATTR_OFFSET,       // struct Tileset's metatileAttributes: 0x14 FireRed, 0x10 Emerald

@@ -876,8 +876,9 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   (u16 x, y + the bits, padded to 4 by agbcc - the menu cursor's RAM table showed it); Japanese R/S keep
   FireRed / Emerald's gMain and 4-byte subsprites (`PK_WIDE_FAMILY_RS_JA`). Kotlin asks native (`WideScreen.gameFor` -> `pkWideKnows`); a game WIDE doesn't know shows
   as ORIGINAL (the companion's pick-list tags WIDE NOT YET). `scripts/verify_wide.py` boots every ROM in the table
-  headless with its save and checks a walk (BG0 off) and a scripted battle (BG3 + OBJ) frame by frame - all 78 in the
-  table pass (build/wide/verify.md; a hack marked `pending` is checked but left out of the table). Rerun both after
+  headless with its save and checks a walk (BG0 off) and a scripted battle (BG3 + OBJ) frame by frame - all 81 in the
+  table pass (build/wide/verify.md; a hack marked `pending` is checked too - its row is under `PK_WIDE_PENDING`, which only
+  verify_wide.py's build defines - but the app doesn't have it). Rerun both after
   touching pk_wide.c.
 - **ROM hacks** (`HACKS` in `gen_wide_tables.py`, by SHA-1, each with its host_roms.conf save and any boot presses):
   - *CFRU* (Unbound, its French build, Radical Red) keep FireRed rev 0's RAM and code, so their addresses map through the
@@ -903,9 +904,14 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
     at 640 metatiles like FireRed, the Emerald ones it kept (0) at 512 (`LAYOUT_VERSIONED`: the split is per snapshot,
     `syncSplit`). Its boot is `rhh_splash.txt` (`boot_file`: default.txt's A presses talk to the follower). Rogue's
     gMapGroups came from its save: the current map's header in ROM -> its group's array -> the table.
-  - *Pending* (mapped, checked, not in the table): Amethyst 1.4.1 and Sword and Shield's two "performance" builds (an edge
-    column on a few walk frames), Orange Islands (the top row, half the walk), Quetzal (its own SaveBlock1, pos 0x470 in:
-    most map frames differ), R.O.W.E. (the boot doesn't reach its field).
+  - *Pending* (mapped, checked, not in the app): Orange Islands (the top row, half the walk), Quetzal (its own SaveBlock1,
+    pos 0x470 in: most map frames differ), R.O.W.E. (12-bit metatile ids - `METATILE_MASK` 0xFFF, elevation in the top
+    nibble - and a 2048-metatile primary tileset get its map found, `NUM_METATILES_TOTAL` 4096; one NPC's sprite and a
+    building's metatiles still differ).
+  - *The game's own stale edge*: Sword and Shield's "performance" builds (and Amethyst 1.4.1 once) don't draw the tile
+    column scrolling in until a whole tile has - the real frame shows the ring's old tiles there and the rebuild the map.
+    `widecheck` doesn't count a frame whose differences all lie inside the partly shown edge tile column / row of BG1's
+    scroll (`x >= 240 - (HOFS & 7)` or `x < 8 - (HOFS & 7)`, the same for rows), and says so.
 - **Transitions that slide lines** (Unbound's wild battle start): the latched scroll is only the last line's, and the
   lines slide both ways around the camera, so the camera's own scroll is also taken from RAM (sFieldCameraOffset +
   sHorizontal / sVerticalCameraPan + 8, as FieldUpdateBgTilemapScroll writes it) and scored as a candidate. On the real
@@ -922,8 +928,8 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   whole screen pixels per GBA pixel showing >= 1.2x more each (`WideCamera.levelsFor`: the Thor's 6.75 -> 5 / 4 / 3,
   ~1.35x / 1.7x / 2.25x the map). It eases back to 1x whenever `pk_wide_wants_close`: not on the map (battles, menu
   screens) or the field's controls locked (`CONTROLS_LOCKED`: sLockFieldControls / sScriptContext2Enabled - every game
-  in the table but Recharged Yellow: the decomp ELFs for retail, the Lock / Unlock / ArePlayerFieldControlsLocked trio
-  for the gcc builds) with BG0 showing a text box / menu or lines drawn apart (a
+  in the table: the decomp ELFs for retail, the Lock / Unlock / ArePlayerFieldControlsLocked trio for the gcc builds,
+  and for Recharged Yellow, whose lock is inlined, the byte that's 1 under a scripted message and 0 through the test walk) with BG0 showing a text box / menu or lines drawn apart (a
   transition) - a warp's fade or the map-name popup don't. The step comes back 0.5 s after. NPCs only exist ~2 tiles
   past the game's own view, so far out they pop in as you near them.
 - **Connected maps, zoomed out** (`readConnections`, `blockIn`, `foreignFor`): the game copies 7 metatiles of each
@@ -952,7 +958,15 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   0xFF a var; Unbound, Radical Red, Amethyst, Orange Islands, Sword and Shield), expansion's too (`TEMPLATE_KIND` 3:
   graphicsId at +1, kind at +3; ids past `OBJ_GFX_VAR_FROM` + 16 are overworld Pokémon, not drawn). Unbound's palette
   table runs on past an empty entry (0x1200s after 0x1100s); `romPalette` caches 64 tags. Each hack's SaveBlock1 is its
-  own (`SB1_OFFSETS`); `mgba_dump`'s `wideghosts` lists them, `NO PALETTE` where neither source has one.
+  own (`SB1_OFFSETS`; Recharged Yellow keeps its flags before its templates: `SB1_FLAGS_AT`); `mgba_dump`'s `wideghosts`
+  lists them and the connected maps they come from, `NO PALETTE` where neither source has one.
+  A template outside its own map isn't drawn (Too Many Types 2 parks cutscene trucks at y -1). The graphics tables of the
+  gcc builds run into other data past their end, so each has its length (`OBJ_GFX_COUNT`): Rogue 0x269, Heart and Soul
+  0x224, Too Many Types 2 0x10D, Recharged Yellow 0x159 (its code: ids to 0x158, vars from 0x15A, Pokémon from 0x200);
+  where a game's var ids aren't known, `OBJ_GFX_VAR_FROM` 0xFFFF leaves them undrawn rather than guessed. Rogue's
+  templates hold graphicsId at +2 (`TEMPLATE_KIND_AT` 1). find_wide_objects.py takes several dumps (a walk dumped every
+  step: more live objects to vote). With no palette tag list (or none loaded) the tint comes from the map: BG palette RAM
+  against the tilesets' colours in ROM.
 - **Torn frames**: a lag frame can change palette RAM or OAM while it's drawn (Recharged Yellow's and Rogue's battle-exit
   fade, Seaglass's healthboxes), so the scanline hook keeps a copy of each whenever a line's differs from the last
   (`linePalBuf` / `lineOamBuf`, up to 8 a frame) and every line is drawn with its own (`useLine` sets the registers `R`
