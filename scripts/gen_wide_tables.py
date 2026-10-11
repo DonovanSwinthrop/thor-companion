@@ -31,7 +31,8 @@ OUT_JSON = os.path.join(ROOT, "build", "wide", "wide.json")
 # pk_wide.h's PK_WIDE_* address slots, in order.
 SLOTS = ["VMAP", "MAP_HEADER", "MAP_GROUPS", "SAVE_BLOCK1_PTR", "CAMERA_OFFSET", "OBJECT_EVENTS", "SPRITES",
          "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN", "CONTROLS_LOCKED", "OBJ_GFX_INFO", "OBJ_PALETTES", "OBJ_FACING",
-         "SPRITE_PAL_TAGS", "ELEVATION_PRIO", "MAP_GROUPS_XOR", "NORMAL_BG3", "METATILE_SIZE", "METATILE_MASK", "PRIMARY_OVERRIDE", "PAN_OFF"]
+         "SPRITE_PAL_TAGS", "ELEVATION_PRIO", "MAP_GROUPS_XOR", "NORMAL_BG3", "METATILE_SIZE", "METATILE_MASK", "PRIMARY_OVERRIDE", "PAN_OFF",
+         "OBJ_GFX_TABLES", "OBJ_GFX_TABLE_MAX", "OBJ_GFX_VAR_FROM", "OBJ_GFX_FF_VAR", "SB1_OFFSETS", "SB1_POS", "LAYOUT_VERSIONED"]
 
 # The references: what was mapped onto retail from the decomp ELFs and checked headless (pk_wide.c's
 # history), plus ScriptContext_SetupScript for the checks' scripted warps and battles.
@@ -47,58 +48,202 @@ REFERENCES = {
     "EM": dict(code="BPEE", rev=0, script=0x08098EF8, a=dict(
         VMAP=0x03005DC0, MAP_HEADER=0x02037318, MAP_GROUPS=0x08486578, SAVE_BLOCK1_PTR=0x03005D8C,
         CAMERA_OFFSET=0x03000E20, OBJECT_EVENTS=0x02037350, SPRITES=0x02020630, COORD_OFFSET=0x02021BBC,
-        COORD_OFFSET_Y=0x02021BBE, SPRITE_ORDER=0x020217F4, GMAIN=0x030022C0)),
+        COORD_OFFSET_Y=0x02021BBE, SPRITE_ORDER=0x020217F4, GMAIN=0x030022C0,
+        # sLockFieldControls and the far-off objects' tables: the decomp ELF's (a QoL build: its ROM data mapped onto
+        # retail through the literal pools - the code and RAM are retail's).
+        CONTROLS_LOCKED=0x03000F2C, OBJ_GFX_INFO=0x08505620, OBJ_PALETTES=0x0850BBC8, OBJ_FACING=0x085055CD,
+        SPRITE_PAL_TAGS=0x03000CF0, ELEVATION_PRIO=0x0850E634)),
     # pret/pokeruby's ruby_rev1 build is byte for byte retail Ruby rev 1: its ELF's symbols, as they are.
     # SaveBlock1 is static there (no pointer), gSpriteCoordOffsetY isn't next to X.
     "RS": dict(code="AXVE", rev=1, script=0x080655D8, a=dict(
         VMAP=0x03004870, MAP_HEADER=0x0202E828, MAP_GROUPS=0x083085A0, SAVE_BLOCK1_PTR=0x02025734,
         CAMERA_OFFSET=0x03000590, OBJECT_EVENTS=0x030048A0, SPRITES=0x02020004, COORD_OFFSET=0x030024D0,
-        COORD_OFFSET_Y=0x030027E0, SPRITE_ORDER=0x03002410, GMAIN=0x03001770)),
+        COORD_OFFSET_Y=0x030027E0, SPRITE_ORDER=0x03002410, GMAIN=0x03001770,
+        # The ELF's sElevationToPriority has no name in pokeruby: InitObjectPriorityByZCoord's literal.
+        CONTROLS_LOCKED=0x030006A4, OBJ_GFX_INFO=0x0836DC70, OBJ_PALETTES=0x08373794, OBJ_FACING=0x0836DC21,
+        SPRITE_PAL_TAGS=0x03000300, ELEVATION_PRIO=0x08376078)),
 }
 # Addresses a ROM may go without (0 = unknown: pk_wide.c then does without what they give).
 OPTIONAL = {"CONTROLS_LOCKED", "OBJ_GFX_INFO", "OBJ_PALETTES", "OBJ_FACING", "SPRITE_PAL_TAGS", "ELEVATION_PRIO"}
 
 # The slots that aren't addresses, as retail has them.
-CONSTANTS = dict(MAP_GROUPS_XOR=0, NORMAL_BG3=0x3014, METATILE_SIZE=16, METATILE_MASK=0x3FF, PRIMARY_OVERRIDE=0, PAN_OFF=8)
+CONSTANTS = dict(MAP_GROUPS_XOR=0, NORMAL_BG3=0x3014, METATILE_SIZE=16, METATILE_MASK=0x3FF, PRIMARY_OVERRIDE=0, PAN_OFF=8,
+                 OBJ_GFX_TABLES=0, OBJ_GFX_TABLE_MAX=0, OBJ_GFX_VAR_FROM=240, OBJ_GFX_FF_VAR=0, SB1_OFFSETS=0, SB1_POS=0, LAYOUT_VERSIONED=0)
+# CFRU's graphics lookup (its GetEventObjectGraphicsInfo, in place of FireRed's): Unbound looks in tables 1-2 (a table of
+# tables at 0x08A69530), takes table 0's 240+ as they are and table 0xFF's from vars 0x4080+; Radical Red in every
+# table (0x091468CC), table 0's 240+ from FireRed's vars, table 0xFF's from vars past SaveBlock1's (not drawn).
+CFRU_UNBOUND = dict(OBJ_GFX_INFO=0x088110E0, OBJ_GFX_TABLES=0x08A69530, OBJ_GFX_TABLE_MAX=2, OBJ_GFX_VAR_FROM=256,
+                    OBJ_GFX_FF_VAR=0x4080)
 
-# ROM hacks, by SHA-1. A CFRU hack keeps FireRed rev 0's RAM and most of its code, so its addresses are mapped
+# ROM hacks, by SHA-1. One with `pending` (why) is mapped and reported but left out of the table: its middle isn't
+# exact yet (verify_wide.py), so the app doesn't offer WIDE for it. A CFRU hack keeps FireRed rev 0's RAM and most of its code, so its addresses are mapped
 # through the literal pools like a retail port's (`mapped`), then `a` overrides what the hack moved; a hack on
 # its own build (pokeemerald-expansion, gcc) gives every address in `a`. `save` is its scripts/host_roms.conf name.
+# The far-off objects in the expansion builds (no symbols): the graphics table is where a live object's id leads to
+# the record its sprite's images come from, its 16 var ids the first 16 non-records past 240, the palettes the
+# {data, tag} run holding tag 0x1103, sSpritePaletteTags the RAM u16[16] whose slots hold the live sprites' tags,
+# the controls lock the byte UnlockPlayerFieldControls / ArePlayerFieldControlsLocked share; the save's templates
+# where the map header's first one is copied (flags 0x600 on), vars from the app's GuideTables.
+SG_OBJECTS = dict(SPRITE_PAL_TAGS=0x030020DC, CONTROLS_LOCKED=0x03001F74, OBJ_GFX_VAR_FROM=0x14A,
+                  SB1_OFFSETS=0x1298 | 0x1B42 << 16)
+# CFRU-style graphics lookups that only fill table 0 (the template's byte 3 still says 0xFF for a var's id).
+def cfru(info, tables, ff_var=0):
+    return dict(OBJ_GFX_INFO=info, OBJ_GFX_TABLES=tables, OBJ_GFX_TABLE_MAX=0xFE, OBJ_GFX_FF_VAR=ff_var)
+
+
 HACKS = [
     dict(name="Unbound v2.1.1.1", sha1="b4776b82a4c7915d0fadeaa27e013523f99dfd94", family="FR", mapped=True,
-         save="unbound", a=dict(MAP_GROUPS=0x08B70498, MAP_GROUPS_XOR=0x00B749DE, NORMAL_BG3=0)),
+         save="unbound", a=dict(MAP_GROUPS=0x08B70498, MAP_GROUPS_XOR=0x00B749DE, NORMAL_BG3=0, **CFRU_UNBOUND)),
     dict(name="Unbound v2.1.1.1 FR", sha1="0ce2a880aa097f1dce4e1db8ee513d0e82d15859", family="FR", mapped=True,
-         save="unbound_fr", a=dict(MAP_GROUPS=0x08B70498, MAP_GROUPS_XOR=0x00B749DE, NORMAL_BG3=0)),
+         save="unbound_fr", a=dict(MAP_GROUPS=0x08B70498, MAP_GROUPS_XOR=0x00B749DE, NORMAL_BG3=0, **CFRU_UNBOUND)),
     dict(name="Radical Red v4.1", sha1="964f951a0fdaf209e4ea1344883ef0d557bb3a80", family="FR", mapped=True,
-         save="radical_red", a=dict(MAP_GROUPS=0x083526A8)),
+         save="radical_red", a=dict(MAP_GROUPS=0x083526A8, OBJ_GFX_INFO=0x08EB1000, OBJ_GFX_TABLES=0x091468CC,
+                                    OBJ_GFX_TABLE_MAX=0xFE)),
+    # Binary FireRed hacks: FireRed rev 0's RAM and code, mapped through the literal pools; gMapGroups is the app's
+    # GuideTables value (one pool vote), the graphics lookup as each hack's GetObjectEventGraphicsInfo has it.
+    dict(name="Odyssey v4.1.1", sha1="8745ddbdbfadf6abaf66de4e9055923b62eb4668", family="FR", mapped=True,
+         save="odyssey", a=dict(MAP_GROUPS=0x083526A8, OBJ_GFX_INFO=0x09226280)),
+    dict(name="Gaia v3.2", sha1="d5b1e77975fcda831e0e9a7b527906bf3f40ecd0", family="FR", mapped=True,
+         save="gaia", a=dict(MAP_GROUPS=0x083528DC, OBJ_GFX_INFO=0x089D6CD0)),
+    dict(name="Amethyst v1.3.0", sha1="00e70c0384a5f1698588034201fd5b849d3542e2", family="FR", mapped=True,
+         save="amethyst", a=dict(MAP_GROUPS=0x083526A8, **cfru(0x0839FDB0, 0x089B03D8))),
+    dict(name="Amethyst v1.4.1", sha1="91291aade04b4b111cd03ae7b6e2ff460e1edd8a", family="FR", mapped=True,
+         pending="a sprite pixel column at the right edge on one walk frame isn't drawn",
+         save="amethyst_v141", a=dict(MAP_GROUPS=0x083526A8, **cfru(0x0839FDB0, 0x089F2598))),
+    dict(name="Orange Islands", sha1="8bac897de515f88e6ce92d0712ce2c018a394b37", family="FR", mapped=True,
+         pending="the top tile row differs once the walk turns north (half the walk frames)",
+         save="orange_islands", a=dict(MAP_GROUPS=0x083526A8, **cfru(0x08801C80, 0x081A2000, 0x4080))),
+    dict(name="Celia's Stupid Romhack v1.1.4", sha1="3cbd5a2e72ce60cfae1e0c28d83e01f855c51537", family="FR",
+         mapped=True, save="celia", a=dict(MAP_GROUPS=0x089DCD7C)),
+    *[dict(name=f"Sword and Shield Ultimate Plus{v}", sha1=sha, family="FR", mapped=True, save=save,
+           a=dict(MAP_GROUPS=0x087B1010, **cfru(0x08EB1000, 0x094BBFCC)),
+           **({"pending": "the edge column differs on a few walk frames"} if "performance" in v else {}))
+      for v, sha, save in [("", "afe4c8e0f9c7186860fcea5f25d8318f5d7929b9", "sword_shield_up"),
+                           (" (casual)", "daa2f89934d2c0447d5271dabeba86bfba04e1fd", "sword_shield_up_casual"),
+                           (" (performance)", "4858cc3d7b335bb5eed553861d7a4a17bad9ce2c", "sword_shield_up_performance"),
+                           (" (casual, performance)", "932323d1fa3732d8673d1319fa86ed4df41087b9",
+                            "sword_shield_up_casual_performance")]],
+    dict(name="Ultra Violet v1.22", sha1="3b6c51d8fb6b513bdd01b7bda3ed8965bc985d58", family="FR", mapped=True,
+         save="ultra_violet", a=dict(MAP_GROUPS=0x0872AF04, OBJ_GFX_INFO=0x08741100)),
+    # Binary Emerald hacks: Emerald's code, mapped the same way.
+    dict(name="Glazed 9.2.0", sha1="e10105d8544469c6a11ca2cf510289981df3c3b0", family="EM", mapped=True,
+         save="glazed", a=dict(MAP_GROUPS=0x08486578)),
+    # Emerald Kaizo: retail Emerald edited in place (95% byte for byte); no save of its own - retail's boots in it.
+    dict(name="Emerald Kaizo v2.0", sha1="a7c4e34fafb53f2d5283eb6d43dad285c0dd40a8", family="EM", mapped=True,
+         save="emerald_kaizo", a=dict(MAP_GROUPS=0x08486578)),
+    dict(name="R.O.W.E. v2.1.9.1", sha1="81bd0f4bfa1c04ab2c6faab1bddd10e8a390ea77", family="EM", mapped=True,
+         pending="the default boot doesn't reach its field (no map frames to check)",
+         save="rowe", a=dict()),
+    # Quetzal: its own SaveBlock1 (pos 0x470 in, the app's NativeConfig), no far-off objects (its own templates).
+    dict(name="Quetzal", sha1="d0658315da1e8827f66f15c3d3a000fe747e163e", family="EM", mapped=True, save="quetzal",
+         pending="most map frames differ (its own engine: not mapped beyond the RAM yet)",
+         a=dict(MAP_GROUPS=0x089286BC, SAVE_BLOCK1_PTR=0x030055BC, SB1_POS=0x470, MAP_HEADER=0x02038CB0,
+                OBJ_GFX_INFO=0)),
+    dict(name="Quetzal (Spanish)", sha1="fe346b5b0eb022e3a103f81e7dcefba6f1dc542f", family="EM", mapped=True,
+         pending="as Quetzal",
+         save="quetzal_es", a=dict(MAP_GROUPS=0x08934070, SAVE_BLOCK1_PTR=0x030055BC, SB1_POS=0x470,
+                                   MAP_HEADER=0x02038CB0, OBJ_GFX_INFO=0)),
+    # Super Mariomon: Emerald's code, its RAM 0x80 lower from the sprites on (sSpriteOrder: find_wide_addrs.py).
+    *[dict(name=f"Super Mariomon v{v}", sha1=sha, family="EM", mapped=True, save=f"mariomon_v{v.replace('.', '_')}",
+           a=dict(SPRITE_ORDER=0x02021774, MAP_GROUPS=groups))
+      for v, sha, groups in [("1.5.2", "06e79d12afa578db97c23c1f7ba771fe2f8fe905", 0x086986B0),
+                             ("1.5.1", "831fe0f97301f17b24a9cd4a64ef0520835c4dde", 0x0869821C),
+                             ("1.3", "043512c2497871c018df606fb90ffbd4c81430f4", 0x08680194),
+                             ("1.2.2", "08d1c275c0ba4d559b33427292702d61ad49fb5c", 0x086801D4),
+                             ("1.2.1", "43dd208b23eade69aa3384301e934ecafbf6c2b3", 0x086801F4)]],
+    # More expansion builds (scripts/find_wide_addrs.py, find_wide_objects.py; ScriptContext_SetupScript from the
+    # battle fixtures or the signature push {r4-r6, lr}; ldr r4, =ctx; movs r6, r0; movs r0, r4; movs r5, #0).
+    dict(name="Seaglass v3.0", sha1="b9f4d332d30fc88c379f9e037f9eae3b2755ead4", family="EX", save="emerald_seaglass",
+         boot=["press B", "wait 30"] * 3, script=0x081EF598, a=dict(
+             VMAP=0x03002464, MAP_HEADER=0x0200B04C, MAP_GROUPS=0x08B45148, SAVE_BLOCK1_PTR=0x030051B8,
+             CAMERA_OFFSET=0x030023F4, OBJECT_EVENTS=0x0200564C, SPRITES=0x02039810, COORD_OFFSET=0x0203AD1C,
+             COORD_OFFSET_Y=0x0203AD1E, SPRITE_ORDER=0x0203A954, GMAIN=0x030014B4, CONTROLS_LOCKED=0x03005644,
+             OBJ_GFX_INFO=0x085CE6BC, OBJ_PALETTES=0x085D4234, OBJ_FACING=0x085CE668, ELEVATION_PRIO=0x085D7618,
+             SPRITE_PAL_TAGS=0x03006644, OBJ_GFX_VAR_FROM=0x103, SB1_OFFSETS=0xDC0 | 0x14EC << 16)),
+    dict(name="Emerald Imperium v1.3.1", sha1="1d20091c4d936f5eb122db8780554dd0829ffb63", family="EX", save="imperium",
+         boot=["press B", "wait 30"] * 3, script=0x08200930, a=dict(
+             VMAP=0x030050AC, MAP_HEADER=0x0200A68C, MAP_GROUPS=0x08FC2F74, SAVE_BLOCK1_PTR=0x03006218,
+             CAMERA_OFFSET=0x03000988, OBJECT_EVENTS=0x0200A6C4, SPRITES=0x0203D2A8, COORD_OFFSET=0x0203E7B4,
+             COORD_OFFSET_Y=0x0203E7B6, SPRITE_ORDER=0x0203E3EC, GMAIN=0x03004218, CONTROLS_LOCKED=0x03000E84,
+             OBJ_GFX_INFO=0x0860AB14, OBJ_PALETTES=0x086108F0, OBJ_FACING=0x0860AAC0, ELEVATION_PRIO=0x08613DD0,
+             SPRITE_PAL_TAGS=0x03001204, OBJ_GFX_VAR_FROM=0x106, SB1_OFFSETS=0x13C4 | 0x1AF0 << 16)),
+    # Rogue: gMapGroups from its save (the current map's header -> its group's array -> the table).
+    dict(name="Emerald Rogue v2.2.1-EX", sha1="7600af1fe08444c850c3c1227fd7dfd81336ae8e", family="EX",
+         save="emerald_rogue", boot=["press B", "wait 30"] * 3, script=0x081FC240, a=dict(
+             VMAP=0x03002410, MAP_HEADER=0x020264B4, MAP_GROUPS=0x0928BF04, SAVE_BLOCK1_PTR=0x03003614,
+             CAMERA_OFFSET=0x030023A0, OBJECT_EVENTS=0x02020A48, SPRITES=0x0203C690, COORD_OFFSET=0x0203DB9C,
+             COORD_OFFSET_Y=0x0203DB9E, SPRITE_ORDER=0x0203D7D4, GMAIN=0x030014B4, CONTROLS_LOCKED=0x03003C1C)),
+    # Heart and Soul: SaveBlock1's pos 4 bytes in; FireRed's 640 primary metatiles on its own layouts (MapLayout +0x18 =
+    # 2), Emerald's 512 on the Emerald ones it kept (0); the RHH splash boot (default.txt's A presses talk to the follower).
+    dict(name="Heart and Soul v2.0.6", sha1="79ee6df0869c1773c8c6a5f764afc1f8d833d8bb", family="EX",
+         save="heart_and_soul", boot_file="rhh_splash.txt", script=0x08208094, a=dict(
+             VMAP=0x0300306C, MAP_HEADER=0x02001D0C, MAP_GROUPS=0x092DF5A4, SAVE_BLOCK1_PTR=0x030041D8, SB1_POS=4,
+             CAMERA_OFFSET=0x03000BDC, OBJECT_EVENTS=0x020017F4, SPRITES=0x0203A764, COORD_OFFSET=0x0203A2DE,
+             COORD_OFFSET_Y=0x0203A2E0, SPRITE_ORDER=0x0203A29C, GMAIN=0x03005BD8, PAN_OFF=12,
+             CONTROLS_LOCKED=0x03001FDD, PRIMARY_OVERRIDE=640, LAYOUT_VERSIONED=1)),
+    dict(name="Too Many Types 2 v1.5.2", sha1="3fa8e61ec1727cc51540c54677623f736a446e1b", family="EX", save="tmt2",
+         boot=["press B", "wait 30"] * 3, script=0x081DC368, a=dict(
+             VMAP=0x030046A8, MAP_HEADER=0x02001BBC, MAP_GROUPS=0x09047730, SAVE_BLOCK1_PTR=0x030057D8,
+             CAMERA_OFFSET=0x03000A8C, OBJECT_EVENTS=0x020016AC, SPRITES=0x0203661C, COORD_OFFSET=0x02036196,
+             COORD_OFFSET_Y=0x02036198, SPRITE_ORDER=0x02036154, GMAIN=0x03004084, CONTROLS_LOCKED=0x03000E6C)),
+    # Recharged Yellow: a gcc pokefirered - FireRed's map, triple-layer metatiles, expansion's objects.
+    *[dict(name=f"Recharged Yellow v{v}", sha1=sha, family="FR_EX", save=save, boot=["press B", "wait 30"] * 3,
+           script=script, a=dict(VMAP=vmap, MAP_HEADER=hdr, MAP_GROUPS=groups, SAVE_BLOCK1_PTR=sb1,
+                                 CAMERA_OFFSET=0x03000928, OBJECT_EVENTS=oe, SPRITES=spr, COORD_OFFSET=coord,
+                                 COORD_OFFSET_Y=coord + 2, SPRITE_ORDER=order, GMAIN=0x03003B64, METATILE_SIZE=24))
+      for v, sha, save, script, vmap, hdr, groups, sb1, oe, spr, coord, order in [
+          ("1.8.0", "be5033598e91d0e80fa93e551406f02a7876d7c2", "recharged_yellow_v180", 0x081A3540, 0x03004990,
+           0x0200B6CC, 0x08A356F0, 0x03005AB4, 0x02005CCC, 0x0203BBF0, 0x0203D0FC, 0x0203CD34),
+          ("1.9.0", "ac30d1ed80e75104a3fb92f71e2b9a51c26e80c8", "recharged_yellow_v190", 0x081A4550, 0x03004990,
+           0x0200B6D4, 0x08A35758, 0x03005AB4, 0x02005CD4, 0x0203BBF8, 0x0203D104, 0x0203CD3C),
+          ("1.9.4", "7d9fae6cf31c07bc7fa5cf7afe137ad5385cefb1", "recharged_yellow_v194", 0x081A56DC, 0x03004990,
+           0x0200B6D4, 0x08B16238, 0x03005AB4, 0x02005CD4, 0x0203BC04, 0x0203D110, 0x0203CD48),
+          ("1.9.7", "ed60654d7525ba005bfc8f799bf0ecba2ef08a2e", "recharged_yellow", 0x081A5898, 0x030049AC,
+           0x0200B6D4, 0x08B3F134, 0x03005AD0, 0x02005CD4, 0x0203BC04, 0x0203D110, 0x0203CD48)]],
     # pokeemerald-expansion builds: scripts/find_wide_addrs.py's dumps (gMapHeader, gSaveBlock1Ptr and gMapGroups from
     # the app's NativeConfig / GuideTables), ScriptContext_SetupScript from their battle fixtures' READMEs.
     dict(name="Lazarus v2.0", sha1="7dcdc7e280bc4631487e13dd37e6e0cea04adea6", family="EX", save="lazarus_srm",
          boot=["press B", "wait 30"] * 3, script=0x0820B2B0, a=dict(
              VMAP=0x03002468, MAP_HEADER=0x0200B06C, MAP_GROUPS=0x08FAF098, SAVE_BLOCK1_PTR=0x03003664,
              CAMERA_OFFSET=0x030023F8, OBJECT_EVENTS=0x0200566C, SPRITES=0x0203B5CC, COORD_OFFSET=0x0203CAD8,
-             COORD_OFFSET_Y=0x0203CADA, SPRITE_ORDER=0x0203C710, GMAIN=0x030014B8, METATILE_SIZE=24)),
+             COORD_OFFSET_Y=0x0203CADA, SPRITE_ORDER=0x0203C710, GMAIN=0x030014B8, METATILE_SIZE=24,
+             OBJ_GFX_INFO=0x087AC934, OBJ_PALETTES=0x087B6704, OBJ_FACING=0x087AC8E0, ELEVATION_PRIO=0x087B9C3C,
+             SPRITE_PAL_TAGS=0x03004B38, CONTROLS_LOCKED=0x03003B38, OBJ_GFX_VAR_FROM=0x1ED,
+             SB1_OFFSETS=0xCE8 | 0x1414 << 16)),
     dict(name="SoulGold v1.1.4", sha1="ea5d369cc8a31cbf1cfacb7c9470ea670f08957b", family="EX", save="soulgold",
          boot=["press B", "wait 30"] * 3, script=0x0823647C, a=dict(
              VMAP=0x03002F58, MAP_HEADER=0x02003828, MAP_GROUPS=0x09587364, SAVE_BLOCK1_PTR=0x030040C4,
              CAMERA_OFFSET=0x03000CB8, OBJECT_EVENTS=0x02003314, SPRITES=0x0203BF38, COORD_OFFSET=0x0203BAB2,
              COORD_OFFSET_Y=0x0203BAB4, SPRITE_ORDER=0x0203BA70, GMAIN=0x030055C0, PAN_OFF=-4, METATILE_SIZE=24,
-             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024)),
+             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024, OBJ_GFX_INFO=0x084FDF3C, OBJ_PALETTES=0x084F6B48,
+             OBJ_FACING=0x084F34C8, ELEVATION_PRIO=0x084F3918, **SG_OBJECTS)),
     # v1.2's two builds: the same RAM, 8 bytes on from v1.1.4's sprite globals; their own ROM data.
     dict(name="SoulGold v1.2", sha1="805d880ee229fb6dc3ce03d7b03baf48f0d759d0", family="EX", save="soulgold_v12",
          boot=["press B", "wait 30"] * 3, script=0x08236D5C, a=dict(
              VMAP=0x03002F58, MAP_HEADER=0x02003828, MAP_GROUPS=0x09592634, SAVE_BLOCK1_PTR=0x030040C4,
              CAMERA_OFFSET=0x03000CB8, OBJECT_EVENTS=0x02003314, SPRITES=0x0203BF40, COORD_OFFSET=0x0203BABA,
              COORD_OFFSET_Y=0x0203BABC, SPRITE_ORDER=0x0203BA78, GMAIN=0x030055C0, PAN_OFF=-4, METATILE_SIZE=24,
-             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024)),
+             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024, OBJ_GFX_INFO=0x084FF56C, OBJ_PALETTES=0x084F7E0C,
+             OBJ_FACING=0x084F476C, ELEVATION_PRIO=0x084F4BDC, **SG_OBJECTS)),
     dict(name="SoulGold v1.2 (second build)", sha1="5d6a036260fdbde96f85b5c1b92d0256d3aebafb", family="EX",
          save="soulgold_v12b", boot=["press B", "wait 30"] * 3, script=0x08236CC4, a=dict(
              VMAP=0x03002F58, MAP_HEADER=0x02003828, MAP_GROUPS=0x09592590, SAVE_BLOCK1_PTR=0x030040C4,
              CAMERA_OFFSET=0x03000CB8, OBJECT_EVENTS=0x02003314, SPRITES=0x0203BF40, COORD_OFFSET=0x0203BABA,
              COORD_OFFSET_Y=0x0203BABC, SPRITE_ORDER=0x0203BA78, GMAIN=0x030055C0, PAN_OFF=-4, METATILE_SIZE=24,
-             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024)),
+             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024, OBJ_GFX_INFO=0x084FF4D4, OBJ_PALETTES=0x084F7D74,
+             OBJ_FACING=0x084F46D4, ELEVATION_PRIO=0x084F4B44, **SG_OBJECTS)),
+    # The third v1.2 build (from main): v1.2's RAM again (find_wide_addrs.py), its own ROM data.
+    dict(name="SoulGold v1.2 (third build)", sha1="2be7c99aa473308debe1d03ff2015bab7d9addb5", family="EX",
+         save="soulgold_v12c", boot=["press B", "wait 30"] * 3, script=0x08236DBC, a=dict(
+             VMAP=0x03002F58, MAP_HEADER=0x02003828, MAP_GROUPS=0x095C04C0, SAVE_BLOCK1_PTR=0x030040C4,
+             CAMERA_OFFSET=0x03000CB8, OBJECT_EVENTS=0x02003314, SPRITES=0x0203BF40, COORD_OFFSET=0x0203BABA,
+             COORD_OFFSET_Y=0x0203BABC, SPRITE_ORDER=0x0203BA78, GMAIN=0x030055C0, PAN_OFF=-4, METATILE_SIZE=24,
+             METATILE_MASK=0x7FF, PRIMARY_OVERRIDE=1024, OBJ_GFX_INFO=0x084FF660, OBJ_PALETTES=0x084F7F00,
+             OBJ_FACING=0x084F4860, ELEVATION_PRIO=0x084F4CD0, **SG_OBJECTS)),
 ]
 FAMILY = {"BPR": "FR", "BPG": "FR", "BPE": "EM", "AXV": "RS", "AXP": "RS"}
+# Hacks under a game code of their own (only taken by SHA-1, as every hack).
+HACK_CODES = {"PUV"}
 KOTLIN = os.path.join(ROOT, "app", "src", "main", "kotlin", "com", "pokedaisy", "app")
 
 
@@ -138,6 +283,23 @@ def map_shapes(rom, groups):
     return out
 
 
+def ghost_tables(rom, a):
+    """The far-off objects' ROM tables as the reference has them: the elevation -> priority bytes, the first
+    graphics infos (a 16x32 sheet with images), palettes ({data, tag}); a mapped one with a single vote is
+    only trusted once its contents check out. A (simplified) fingerprint, None if it can't be read."""
+    try:
+        elev = rom.d[a["ELEVATION_PRIO"] - 0x08000000:][:16] if a.get("ELEVATION_PRIO") else None
+        infos = []
+        for i in range(4) if a.get("OBJ_GFX_INFO") else ():
+            info = rom.u32(a["OBJ_GFX_INFO"] + 4 * i)
+            infos.append((struct.unpack_from("<hh", rom.d, info - 0x08000000 + 8), rom.u32(info + 0x1C) >> 24))
+        pals = [rom.u32(a["OBJ_PALETTES"] + 8 * i) >> 24 for i in range(4)] if a.get("OBJ_PALETTES") else None
+        facing = rom.d[a["OBJ_FACING"] - 0x08000000:][:8] if a.get("OBJ_FACING") else None
+        return elev, infos, pals, facing
+    except (struct.error, IndexError):
+        return None
+
+
 def main():
     dirs = [os.path.expanduser(d) for d in sys.argv[1:]]
     if not dirs:
@@ -149,7 +311,7 @@ def main():
         with open(path, "rb") as f:
             head = f.read(0xC0)
         code = head[0xAC:0xB0].decode("ascii", "replace")
-        if code[:3] not in FAMILY:
+        if code[:3] not in FAMILY and code[:3] not in HACK_CODES:
             continue
         data = open(path, "rb").read()
         sha1 = hashlib.sha1(data).hexdigest()
@@ -194,6 +356,11 @@ def main():
             addrs[slot], votes[slot] = val, n
         if not hack and addrs["MAP_GROUPS"] is not None and map_shapes(dst, addrs["MAP_GROUPS"]) != map_shapes(src, ref["a"]["MAP_GROUPS"]):
             missing.append("MAP_GROUPS (its maps don't match the reference's)")
+        if not hack and ghost_tables(dst, addrs) != ghost_tables(src, ref["a"]):
+            # Not the reference's tables: no far-off objects for it (WIDE itself doesn't need them).
+            print(f"{os.path.basename(path)}: far-off objects' tables don't match the reference's, left off")
+            for k in ("OBJ_GFX_INFO", "OBJ_PALETTES", "OBJ_FACING", "ELEVATION_PRIO"):
+                addrs[k], votes[k] = 0, 0
         if hack and "script" in hack:
             script = hack["script"]
         else:
@@ -201,9 +368,13 @@ def main():
         entry = dict(file=os.path.basename(path), path=path, crc=f"{crc:08x}", code=dst.code, rev=dst.rev, family=fam,
                      addrs={k: (f"{v:#010x}" if v is not None else None) for k, v in addrs.items()}, votes=votes,
                      script=f"{script:#010x}" if script else None, missing=missing, save=hack["save"] if hack else None,
-                     boot=hack.get("boot", []) if hack else [],
+                     boot=hack.get("boot", []) if hack else [], boot_file=hack.get("boot_file") if hack else None,
                      name=hack["name"] if hack else None)
         report.append(entry)
+        if hack and hack.get("pending"):
+            print(f"pending {entry['name']}: {hack['pending']}")
+            entry["pending"] = hack["pending"]
+            continue
         if missing:
             print(f"left out {entry['file']}: no {', '.join(missing)}")
             continue

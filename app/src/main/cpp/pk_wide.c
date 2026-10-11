@@ -52,14 +52,17 @@
 
 // Each engine's layout.
 static const int32_t FAMILIES[][PK_WIDE_CONFIG_SIZE - PK_WIDE_ADDRS] = {
-    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 4, 0x8E0, 0xEE0, 0x1000, 7 },    // u32 attributes, layer in bits 29-30; sized border
-    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 4, 0xC70, 0x1270, 0x139C, 6 },  // u16 attributes, layer in bits 12-15; 2x2 border
+    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 4, 0x8E0, 0xEE0, 0x1000, 7, 2 },    // u32 attributes, layer in bits 29-30; sized border
+    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 4, 0xC70, 0x1270, 0x139C, 6, 2 },  // u16 attributes, layer in bits 12-15; 2x2 border
     // Emerald's map; a static SaveBlock1, a longer gMain, 16-bit subsprite offsets.
-    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8, 4, 0, 0, 0, 6 },
+    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8, 4, 0xC20, 0x1220, 0x1340, 6, 2 },
     // Japanese Ruby / Sapphire: the static SaveBlock1, but gMain's inBattle and 8-bit subsprites as later games.
-    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4, 4, 0, 0, 0, 6 },
-    // pokeemerald-expansion: Emerald's map and sprites, ObjectEvent.spriteId at +0x23.
-    [PK_WIDE_FAMILY_EX] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 0x23, 0, 0, 0, 6 },
+    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4, 4, 0xC20, 0x1220, 0x1340, 6, 2 },
+    // pokeemerald-expansion: Emerald's map and sprites, ObjectEvent.spriteId at +0x23, 16-bit template graphics ids;
+    // each hack's SaveBlock1 its own (PK_WIDE_SB1_OFFSETS).
+    [PK_WIDE_FAMILY_EX] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 0x23, 0, 0, 0, 6, 3 },
+    // FireRed's map (its tilesets, attributes and sized border) with expansion's objects (Recharged Yellow).
+    [PK_WIDE_FAMILY_FR_EX] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 0x23, 0, 0, 0, 7, 3 },
 };
 
 // Every engine row and every ROM row fills its part of the config, no more, no less.
@@ -137,7 +140,7 @@ struct Ghost {
     int prio;            // OAM priority, from its elevation
     uint32_t palTag;
 };
-#define MAX_GHOSTS 128
+#define MAX_GHOSTS 256
 
 struct Snap {
     bool ok;
@@ -147,6 +150,7 @@ struct Snap {
     int vw, vh;
     int width, height;             // the map itself
     uint32_t border, primary, secondary;
+    int split;                     // metatiles in the primary tileset (the engine's, or the hack's for this layout)
     int bw, bh;
     struct Conn conn[MAX_CONNS];
     int nconn;
@@ -166,17 +170,51 @@ static bool flagSet(uint32_t sb1, int flag) {
     return (r8(sb1 + (uint32_t) C[PK_WIDE_SB1_FLAGS] + (uint32_t) (flag >> 3)) >> (flag & 7)) & 1;
 }
 
+/** A var's value (0x4000 on, the ones SaveBlock1 keeps); 0 for any other. */
+static int varGet(uint32_t sb1, int var) {
+    return var >= 0x4000 && var < 0x4100 ? (int) r16(sb1 + (uint32_t) C[PK_WIDE_SB1_VARS] + 2 * (uint32_t) (var - 0x4000)) : 0;
+}
+
+/** An object's ObjectEventGraphicsInfo, as GetObjectEventGraphicsInfo finds it: an id past the table's own (240 on)
+ * from VAR_OBJ_GFX_ID_*. CFRU's ids are 16-bit, a table and an entry: table 0xFF's from a var, tables past the last
+ * from table 0, an empty entry is table 0's 16th. 0 = none. */
+static uint32_t ghostInfo(uint32_t sb1, int gfx) {
+    uint32_t base = (uint32_t) C[PK_WIDE_OBJ_GFX_INFO], tables = (uint32_t) C[PK_WIDE_OBJ_GFX_TABLES];
+    int from = C[PK_WIDE_OBJ_GFX_VAR_FROM] ? C[PK_WIDE_OBJ_GFX_VAR_FROM] : 240;
+    for (int hop = 0; hop < 2; hop++) {   // a var's id is looked up once more (never a var again)
+        int table = gfx >> 8 & 0xFF, entry = gfx & 0xFF;
+        if (tables && table == 0xFF) {
+            if (hop || !C[PK_WIDE_OBJ_GFX_FF_VAR] || entry > 0xF) return 0;
+            gfx = varGet(sb1, C[PK_WIDE_OBJ_GFX_FF_VAR] + entry);
+            continue;
+        }
+        int id = tables ? entry : gfx;   // CFRU: table 0's entry; else the whole id
+        if (table == 0 || !tables) {
+            if (id >= from + 16) return 0;   // past the table (expansion's overworld Pokémon: their own graphics)
+            if (id >= from) {
+                if (hop) return 0;
+                gfx = varGet(sb1, 0x4010 + id - from);   // VAR_OBJ_GFX_ID_*
+                continue;
+            }
+        }
+        if (!tables) return r32(base + 4 * (uint32_t) id);
+        uint32_t list = table && table <= C[PK_WIDE_OBJ_GFX_TABLE_MAX] ? r32(tables + 4 * (uint32_t) table) : 0;
+        if (!list) list = base;
+        uint32_t info = r32(list + 4 * (uint32_t) entry);
+        return info ? info : r32(base + 0x40);
+    }
+    return 0;
+}
+
 /** One object template (at `t`, its x / y relative to a map whose (0, 0) is VMap cell (ox, oy)) as a ghost, unless
  * it's hidden by its flag: its sprite where SpawnObjectEvent would put it - the frame of the movement type's first
  * facing, the bottom of the box on the tile's bottom, centred on it. */
 static void addGhost(struct Snap* s, uint32_t sb1, uint32_t t, int ox, int oy) {
     if (s->nghosts >= MAX_GHOSTS) return;
-    int gfx = (int) r8(t + 1);
     int flag = (int) r16(t + 0x14);
     if (flag && flagSet(sb1, flag)) return;   // hidden (picked up, beaten, moved on)
-    if (gfx >= 240) gfx = (int) r16(sb1 + (uint32_t) C[PK_WIDE_SB1_VARS] + 2 * (uint32_t) (0x10 + gfx - 240));   // VAR_OBJ_GFX_ID_*
-    if (gfx < 0 || gfx > 0xFF) return;
-    uint32_t info = r32((uint32_t) C[PK_WIDE_OBJ_GFX_INFO] + 4 * (uint32_t) gfx);
+    int kind = C[PK_WIDE_TEMPLATE_KIND];   // byte 3 then: graphicsId's high byte at +2; CFRU's table is +3
+    uint32_t info = ghostInfo(sb1, (int) (r8(t + 1) | (kind == 3 ? r8(t + 2) << 8 : C[PK_WIDE_OBJ_GFX_TABLES] ? r8(t + 3) << 8 : 0)));
     int w = s16(info + 8), h = s16(info + 0xA);
     if (!info || w <= 0 || h <= 0 || w > 64 || h > 64 || (w & 7) || (h & 7)) return;
     bool inanimate = r8(info + 0xC) & 0x40;
@@ -214,12 +252,12 @@ static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
     uint32_t events = r32(hdr + 4);
     int count = events ? (int) r8(events) : 0;
     if (count > 64) count = 64;
-    int mapGroup = (int) r8(sb1 + 4), mapNum = (int) r8(sb1 + 5);
+    int mapGroup = s->group, mapNum = s->num;
     uint32_t base = sb1 + (uint32_t) C[PK_WIDE_SB1_TEMPLATES];
     for (int i = 0; i < count; i++) {
         uint32_t t = base + 0x18 * (uint32_t) i;
         int localId = (int) r8(t);
-        if (r8(t + 2) != 0) continue;   // a clone of a connected map's object: spawned when near, else that map's own
+        if (r8(t + (uint32_t) C[PK_WIDE_TEMPLATE_KIND]) != 0) continue;   // a clone of a connected map's object: spawned when near, else that map's own
         bool live = false;
         for (int k = 0; k < 16 && !live; k++) {
             const uint8_t* oe = s->objects + 0x24 * k;
@@ -234,12 +272,12 @@ static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
         if (n > 64) n = 64;
         for (int i = 0; i < n; i++) {
             uint32_t t = arr + 0x18 * (uint32_t) i;
-            if (r8(t + 2) != 0) continue;
+            if (r8(t + (uint32_t) C[PK_WIDE_TEMPLATE_KIND]) != 0) continue;
             int localId = (int) r8(t);
             bool cloned = false;   // the current map has a clone of it (shown, or a ghost of its own)
             for (int m = 0; m < count && !cloned; m++) {
                 uint32_t ct = base + 0x18 * (uint32_t) m;
-                cloned = r8(ct + 2) == 1 && (int) r8(ct + 8) == localId && (int) r16(ct + 0xC) == k->num && (int) r16(ct + 0xE) == k->group;
+                cloned = r8(ct + (uint32_t) C[PK_WIDE_TEMPLATE_KIND]) == 1 && (int) r8(ct + 8) == localId && (int) r16(ct + 0xC) == k->num && (int) r16(ct + 0xE) == k->group;
             }
             if (!cloned) addGhost(s, sb1, t, k->ox, k->oy);
         }
@@ -303,10 +341,11 @@ static void take(struct Snap* s) {
     badRead = false;
     s->ok = false;
     uint32_t sb1 = C[PK_WIDE_SAVE_STATIC] ? (uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR] : r32((uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]);
-    s->posX = s16(sb1);
-    s->posY = s16(sb1 + 2);
-    s->group = (int) r8(sb1 + 4);
-    s->num = (int) r8(sb1 + 5);
+    uint32_t pos = sb1 + (uint32_t) C[PK_WIDE_SB1_POS];
+    s->posX = s16(pos);
+    s->posY = s16(pos + 2);
+    s->group = (int) r8(pos + 4);
+    s->num = (int) r8(pos + 5);
     uint32_t co = (uint32_t) C[PK_WIDE_CAMERA_OFFSET];
     s->xTile = (int) r8(co + 2);
     s->yTile = (int) r8(co + 3);
@@ -330,6 +369,8 @@ static void take(struct Snap* s) {
     s->border = r32(layout + 8);
     s->primary = r32(layout + 0x10);
     s->secondary = r32(layout + 0x14);
+    bool emeraldLayout = C[PK_WIDE_LAYOUT_VERSIONED] && r8(layout + 0x18) == 0;
+    s->split = C[PK_WIDE_PRIMARY_OVERRIDE] && !emeraldLayout ? C[PK_WIDE_PRIMARY_OVERRIDE] : C[PK_WIDE_PRIMARY_METATILES];
     // Sizes from memory are only trusted within reason: nothing below multiplies a garbage one.
     if (s->width <= 0 || s->height <= 0 || s->width > MAX_MAP_DATA || s->height > MAX_MAP_DATA) return;
     if (C[PK_WIDE_BORDER_SIZED]) {
@@ -368,15 +409,15 @@ struct Tilesets {
 };
 static struct Tilesets cur;
 static uint32_t mtPrimary, mtSecondary;   // what `cur` holds
+static int split = 512;                   // metatiles in the primary tileset of what's being drawn (metatile() sets it)
 
 static const uint16_t* metatileIn(struct Tilesets* t, int mid, int bg) {
     uint16_t (*mtTiles)[3][4] = t->mt;
     uint8_t* mtDone = t->done;
     if (mid > NUM_METATILES_TOTAL) mid = 0;     // DrawMetatileAt's own clamp
     if (!mtDone[mid]) {
-        int prim = C[PK_WIDE_PRIMARY_OVERRIDE] ? C[PK_WIDE_PRIMARY_OVERRIDE] : C[PK_WIDE_PRIMARY_METATILES];
-        uint32_t ts = mid < prim ? t->primary : t->secondary;
-        int i = mid < prim ? mid : mid - prim;
+        uint32_t ts = mid < split ? t->primary : t->secondary;
+        int i = mid < split ? mid : mid - split;
         uint32_t attrs = r32(ts + (uint32_t) C[PK_WIDE_ATTR_OFFSET]);
         uint32_t attr = C[PK_WIDE_ATTR_SIZE] == 4 ? r32(attrs + 4 * (uint32_t) i) : r16(attrs + 2 * (uint32_t) i);
         int layer = (int) ((attr >> C[PK_WIDE_LAYER_SHIFT]) & (uint32_t) C[PK_WIDE_LAYER_MASK]);
@@ -406,7 +447,10 @@ static const uint16_t* metatileIn(struct Tilesets* t, int mid, int bg) {
     return mtTiles[mid][bg - 1];
 }
 
+static void syncSplit(const struct Snap* s);
+
 static const uint16_t* metatile(const struct Snap* s, int mid, int bg) {
+    syncSplit(s);
     if (s->primary != mtPrimary || s->secondary != mtSecondary) {
         memset(cur.done, 0, sizeof(cur.done));
         cur.primary = mtPrimary = s->primary;
@@ -434,6 +478,15 @@ struct Foreign {
 };
 #define FOREIGN_SLOTS 4
 static struct Foreign foreign[FOREIGN_SLOTS];
+
+/** Draws with the snapshot's primary split from now on (the caches were filled for the other one: emptied). */
+static void syncSplit(const struct Snap* s) {
+    if (s->split == split) return;
+    split = s->split;
+    mtPrimary = mtSecondary = 0;
+    for (int i = 0; i < FOREIGN_SLOTS; i++) foreign[i].t.primary = foreign[i].t.secondary = 0;
+}
+
 static uint32_t foreignFrame;   // drawRegion calls so far: a slot used in this one is never replaced (no reloading per frame)
 
 /** GBA BIOS LZ77 (type 0x10) at `src` into dst (at most `cap` bytes); bytes written, 0 if it isn't one. */
@@ -578,8 +631,46 @@ static int lineIoFrames;   // frames drawn since the hook went in (lineIo is who
 static struct GBA* hookGba;
 static void (*origDrawScanline)(struct GBAVideoRenderer*, int);
 
+// The palette each line was drawn with: a game that changes palette RAM mid-frame (a fade landing late, an HBlank
+// effect) shows two palettes in one frame. A copy is kept only when a line's differs from the last one taken.
+#define LINE_PALS 8
+static uint16_t linePalBuf[LINE_PALS][512];
+static uint8_t linePalOf[PK_WIDE_H];
+static int linePalN;
+// The same for OAM (a battle's sprites are drawn from it): healthboxes sliding in on a late frame tear too.
+static uint16_t lineOamBuf[LINE_PALS][512];
+static uint8_t lineOamOf[PK_WIDE_H];
+static int lineOamN;
+
+// VRAM written while the frame was being drawn (a lag frame's tile upload): lines before and after it show different
+// tiles, which no snapshot taken after the frame can redraw. Only reported (pk_wide_last_vram_torn), for the checks.
+static int drawingLine = PK_WIDE_H;   // the line last drawn; PK_WIDE_H between frames
+static bool vramTorn, vramTornLast;
+static void (*origWriteVRAM)(struct GBAVideoRenderer*, uint32_t);
+static void hookWriteVRAM(struct GBAVideoRenderer* r, uint32_t address) {
+    if (drawingLine < PK_WIDE_H - 1) vramTorn = true;
+    origWriteVRAM(r, address);
+}
+
 static void hookDrawScanline(struct GBAVideoRenderer* r, int y) {
-    if (hookGba && y >= 0 && y < PK_WIDE_H) memcpy(lineIo[y], hookGba->memory.io, sizeof(lineIo[0]));
+    if (y == 0) {
+        vramTornLast = vramTorn;   // the frame before, done
+        vramTorn = false;
+    }
+    drawingLine = y;
+    if (hookGba && y >= 0 && y < PK_WIDE_H) {
+        memcpy(lineIo[y], hookGba->memory.io, sizeof(lineIo[0]));
+        const uint16_t* pal = hookGba->video.palette;
+        if (y == 0) linePalN = 0;
+        if (!linePalN || (memcmp(pal, linePalBuf[linePalN - 1], sizeof(linePalBuf[0])) && linePalN < LINE_PALS))
+            memcpy(linePalBuf[linePalN++], pal, sizeof(linePalBuf[0]));
+        linePalOf[y] = (uint8_t) (linePalN - 1);
+        const uint16_t* oam = hookGba->video.oam.raw;
+        if (y == 0) lineOamN = 0;
+        if (!lineOamN || (memcmp(oam, lineOamBuf[lineOamN - 1], sizeof(lineOamBuf[0])) && lineOamN < LINE_PALS))
+            memcpy(lineOamBuf[lineOamN++], oam, sizeof(lineOamBuf[0]));
+        lineOamOf[y] = (uint8_t) (lineOamN - 1);
+    }
     origDrawScanline(r, y);
 }
 
@@ -591,6 +682,10 @@ static void hookScanlines(struct GBA* gba) {
         r->drawScanline = hookDrawScanline;
         lineIoFrames = 0;
     }
+    if (r->writeVRAM && r->writeVRAM != hookWriteVRAM) {
+        origWriteVRAM = r->writeVRAM;
+        r->writeVRAM = hookWriteVRAM;
+    }
     hookGba = gba;
 }
 
@@ -600,6 +695,19 @@ static inline const uint16_t* lineRegs(int y) {
     if (y < 0) y = 0;
     if (y >= PK_WIDE_H) y = PK_WIDE_H - 1;
     return lineIoFrames > 1 ? lineIo[y] : G->memory.io;
+}
+
+/** The palette in use (P[i]: BG 0..255, OBJ 256..511): line y's as it was drawn ([useLine]), else palette RAM now. */
+static const uint16_t* P;
+static inline void useLine(int y) {
+    R = lineRegs(y);
+    if (y < 0) y = 0;
+    if (y >= PK_WIDE_H) y = PK_WIDE_H - 1;
+    P = lineIoFrames > 1 && linePalN ? linePalBuf[linePalOf[y] < linePalN ? linePalOf[y] : 0] : G->video.palette;
+}
+static inline void useLive(void) {
+    R = G->memory.io;
+    P = G->video.palette;
 }
 static int bgPrio[4];
 static uint32_t bgChar[4], bgScreen[4];
@@ -699,11 +807,12 @@ static uint32_t brightness(uint32_t c, int layer) {
     if (mode < 2 || !(cnt & (1 << layer))) return c;
     unsigned y = io(0x54) & 0x1F;
     if (y > 16) y = 16;
+    // As mGBA's 32-bit renderer (_brighten / _darken): each channel in place, so a darkened green or blue also loses
+    // the fraction from the channel below (white darkened by 1 is 240, 239, 239).
     uint32_t out = c & 0xFF000000;
     for (int sh = 0; sh <= 16; sh += 8) {
-        unsigned a = (c >> sh) & 0xFF;
-        a = mode == 2 ? a + ((0xFF - a) * y) / 16 : a - (a * y) / 16;
-        out |= (uint32_t) (a & 0xFF) << sh;
+        uint32_t m = 0xFFu << sh, a = c & m;
+        out |= (mode == 2 ? a + ((m - a) * y) / 16 : a - (a * y) / 16) & m;
     }
     return out;
 }
@@ -723,6 +832,7 @@ static uint16_t mapPixel(const struct Snap* s, int mx, int my, int enabled, int*
     for (int i = 0; i < 3; i++) {
         int b = order3[i];
         if (!(enabled & (1 << b))) continue;
+        if (f) syncSplit(s);
         uint16_t e = f ? metatileIn(&f->t, mid, b)[q] : metatile(s, mid, b)[q];
         int px = mx & 7, py = my & 7;
         if (e & 0x400) px = 7 - px;
@@ -740,12 +850,12 @@ static uint16_t mapPixel(const struct Snap* s, int mx, int my, int enabled, int*
             *prio = bgPrio[b];
             *layer = b;
             if (f && (f->ownPrimary || pal >= np)) return f->pal[pal * 16 + ci];
-            return G->video.palette[pal * 16 + ci];
+            return P[pal * 16 + ci];
         }
     }
     *prio = 4;
     *layer = 5;
-    return G->video.palette[0];
+    return P[0];
 }
 
 struct Piece {
@@ -924,8 +1034,65 @@ static inline bool onFrame(int x, int y) {
     return x >= 0 && x < PK_WIDE_W && y >= 0 && y < PK_WIDE_H;
 }
 
+/** romPalette's answers (a tag -> its data, 0 = none), most recent first-come; emptied with the game. */
+#define PAL_CACHE 64
+static uint32_t palCacheTag[PAL_CACHE], palCacheData[PAL_CACHE];
+static int palCacheN, palCacheNext;
+
+static uint32_t romPaletteFind(uint32_t tag);
+
+/** The ROM's palette for an object palette tag (its sObjectEventSpritePalettes entry), or 0. */
+static uint32_t romPalette(uint32_t tag) {
+    for (int i = 0; i < palCacheN; i++)
+        if (palCacheTag[i] == tag) return palCacheData[i];
+    uint32_t data = romPaletteFind(tag);
+    palCacheTag[palCacheNext] = tag;
+    palCacheData[palCacheNext] = data;
+    palCacheNext = (palCacheNext + 1) % PAL_CACHE;
+    if (palCacheN < PAL_CACHE) palCacheN++;
+    return data;
+}
+
+static uint32_t romPaletteFind(uint32_t tag) {
+    uint32_t last = 0;
+    for (int k = 0; k < 1024 && C[PK_WIDE_OBJ_PALETTES]; k++) {   // CFRU hacks have hundreds
+        uint32_t e = (uint32_t) C[PK_WIDE_OBJ_PALETTES] + 8 * (uint32_t) k, data = r32(e);
+        if (!data) {
+            // The end - unless the tags carry on past one empty entry (Unbound's 0x1200s follow its 0x1100s).
+            uint32_t next = r32(e + 8);
+            if (next >> 25 != 4 || r16(e + 12) <= last) break;   // a ROM pointer (0x08 / 0x09...)
+            continue;
+        }
+        last = r16(e + 4);
+        if (last == tag) return mem(data, 32) ? data : 0;
+    }
+    return 0;
+}
+
+/** How the game has tinted its loaded object palettes (day / night, a fade to black), per channel x256: palette RAM
+ * against the ROM's colours for every slot holding an object palette. A ghost drawn from the ROM gets the same. */
+static int tint[3] = { 256, 256, 256 };
+static void measureTint(void) {
+    tint[0] = tint[1] = tint[2] = 256;
+    const uint8_t* tags = C[PK_WIDE_SPRITE_PAL_TAGS] ? mem((uint32_t) C[PK_WIDE_SPRITE_PAL_TAGS], 32) : NULL;
+    int32_t rom[3] = { 0 }, ram[3] = { 0 };
+    for (int slot = 0; tags && slot < 16; slot++) {
+        uint32_t tag = le16(tags + 2 * slot), data = tag == 0xFFFF ? 0 : romPalette(tag);
+        const uint8_t* p = data ? mem(data, 32) : NULL;
+        for (int i = 1; p && i < 16; i++) {
+            uint16_t a = (uint16_t) le16(p + 2 * i), b = G->video.palette[256 + slot * 16 + i];
+            for (int c = 0; c < 3; c++) {
+                rom[c] += (a >> (5 * c)) & 31;
+                ram[c] += (b >> (5 * c)) & 31;
+            }
+        }
+    }
+    for (int c = 0; c < 3; c++)
+        if (rom[c] >= 64) tint[c] = clampi(ram[c] * 256 / rom[c], 0, 256);   // darker only: a fade to white isn't a ratio
+}
+
 /** A ghost's colour: the OBJ palette slot its tag is loaded in (the game's fades and tints with it), else the
- * palette from the ROM's table; false if neither has it. */
+ * palette from the ROM's table, tinted as the loaded ones are ([measureTint]); false if neither has it. */
 static bool ghostPalette(uint32_t tag, uint32_t alpha, uint32_t pal[16]) {
     const uint8_t* tags = C[PK_WIDE_SPRITE_PAL_TAGS] ? mem((uint32_t) C[PK_WIDE_SPRITE_PAL_TAGS], 32) : NULL;
     for (int slot = 0; tags && slot < 16; slot++) {
@@ -933,37 +1100,39 @@ static bool ghostPalette(uint32_t tag, uint32_t alpha, uint32_t pal[16]) {
         for (int i = 0; i < 16; i++) pal[i] = color(G->video.palette[256 + slot * 16 + i], alpha);
         return true;
     }
-    for (int k = 0; k < 64 && C[PK_WIDE_OBJ_PALETTES]; k++) {
-        uint32_t e = (uint32_t) C[PK_WIDE_OBJ_PALETTES] + 8 * (uint32_t) k, data = r32(e);
-        if (!data) break;
-        if (r16(e + 4) != tag) continue;
-        const uint8_t* p = mem(data, 32);
-        if (!p) return false;
-        for (int i = 0; i < 16; i++) pal[i] = color((uint16_t) le16(p + 2 * i), alpha);
-        return true;
+    uint32_t data = romPalette(tag);
+    const uint8_t* p = data ? mem(data, 32) : NULL;
+    if (!p) return false;
+    for (int i = 0; i < 16; i++) {
+        uint32_t c = le16(p + 2 * i), r = (c & 31) * (uint32_t) tint[0] >> 8, g = ((c >> 5) & 31) * (uint32_t) tint[1] >> 8,
+                 b = ((c >> 10) & 31) * (uint32_t) tint[2] >> 8;
+        pal[i] = color((uint16_t) (r | g << 5 | b << 10), alpha);
     }
-    return false;
+    return true;
 }
 
 /** The snapshot's ghosts over the rectangle, behind every real sprite and each other front first (takenBuf). */
 static void drawGhosts(const struct Snap* s, int cx, int cy, int x0, int y0, int x1, int y1, uint32_t* dst, int stride,
                        uint32_t alpha) {
     int w = x1 - x0;
+    if (s->nghosts) measureTint();
     for (int i = 0; i < s->nghosts; i++) {
         const struct Ghost* g = &s->ghosts[i];
         int gx = g->x - cx, gy = g->y - cy;   // on screen
         if (gx + g->w <= x0 || gx >= x1 || gy + g->h <= y0 || gy >= y1) continue;
         const uint8_t* px4 = mem(g->pixels, (uint32_t) (g->w * g->h / 2));
         uint32_t pal[16];
-        if (!px4 || !ghostPalette(g->palTag, alpha, pal)) continue;
+        // Only an NPC's own palette: the lights and the like (expansion's 0x8001) are the game's to show, as it does.
+        if (!px4 || !romPalette(g->palTag) || !ghostPalette(g->palTag, alpha, pal)) continue;
         for (int yy = 0; yy < g->h; yy++) {
             int Y = gy + yy, J = Y - y0;
             if (Y < y0 || Y >= y1) continue;
-            R = lineRegs(Y);
+            useLine(Y);
             if (!(io(0) & 0x1000)) continue;
             for (int xx = 0; xx < g->w; xx++) {
                 int X = gx + xx - x0;
                 if (X < 0 || X >= w || takenBuf[J][X]) continue;
+                if (onFrame(gx + xx, Y)) continue;   // the game's own view shows all that's there
                 int wl = windowLayers(gx + xx, Y);
                 if (!(wl & 0x10)) continue;
                 int px = g->hflip ? g->w - 1 - xx : xx;
@@ -989,7 +1158,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
         int y = y0 + j;
         // This line as the PPU drew it: its layers, windows and scroll (a line scrolled apart from the
         // latched value is that much further along the map). Above / below the screen: its edge line's.
-        R = lineRegs(y);
+        useLine(y);
         int dx = signed9((io(0x14) & 0x1FF) - href), dy = signed9((io(0x16) & 0x1FF) - vref);
         int disp = io(0);
         for (int x = 0; x < w; x++) {
@@ -1020,7 +1189,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
                     continue;
                 }
             }
-            uint16_t c = enabled ? mapPixel(s, cx + mx, cy + my, enabled, &prio, &layer, onFrame(sx, y)) : G->video.palette[ci];
+            uint16_t c = enabled ? mapPixel(s, cx + mx, cy + my, enabled, &prio, &layer, onFrame(sx, y)) : P[ci];
             uint32_t c32 = color(c, alpha);
             dst[j * stride + x] = wl & 0x20 ? brightness(c32, layer) : c32;
             prioBuf[j][x] = (uint8_t) prio;
@@ -1029,7 +1198,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
             takenBuf[j][x] = 0;
         }
     }
-    R = G->memory.io;
+    useLive();
     // The PPU's OBJ layer: per pixel the first opaque piece in OAM order wins among sprites,
     // then shows if its priority is <= the front BG's.
     if (!(io(0) & 0x40)) return;   // 2D tile mapping
@@ -1047,7 +1216,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
         for (int yy = 0; yy < bh; yy++) {
             int Y = p[i].y + yy, J = Y - y0;
             if (Y < y0 || Y >= y1) continue;
-            R = lineRegs(Y);
+            useLine(Y);
             if (!(io(0) & 0x1000)) continue;   // OBJ off on this line
             for (int xx = 0; xx < bw; xx++) {
                 int X = p[i].x + xx - x0;
@@ -1070,14 +1239,14 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
                 if (!ci) continue;
                 takenBuf[J][X] = 1;
                 if (p[i].prio > prioBuf[J][X]) continue;
-                uint32_t c = color(G->video.palette[256 + p[i].pal * 16 + ci], alpha);
+                uint32_t c = color(P[256 + p[i].pal * 16 + ci], alpha);
                 dst[J * stride + X] = p[i].mode == 1 ? blend(c, below[J][X], layerBuf[J][X]) : wl & 0x20 ? brightness(c, 4) : c;
                 holeBuf[J][X] = 0;
             }
         }
     }
     drawGhosts(s, cx, cy, x0, y0, x1, y1, dst, stride, alpha);
-    R = G->memory.io;
+    useLive();
 }
 
 // --- battles ---------------------------------------------------------------------------------------
@@ -1114,7 +1283,7 @@ static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uin
             }
             continue;
         }
-        R = lineRegs(y);
+        useLine(y);
         uint16_t disp = io(0), cnt = io(0x0E);
         uint32_t chr = ((cnt >> 2) & 3) * 0x4000u, scr = ((cnt >> 8) & 31) * 0x800u;
         int hofs = io(0x1C) & 0x1FF, vofs = io(0x1E) & 0x1FF, my = (y + vofs) & 255;
@@ -1126,7 +1295,8 @@ static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uin
                 continue;
             }
             uint16_t e = 0;
-            if ((disp & 0x0800) && (windowLayers(sx, y) & 8)) {
+            int wl = windowLayers(sx, y);   // its window's layers, and whether effects apply there (0x20)
+            if ((disp & 0x0800) && (wl & 8)) {
                 int mx = (sx + hofs) & 511;
                 e = le16(vram + scr + (uint32_t) (mx >> 8) * 0x800 + 2 * (uint32_t) (((my >> 3) & 31) * 32 + ((mx >> 3) & 31)));
                 int px = mx & 7, py = my & 7;
@@ -1135,9 +1305,9 @@ static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uin
                 uint32_t off = chr + (e & 0x3FFu) * 32 + (uint32_t) (py * 4 + px / 2);
                 if (off < 0x10000) ci = px & 1 ? vram[off] >> 4 : vram[off] & 15;
             }
-            uint16_t c = G->video.palette[ci ? (e >> 12) * 16 + ci : 0];
+            uint16_t c = P[ci ? (e >> 12) * 16 + ci : 0];
             uint32_t c32 = color(c, alpha);
-            dst[j * stride + x] = brightness(c32, ci ? 3 : 5);
+            dst[j * stride + x] = wl & 0x20 ? brightness(c32, ci ? 3 : 5) : c32;   // a window can leave a fade out
             prioBuf[j][x] = (uint8_t) (ci ? cnt & 3 : 4);
             layerBuf[j][x] = (uint8_t) (ci ? 3 : 5);
             below[j][x] = c32;
@@ -1147,8 +1317,10 @@ static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uin
     }
     // The frame's own OAM, front first. An OAM x of 9 bits reads as negative near its top (a sprite
     // reaching in from the left), y of 8 bits past the screen's bottom likewise.
-    if ((G->memory.io[0] & 0x1000) && (G->memory.io[0] & 0x40)) {
-        const uint16_t* oam = G->video.oam.raw;
+    // Each OAM the frame was drawn with draws its own lines (one, unless it changed mid-frame).
+    int snaps = lineIoFrames > 1 && lineOamN ? lineOamN : 1;
+    for (int snap = 0; snap < snaps && (G->memory.io[0] & 0x1000) && (G->memory.io[0] & 0x40); snap++) {
+        const uint16_t* oam = lineIoFrames > 1 && lineOamN ? lineOamBuf[snap] : G->video.oam.raw;
         for (int k = 0; k < 128; k++) {
             uint16_t a0 = oam[k * 4], a1 = oam[k * 4 + 1], a2 = oam[k * 4 + 2];
             int rot = (a0 >> 8) & 3;                         // 0 normal, 1 affine, 2 hidden, 3 affine double-size
@@ -1168,10 +1340,12 @@ static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uin
             for (int yy = 0; yy < bh; yy++) {
                 int Y = oy + yy, J = Y - y0;
                 if (Y < 0 || Y >= PK_WIDE_H || Y < y0 || Y >= y1) continue;
-                R = lineRegs(Y);
+                if (snaps > 1 && lineOamOf[Y] != snap) continue;   // another OAM drew this line
+                useLine(Y);
                 for (int xx = 0; xx < bw; xx++) {
                     int X = ox + xx - x0;
-                    if (X < 0 || X >= w || takenBuf[J][X] || !(windowLayers(ox + xx, Y) & 0x10)) continue;
+                    int wl = X < 0 || X >= w || takenBuf[J][X] ? 0 : windowLayers(ox + xx, Y);
+                    if (!(wl & 0x10)) continue;
                     int px, py;
                     if (rot & 1) {   // mGBA's: texel = (matrix * (box pixel - box centre) + sprite centre) >> 8
                         px = (pa * (xx - bw / 2) + pb * (yy - bh / 2) + (sw << 7)) >> 8;
@@ -1187,14 +1361,14 @@ static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uin
                     if (!ci) continue;
                     takenBuf[J][X] = 1;
                     if (prio > prioBuf[J][X]) continue;
-                    uint32_t c = color(G->video.palette[256 + pal * 16 + ci], alpha);
-                    dst[J * stride + X] = mode == 1 ? blend(c, below[J][X], layerBuf[J][X]) : brightness(c, 4);
+                    uint32_t c = color(P[256 + pal * 16 + ci], alpha);
+                    dst[J * stride + X] = !(wl & 0x20) ? c : mode == 1 ? blend(c, below[J][X], layerBuf[J][X]) : brightness(c, 4);
                     holeBuf[J][X] = 0;
                 }
             }
         }
     }
-    R = G->memory.io;
+    useLive();
 }
 
 // --- menu screens ------------------------------------------------------------------------------------
@@ -1225,7 +1399,7 @@ static bool menuScreen(void) {
 static bool menuPixel(int sx, int y, uint32_t alpha, uint32_t* out) {
     const uint8_t* vram = (const uint8_t*) G->video.vram;
     int b = menuBg;
-    R = lineRegs(y);
+    useLine(y);
     uint16_t disp = io(0), cnt = io(0x08 + 2 * b);
     int wl = windowLayers(sx, y);
     if (!(disp & (0x100 << b)) || !(wl & (1 << b))) return false;
@@ -1247,7 +1421,7 @@ static bool menuPixel(int sx, int y, uint32_t alpha, uint32_t* out) {
         palBase = (e >> 12) * 16;
     }
     if (!ci) return false;
-    uint32_t c = color(G->video.palette[palBase + ci], alpha);
+    uint32_t c = color(P[palBase + ci], alpha);
     *out = wl & 0x20 ? brightness(c, b) : c;
     return true;
 }
@@ -1315,15 +1489,15 @@ static void drawMenuRegion(int x0, int y0, int x1, int y1, bool skipFrame, uint3
             }
             uint32_t c;
             if (!menuPixel(fx, ry, alpha, &c)) {
-                R = lineRegs(ry);
-                c = color(G->video.palette[0], alpha);
+                useLine(ry);
+                c = color(P[0], alpha);
                 if (windowLayers(fx, ry) & 0x20) c = brightness(c, 5);
             }
             dst[j * stride + x] = c;
             holeBuf[j][x] = 0;
         }
     }
-    R = G->memory.io;
+    useLive();
 }
 
 // --- ambient edges -----------------------------------------------------------------------------------
@@ -1416,8 +1590,14 @@ int pk_wide_configure(uint32_t crc) {
     if (configured) {
         memcpy(C, rom->a, sizeof(rom->a));
         memcpy(C + PK_WIDE_ADDRS, FAMILIES[rom->family], sizeof(FAMILIES[0]));
+        if (C[PK_WIDE_SB1_OFFSETS]) {   // a hack's own SaveBlock1: flags follow the 64 templates, then the vars
+            C[PK_WIDE_SB1_TEMPLATES] = C[PK_WIDE_SB1_OFFSETS] & 0xFFFF;
+            C[PK_WIDE_SB1_FLAGS] = C[PK_WIDE_SB1_TEMPLATES] + 64 * 0x18;
+            C[PK_WIDE_SB1_VARS] = (C[PK_WIDE_SB1_OFFSETS] >> 16) & 0xFFFF;
+        }
     }
     mtPrimary = mtSecondary = 0;
+    palCacheN = palCacheNext = 0;
     for (int i = 0; i < FOREIGN_SLOTS; i++) foreign[i].t.primary = foreign[i].t.secondary = 0;   // another game's tilesets
     pk_wide_reset();
     return configured;
@@ -1442,6 +1622,7 @@ void pk_wide_reset(void) {
 int pk_wide_last_score(void) { return lastScore; }
 int pk_wide_last_mode(void) { return lastMode; }
 int pk_wide_last_torn(void) { return lastTorn; }
+int pk_wide_last_vram_torn(void) { return drawingLine >= PK_WIDE_H - 1 ? vramTorn : vramTornLast; }
 
 /** a * (256 - t) + b * t, per channel, keeping a's alpha. */
 static inline uint32_t lerp(uint32_t a, uint32_t b, int t) {
@@ -1580,7 +1761,7 @@ static int viewInner(struct mCore* core, const uint32_t* frame, uint32_t* out, s
         // kept - what the next frame shows - so the frame that is drawn still has its snapshot from the frame before.
         if (!core || core->platform(core) != mPLATFORM_GBA || !configured) return 0;
         G = (struct GBA*) core->board;
-        R = G->memory.io;
+        useLive();
         hookScanlines(G);
         int cur = prev == 0 ? 1 : 0;
         take(&snaps[cur]);
@@ -1602,7 +1783,7 @@ static int viewInner(struct mCore* core, const uint32_t* frame, uint32_t* out, s
         return 0;
     }
     G = (struct GBA*) core->board;
-    R = G->memory.io;
+    useLive();
     hookScanlines(G);
 
     int cur = prev == 0 ? 1 : 0;

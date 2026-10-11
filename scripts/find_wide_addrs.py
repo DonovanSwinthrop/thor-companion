@@ -85,6 +85,8 @@ def main():
     ap.add_argument("--boot", default=os.path.join(ROOT, "native-capture", "boot", "default.txt"))
     ap.add_argument("--extra", default="", help="commands after the boot, comma separated")
     ap.add_argument("--keep", help="dump into this dir (and keep it)")
+    ap.add_argument("--pos", type=lambda v: int(v, 0), default=0,
+                    help="where SaveBlock1's pos is (Heart and Soul 4, Quetzal 0x470: pk_wide.h's SB1_POS)")
     a = ap.parse_args()
     boot = [l for l in open(a.boot).read().splitlines() if l.strip() and not l.startswith(("#", "shot"))]
     boot += [c.strip() for c in a.extra.split(",") if c.strip()]
@@ -97,7 +99,7 @@ def main():
     pos = []
     for d in D:
         sb = d.u32(a.save1)
-        pos.append(struct.unpack("<hh", d.mem(sb, 4)))
+        pos.append(struct.unpack("<hh", d.mem(sb + a.pos, 4)))
     print("pos per dump:", pos, " HOFS/VOFS:", [(d.hofs, d.vofs) for d in D])
     if pos[1] != (pos[0][0] + 1, pos[0][1]) or pos[2] != (pos[1][0], pos[1][1] + 1):
         sys.exit("the player didn't walk right then down - the boot didn't reach the field (try --extra)")

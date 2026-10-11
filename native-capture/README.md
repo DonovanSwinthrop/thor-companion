@@ -66,6 +66,7 @@ One command per line:
 | `widestats` | Print WIDE's tally: frames, unverified ones (margins faded), torn sprite lists, centre checks exact / worst, and its time per frame (frames over 2 ms are also printed as they happen) |
 | `wideview X Y W H` | From now on WIDE draws this window instead of `wideon`'s strips: the frame's pixels, its top-left (0, 0), up to 800x800 - ZOOM and the look-around (e.g. `wideview -200 -100 640 360`) |
 | `wideinfo [lines]` | Print how the last frame went: mode (0 glow, 1 map, 2 battle), tilemap score (0..1000, -1 untried), torn sprite list, close (ZOOM steps back in); with `lines`, BG1's scroll as latched and per line as drawn |
+| `wideghosts` | List the far-off objects (unspawned templates) the last snapshot holds: box in VMap pixels, palette tag, priority; `NO PALETTE` if neither a loaded slot nor the ROM's table has its colours |
 | `wideshot FILE` | Write the last wide frame (`240 + 2 * MARGIN` x 160) as a PPM |
 | `widecentre FILE` | Write the last frame's rebuild of the middle 240x160 (with `widecheck` on) as a PPM, to diff against `shot` |
 | `widerec FILE N` | Run N frames (keys as `keys` holds them) recording every wide frame into FILE - `scripts/wide_gif.py FILE out.gif` makes an animation (or a contact sheet) of it |

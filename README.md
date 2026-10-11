@@ -126,7 +126,9 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
 - **Aspect**: the GBA's own 3:2, stretched to fill a 16:9 top screen, or **EXPAND**: the overworld drawn past the
   GBA's edges - beside the game on a wide screen, above and below it on a phone held upright - so the screen shows
   more of the map with the pixels kept square (FireRed, LeafGreen, Emerald, Ruby and
-  Sapphire, every language and revision, plus Unbound, Radical Red, Lazarus and SoulGold).
+  Sapphire, every language and revision, plus Unbound, Radical Red, Lazarus, SoulGold, Heart and Soul, Gaia, Odyssey,
+  Amethyst 1.3.0, Glazed, Seaglass, Emerald Imperium, Emerald Rogue, Too Many Types 2, Recharged Yellow, Super Mariomon,
+  Ultra Violet, Sword and Shield Ultimate Plus and Celia's hack).
   The extra strips are rebuilt every frame from the game's own map, tiles and sprites. Battles are wide too: their
   scenery runs on past the edges and Pokémon, trainers and healthboxes slide in from off screen. Fog, ash and rain
   reach the screen's edges, and dark caves stay dark around Flash's light. On the title

@@ -62,6 +62,7 @@ object GameTitles {
         "5d6a036260fdbde96f85b5c1b92d0256d3aebafb" to "Pokémon SoulGold",
         "2be7c99aa473308debe1d03ff2015bab7d9addb5" to "Pokémon SoulGold",
         "e10105d8544469c6a11ca2cf510289981df3c3b0" to "Pokémon Glazed",
+        "a7c4e34fafb53f2d5283eb6d43dad285c0dd40a8" to "Pokémon Emerald Kaizo",
         "1d20091c4d936f5eb122db8780554dd0829ffb63" to "Pokémon Emerald Imperium",
         "d0658315da1e8827f66f15c3d3a000fe747e163e" to "Pokémon Quetzal",
         "fe346b5b0eb022e3a103f81e7dcefba6f1dc542f" to "Pokémon Quetzal",

@@ -161,11 +161,17 @@ static void wideAfterFrame(void) {
         miss += ((wideCentre[i] ^ (uint32_t) video[(i / PK_WIDE_W) * videoW + i % PK_WIDE_W]) & 0xFFFFFF) != 0;
     wideStats.checked++;
     if (!miss) wideStats.exact++;
-    else {
+    else if (pk_wide_last_vram_torn()) {
+        // VRAM written while the frame was drawn: its lines show two sets of tiles - not the rebuild's to match.
+        wideStats.checked--;
+        wideStats.unverified++;
+        printf("widecheck: frame %u: %d px differ, VRAM written mid-frame (not counted)\n", core->frameCounter(core), miss);
+    } else {
         printf("widecheck: frame %u (%s): %d px differ\n", core->frameCounter(core),
                pk_wide_last_mode() == PK_WIDE_MODE_BATTLE ? "battle" : "map", miss);
-        // The first few as images: the real frame, then the rebuild, side by side.
-        if (wideDumped < 4) {
+        // The first few as images: the real frame, then the rebuild, side by side. A battle check (`widecheck all`,
+        // BG3 + sprites) saves only its battle frames: its map frames lack BG1-2 by design.
+        if (wideDumped < 4 && !(wideCheckBattles && pk_wide_last_mode() != PK_WIDE_MODE_BATTLE)) {
             char path[64];
             snprintf(path, sizeof(path), "/work/miss_%u.ppm", core->frameCounter(core));
             FILE* f = fopen(path, "wb");
@@ -768,11 +774,18 @@ int main(int argc, char** argv) {
             sscanf(line, "%*s %d %u", &n, &seed);
             srand(seed);
             const int slots[] = { PK_WIDE_VMAP, PK_WIDE_MAP_HEADER, PK_WIDE_CAMERA_OFFSET, PK_WIDE_OBJECT_EVENTS,
-                                  PK_WIDE_SPRITES, PK_WIDE_COORD_OFFSET, PK_WIDE_SPRITE_ORDER, PK_WIDE_SAVE_BLOCK1_PTR };
+                                  PK_WIDE_SPRITES, PK_WIDE_COORD_OFFSET, PK_WIDE_SPRITE_ORDER, PK_WIDE_SAVE_BLOCK1_PTR,
+                                  PK_WIDE_SPRITE_PAL_TAGS, PK_WIDE_SB1_TEMPLATES };
             for (int k = 0; k < n; k++) {
                 wideView = (struct PkWideView) { rand() % 2000 - 1000, rand() % 1400 - 700, rand() % 900 - 20, rand() % 900 - 20 };
                 for (int m = rand() % 6; m > 0; m--) {
-                    uint32_t base = (uint32_t) C[slots[rand() % 8]];
+                    int slot = slots[rand() % 10];
+                    uint32_t base = (uint32_t) C[slot];
+                    if (slot == PK_WIDE_SB1_TEMPLATES) {   // the far-off objects' templates, flags and vars in SaveBlock1
+                        uint32_t sb1 = C[PK_WIDE_SAVE_STATIC] ? (uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]
+                                                              : r32((uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]);
+                        base = base && sb1 ? sb1 + base : 0;
+                    }
                     if (!base) continue;
                     uint32_t at = base + (uint32_t) (rand() % 0x800);
                     if (rand() % 2) {
@@ -846,6 +859,16 @@ int main(int argc, char** argv) {
                 printf("wideinfo: latched BG1 %d,%d; per line:", G->memory.io[0x14 >> 1] & 0x1FF, G->memory.io[0x16 >> 1] & 0x1FF);
                 for (int y = 0; y < PK_WIDE_H; y++) printf(" %d,%d", lineRegs(y)[0x14 >> 1] & 0x1FF, lineRegs(y)[0x16 >> 1] & 0x1FF);
                 printf("\n");
+            }
+        } else if (!strcmp(cmd, "wideghosts")) {
+            // The far-off objects the last snapshot holds (not spawned): box in VMap pixels, palette tag, whether it has colours.
+            const struct Snap* s = prev >= 0 ? &snaps[prev] : NULL;
+            printf("wideghosts: %d\n", s ? s->nghosts : -1);
+            for (int i = 0; s && i < s->nghosts; i++) {
+                uint32_t pal[16];
+                const struct Ghost* g = &s->ghosts[i];
+                printf("wideghosts: %d,%d %dx%d tag %#x prio %d%s%s\n", g->x, g->y, g->w, g->h, g->palTag, g->prio,
+                       g->hflip ? " hflip" : "", ghostPalette(g->palTag, 0xFF000000u, pal) ? "" : " NO PALETTE");
             }
         } else if (!strcmp(cmd, "wideshot")) {
             sscanf(line, "%*s %255s", arg1);
