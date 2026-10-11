@@ -69,6 +69,9 @@ class EmulatorEngine(
     /** WIDE's native tables for this game ([WideScreen.gameFor]), or [WideScreen.OFF]; applied between frames. */
     @Volatile var wideGame = WideScreen.OFF
 
+    /** ZOOM and the look-around over WIDE: asked for the window to draw before each frame ([EmulatorView.camera]). */
+    @Volatile var wideCamera: WideCamera? = null
+
     /** What fast-forward sounds like (Settings: STEADY / SPED-UP / OFF). */
     @Volatile var ffMusicMode = FfMusicMode.STEADY
     /** SMART: 1x while a menu screen or the region map is up ([FfMenuWatch], [RegionMapWatch]). */
@@ -498,6 +501,14 @@ class EmulatorEngine(
                 if (wideWanted != wideApplied) {
                     MgbaCore.pkWideConfigure(wideWanted)
                     wideApplied = wideWanted
+                    wideCamera?.reset()
+                }
+                val camera = wideCamera
+                if (wideApplied != WideScreen.OFF && camera != null) {
+                    camera.walking = input.mask and DIRECTIONS != 0
+                    val win = camera.frame(MgbaCore.pkWideWantsClose())
+                    if (win != null) MgbaCore.pkWideSetView(win.x, win.y, win.w, win.h)
+                    else MgbaCore.pkWideSetView(0, 0, 0, 0)
                 }
                 val rewinding = rewindHeld && rewindWanted > 0
                 MgbaCore.pkSetRewinding(rewinding)
@@ -869,5 +880,7 @@ class EmulatorEngine(
         const val DRC_MAX = 0.005
         /** SPEED_CYCLE steps. Index 0 (1×) is the normal, audio-on state. */
         val SPEED_STEPS = floatArrayOf(1f, 1.5f, 2f, 3f, 4f)
+        /** The D-pad's bits: one held = the player walking (the look-around glides back). */
+        const val DIRECTIONS = MgbaCore.Key.UP or MgbaCore.Key.DOWN or MgbaCore.Key.LEFT or MgbaCore.Key.RIGHT
     }
 }

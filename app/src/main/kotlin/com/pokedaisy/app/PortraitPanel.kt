@@ -46,6 +46,14 @@ class PortraitPanel(
     var enabled = false
         private set
     private var ratio = prefs.portraitCompanionRatio
+
+    /** ASPECT > WIDE: the game fills everything above the companion ([GameStageLayout.expand]). */
+    var expand = false
+        set(v) {
+            if (field == v) return
+            field = v
+            apply()
+        }
     private var underGame = prefs.portraitCompanionUnderGame
 
     private var panel: View? = null
@@ -58,8 +66,8 @@ class PortraitPanel(
     private val screenH get() = root.height.takeIf { it > 0 } ?: context.resources.displayMetrics.heightPixels
     private val gameH get() = root.gameHeightFor(screenW)
     private val gripH get() = gripView?.height ?: 0
-    private val reserve get() = if (underGame) gripH else 0
-    private fun arrangement() = PortraitLayout.arrange(screenW, screenH, gameH, gripH, ratio, underGame)
+    private val reserve get() = if (underGame && !expand) gripH else 0
+    private fun arrangement() = PortraitLayout.arrange(screenW, screenH, gameH, gripH, ratio, underGame, expand)
 
     // A rotation, the status bar coming or going, a Game Boy game's 10:9: lay out again.
     private val relayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -168,7 +176,7 @@ class PortraitPanel(
     private fun onDragStart() {
         dragStartHeight = arrangement().companionHeight
         // Along the bottom the grip is on the companion's top edge: up = taller. Under the game it hangs below: down.
-        dragGrows = if (underGame) 1 else -1
+        dragGrows = if (underGame && !expand) 1 else -1
     }
 
     private fun onDrag(dy: Float) {

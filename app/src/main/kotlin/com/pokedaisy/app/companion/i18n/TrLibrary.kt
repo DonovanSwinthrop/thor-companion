@@ -191,6 +191,8 @@ internal val trLibrary: Map<String, Tr> = mapOf(
     // In-game HUD (EmulatorEngine / PokeDaisyActivity).
     "Game restarted" to Tr(ja = "ゲームを リスタートしました", fr = "Jeu redémarré", de = "Spiel neu gestartet", it = "Gioco riavviato", es = "Juego reiniciado"),
     "Fast-forward" to Tr(ja = "はやおくり", fr = "Avance rapide", de = "Vorspulen", it = "Avanti veloce", es = "Avance rápido"),
+    "Zoom {0}" to Tr(ja = "ズーム {0}", fr = "Zoom {0}", de = "Zoom {0}", it = "Zoom {0}", es = "Zoom {0}"),
+    "Zoom needs ASPECT > EXPAND" to Tr(ja = "ズームは アスペクト > ひろげる で", fr = "Le zoom demande FORMAT > ÉTENDRE", de = "Zoom braucht FORMAT > ERWEITERN", it = "Lo zoom richiede FORMATO > ESPANDI", es = "El zoom necesita FORMATO > AMPLIAR"),
     "Rewinding" to Tr(ja = "まきもどし ちゅう", fr = "Retour arrière", de = "Zurückspulen", it = "Riavvolgimento", es = "Rebobinando"),
     "Rewind is off - turn it on in SETTINGS" to Tr(ja = "まきもどしは オフです - せっていで オンに", fr = "Retour arrière désactivé - activez-le dans OPTIONS", de = "Zurückspulen ist aus - in OPTIONEN einschalten", it = "Riavvolgimento disattivato - attivalo in OPZIONI", es = "Rebobinar está desactivado - actívalo en AJUSTES"),
     "Slow-motion ½×" to Tr(ja = "スロー ½×", fr = "Ralenti ½×", de = "Zeitlupe ½×", it = "Rallentatore ½×", es = "Cámara lenta ½×"),

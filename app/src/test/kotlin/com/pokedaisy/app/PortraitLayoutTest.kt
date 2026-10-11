@@ -58,6 +58,19 @@ class PortraitLayoutTest {
     }
 
     @Test
+    fun wideFillsEverythingAboveTheCompanion() {
+        val grip = 63
+        // ASPECT > WIDE: the game's area runs down to the grip, the pad over the game - wherever COMPANION puts it.
+        for (under in listOf(false, true)) {
+            val a = PortraitLayout.arrange(w, h, game, grip, PortraitLayout.DEFAULT_RATIO, underGame = under, expand = true)
+            assertEquals(h - 941, a.companionTop)
+            assertEquals(h - 941 - grip, a.gameAreaBottom)
+            assertEquals(0, a.padTop)
+            assertEquals(a.gameAreaBottom, a.padBottom)
+        }
+    }
+
+    @Test
     fun underTheGameThePadTakesTheBottom() {
         val grip = 63
         val a = PortraitLayout.arrange(w, h, game, grip, PortraitLayout.DEFAULT_RATIO, underGame = true)

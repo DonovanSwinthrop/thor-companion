@@ -9,6 +9,10 @@ struct mCore;
 #define PK_WIDE_H 160
 /** Most GBA pixels drawn beside the game, per side (21:9 at 160 tall needs 67). */
 #define PK_WIDE_MAX_MARGIN 96
+/** The largest window pk_wide_view draws (ZOOM's farthest step: 640 x 360 on a 1080p screen, 360 x ~470 on a phone
+ * held upright). */
+#define PK_WIDE_MAX_VIEW_W 800
+#define PK_WIDE_MAX_VIEW_H 800
 
 /** Engines (the layouts below): FireRed / LeafGreen (and the CFRU hacks), Emerald, Ruby / Sapphire, every language and
  * revision, and pokeemerald-expansion. */
@@ -34,6 +38,7 @@ enum {
     PK_WIDE_COORD_OFFSET_Y,    // gSpriteCoordOffsetY (s16): right after X, but not in Ruby / Sapphire
     PK_WIDE_SPRITE_ORDER,      // u8[64], BuildOamBuffer's order
     PK_WIDE_GMAIN,             // gMain: inBattle is bit 1 of +PK_WIDE_INBATTLE_OFF
+    PK_WIDE_CONTROLS_LOCKED,   // ArePlayerFieldControlsLocked's u8 (FireRed's sScriptContext2Enabled); 0 = unknown
     PK_WIDE_MAP_GROUPS_XOR,    // not an address: what gMapGroups' entries are XORed with (Unbound), else 0
     PK_WIDE_NORMAL_BG3,        // not an address: what DrawMetatile puts on BG3 under a NORMAL metatile (0x3014; Unbound 0)
     PK_WIDE_METATILE_SIZE,     // not an address: 16 (two layers), 24 (triple-layer: BG3, BG2, BG1 - Lazarus)
@@ -74,6 +79,22 @@ void pk_wide_reset(void);
  * strips is the map, 0..256 (the rest is the glow).
  */
 int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int margin, uint32_t* centre);
+
+/** A window onto the scene in the game frame's pixels ((0, 0) is its top-left corner, the frame 240 x 160): ZOOM and
+ * the look-around draw any such window, beside, around or away from the frame. */
+struct PkWideView {
+    int x, y, w, h;
+};
+
+/**
+ * pk_wide_frame for any window: `out` (view.w x view.h, at most PK_WIDE_MAX_VIEW_W x _H) gets the frame where the window
+ * covers it and the rebuilt scene everywhere else - or, off the map, the glow from the frame's edges, crossfaded.
+ */
+int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struct PkWideView view, uint32_t* centre);
+
+/** Whether the last frame wants the game seen close up (ZOOM steps back in): anything but the plain overworld - a
+ * battle, a menu screen, or the field with its controls locked (a script) and a text box or a screen effect up. */
+int pk_wide_wants_close(void);
 
 /** What the last frame's strips showed: nothing drawn (the glow), the map, or a battle. */
 enum { PK_WIDE_MODE_NONE, PK_WIDE_MODE_MAP, PK_WIDE_MODE_BATTLE };

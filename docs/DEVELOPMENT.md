@@ -699,12 +699,13 @@ rebindable in Settings > HOTKEYS. Values are Android key names, comma-separated.
 | `save_state` (current slot) | `SELECT`+`R1`, `BUTTON_Y`, keyboard `F1` |
 | `load_state` (current slot) | `SELECT`+`L1`, `BUTTON_X`, keyboard `F2` |
 | `undo_save` / `undo_load`   | keyboard `F3` / `F4`                     |
-| `slot_next`                 | `BUTTON_THUMBR` (right-stick click), `]` |
+| `slot_next`                 | keyboard `]`                             |
 | `slot_prev`                 | `BUTTON_THUMBL` (left-stick click), `[`  |
 | `ff_hold`                   | `BUTTON_R2`, keyboard `SPACE`            |
 | `ff_toggle`                 | keyboard `TAB`                           |
 | `speed_cycle`               | `BUTTON_L2`, keyboard `=`                |
 | `slowmo_hold`               | keyboard `-`                             |
+| `zoom` (WIDE's zoom steps)  | `BUTTON_THUMBR` (right-stick click), `C` |
 | `exit_game`                 | `SELECT`+`START`, keyboard `ESC`         |
 
 Single-button defaults use only buttons the GBA itself doesn't need; the SELECT
@@ -752,9 +753,10 @@ ON, imported ones OFF. `Prefs.cheatsEnabled` is the master switch (off by defaul
 - **Savestates** don't carry cheats (`SAVESTATE_CHEATS` isn't in the flags); a state made with a
   cheat on does carry the memory it wrote, like any emulator.
 
-## WIDE (ASPECT)
+## WIDE (ASPECT > EXPAND)
 
-SETTINGS > ASPECT > WIDE fills a wide screen with the game at full height and square pixels: the middle is the
+SETTINGS > ASPECT > EXPAND (`GameAspect.WIDE` / WIDE in the code and prefs; renamed on screen once it also went
+up and down on phones) fills a wide screen with the game at full height and square pixels: the middle is the
 game's own 240x160 frame, the strips beside it (22 GBA px per side on the Thor's 1920x1080) are the overworld,
 rebuilt every frame from the game's memory by `app/src/main/cpp/pk_wide.c`. A wider PPU can't do it: the field
 only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would be wrap-around garbage.
@@ -849,10 +851,26 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   screen a slid line shows the 256-px ring wrapped around (the map where it holds the camera's view, leftover tiles past
   it - which the next frame may already have redrawn, so those pixels are the real frame's); the margins show the map
   slid along. `mgba_dump`'s `wideinfo lines` prints each line's scroll.
-- **Width**: `WideScreen.marginFor` - as many GBA px per side as fit with the game at the view's full height
-  (`EmulatorView.onWideMargin` -> `pkWideSetMargin`), up to 96. The core writes the wide frame next to its own
-  (`pkWideBuffer` / `pkWideWidth`); `EmulatorView` uploads whichever the last frame was, resizing its texture when
-  the width changes. Savestate thumbnails stay the 240x160 frame.
+- **The window** (`WideCamera`, `pk_wide_view`): pk_wide.c draws any rectangle around the frame - beside, above,
+  below, or one the frame only partly covers (rows past the screen take its edge line's registers; holes go on with
+  the frame's nearest edge pixel; the glow spreads from all four edges). Before each frame the engine asks
+  `EmulatorView.camera` for the window (`pkWideSetView`), and `publishFrame` hands the GL thread the drawn window with
+  where it goes: whole GBA pixels drawn, the quad offset by the fraction (`WideCamera.Window.offX` / `offY`), so zoom
+  and look glide instead of stepping. Up to 800x800 (`PK_WIDE_MAX_VIEW_W` / `_H`). Savestate thumbnails stay 240x160.
+- **ZOOM** (the ZOOM hotkey: R3 - the right stick's click, which used to be SLOT NEXT - or C on a keyboard): steps out from 1x (the game at the view's full height) to
+  whole screen pixels per GBA pixel showing >= 1.2x more each (`WideCamera.levelsFor`: the Thor's 6.75 -> 5 / 4 / 3,
+  ~1.35x / 1.7x / 2.25x the map). It eases back to 1x whenever `pk_wide_wants_close`: not on the map (battles, menu
+  screens) or the field's controls locked (`CONTROLS_LOCKED`: FireRed's sScriptContext2Enabled, mapped to every
+  FireRed / LeafGreen and the CFRU hacks; 0 elsewhere so far) with BG0 showing a text box / menu or lines drawn apart (a
+  transition) - a warp's fade or the map-name popup don't. The step comes back 0.5 s after. NPCs only exist ~2 tiles
+  past the game's own view, so far out they pop in as you near them.
+- **A phone upright** (`PortraitPanel.expand`, `GameStageLayout.expand`, `PortraitLayout.arrange(expand)`): the game
+  takes everything above the companion (COMPANION's AT BOTTOM / UNDER GAME land in the same place then) and the touch
+  pad lies over it; 1x is the frame at the view's full width (`levelsFor` takes the smaller fit), so the window goes
+  on above and below it (a 1080-wide phone: 4.5 -> 3 / 2).
+- **Look-around** (the right stick, AXIS_Z / RZ or RX / RY): standing, it moves the view and leaves it there; walking
+  (a direction held) glides it back - with the stick held while walking it follows the stick, the player kept 28 px
+  inside. Checked headless with `mgba_dump`'s `wideview X Y W H`.
 - **Checks**: `scripts/widescreen_proto.py` is the Python original (reads `mgba_dump` captures). The C is checked
   headless with `mgba_dump`'s `wideon` / `widecheck` / `widestats` (`native-capture/README.md`): it rebuilds the
   middle 240x160 too and compares it with the real frame. Walking, running and NPCs moving, every frame matched

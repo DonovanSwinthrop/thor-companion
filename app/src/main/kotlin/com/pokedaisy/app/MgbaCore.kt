@@ -52,12 +52,16 @@ object MgbaCore {
     external fun pkWideConfigure(crc: Int)
     /** WIDE: whether pk_wide.c has tables for the ROM with this CRC32 (pk_wide_games.h). Any thread. */
     external fun pkWideKnows(crc: Int): Boolean
-    /** WIDE: GBA pixels to draw beside the game, per side ([WideScreen.marginFor]; 0 = none). Any thread. */
-    external fun pkWideSetMargin(margin: Int)
-    /** Direct buffer over the wide frame (room for [WideScreen.MAX_MARGIN]); null for a Game Boy core. */
+    /** WIDE: the window to draw around the frame from the next frame on ([WideCamera]), in the frame's pixels
+     * (its top-left 0, 0); [w] 0 = none. Any thread. */
+    external fun pkWideSetView(x: Int, y: Int, w: Int, h: Int)
+    /** Direct buffer over the wide frame (room for the largest window); null for a Game Boy core. */
     external fun pkWideBuffer(): ByteBuffer?
-    /** The last frame's wide width ([pkWideBuffer] holds that x 160), or 0 if it wasn't drawn wide. Emu thread. */
+    /** The last frame's window ([pkWideBuffer] holds [pkWideWidth] x [pkWideHeight]), or 0 if it wasn't drawn wide. Emu thread. */
     external fun pkWideWidth(): Int
+    external fun pkWideHeight(): Int
+    /** ZOOM: whether the last frame wants the game seen close up (a battle, a menu, a text box). Emu thread. */
+    external fun pkWideWantsClose(): Boolean
 
     /** REWIND: keep [entries] states, one every 2 frames (0 = off, its memory freed). Emu thread. */
     external fun pkSetRewind(entries: Int)

@@ -216,9 +216,10 @@ enum class GameAspect(val label: String) {
     ORIGINAL(tk("ORIGINAL")),
     /** The game stretched to fill the screen. */
     STRETCH(tk("STRETCH")),
-    /** The overworld drawn past the GBA's edges, rebuilt from the game's own memory (WideScreen,
-     * pk_wide.c); the games it doesn't know yet show as ORIGINAL. */
-    WIDE(tk("WIDE")),
+    /** EXPAND (WIDE in the code and prefs): the overworld drawn past the GBA's edges - beside the game on a wide
+     * screen, above and below it on a phone upright - rebuilt from the game's own memory (WideScreen, pk_wide.c);
+     * ZOOM and the look-around on top (WideCamera). The games it doesn't know yet show as ORIGINAL. */
+    WIDE(tk("EXPAND")),
 }
 
 /** SETTINGS > SHADERS > FILTER: the screen effect drawn over the game (EmulatorView, ScreenShaders),

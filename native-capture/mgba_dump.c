@@ -39,7 +39,10 @@
 //                        /work/miss_<frame>.ppm: real | rebuild); `widestats` prints
 //                        the tally since. Map frames only, unless `all` (battles: capture with
 //                        `layers 0x18`, since their rebuild is BG3 + sprites)
-//   wideshot FILE      - write the last wide frame as a PPM
+//   wideview X Y W H   - from now on draw this window instead (the frame's pixels, its top-left
+//                        (0, 0); up to 800x800): ZOOM and the look-around, e.g. -200 -100 640 360
+//   wideinfo [lines]   - print the last frame's mode, score, torn and close (ZOOM steps in) flags
+//   wideshot FILE      - write the last wide frame (the window) as a PPM
 //   widecentre FILE    - write the last rebuild of the middle 240x160 (widecheck on) as a PPM
 //   widerec FILE N     - run N frames, recording every wide frame into FILE (scripts/wide_gif.py)
 //   layers MASK        - draw only the video layers in MASK from the next frame on
@@ -126,8 +129,8 @@ static unsigned videoW, videoH;
 // WIDE (the app's pk_wide.c): run after every frame once `wideon`, as the app does.
 static bool wideOn, wideCheck, wideCheckBattles;
 static int wideDumped;   // misses saved as images since the last widecheck
-static int wideMargin;
-static uint32_t wideOut[(PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H];
+static struct PkWideView wideView;   // the window drawn: `wideon`'s strips, or `wideview`'s
+static uint32_t wideOut[PK_WIDE_MAX_VIEW_W * PK_WIDE_MAX_VIEW_H];
 static uint32_t wideCentre[PK_WIDE_W * PK_WIDE_H];
 static struct { int frames, checked, exact, unverified, battle, torn, worst, worstFrame; double ns, maxNs; } wideStats;
 
@@ -135,7 +138,7 @@ static void wideAfterFrame(void) {
     if (!wideOn) return;
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    pk_wide_frame(core, (const uint32_t*) video, wideOut, wideMargin, wideCheck ? wideCentre : NULL);
+    pk_wide_view(core, (const uint32_t*) video, wideOut, wideView, wideCheck ? wideCentre : NULL);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     double ns = (t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec);
     wideStats.ns += ns;
@@ -751,9 +754,16 @@ int main(int argc, char** argv) {
             uint32_t crc = bytes ? doCrc32(bytes, size) : 0;
             free(bytes);
             wideOn = pk_wide_configure(crc);
-            wideMargin = n;
+            wideView = (struct PkWideView) { -n, 0, PK_WIDE_W + 2 * n, PK_WIDE_H };
             memset(&wideStats, 0, sizeof(wideStats));
             printf("wideon: ROM %08x %s, margin %d\n", crc, wideOn ? "known" : "NOT KNOWN (WIDE off)", n);
+        } else if (!strcmp(cmd, "wideview")) {
+            // wideview X Y W H: draw this window (the frame's pixels, its top-left (0, 0)) - ZOOM / look-around.
+            struct PkWideView v = { 0, 0, 0, 0 };
+            sscanf(line, "%*s %d %d %d %d", &v.x, &v.y, &v.w, &v.h);
+            if (v.w > PK_WIDE_MAX_VIEW_W) v.w = PK_WIDE_MAX_VIEW_W;
+            if (v.h > PK_WIDE_MAX_VIEW_H) v.h = PK_WIDE_MAX_VIEW_H;
+            if (v.w > 0 && v.h > 0) wideView = v;
         } else if (!strcmp(cmd, "widecheck")) {
             char what[16] = {0};
             sscanf(line, "%*s %15s", what);
@@ -785,11 +795,11 @@ int main(int argc, char** argv) {
             sscanf(line, "%*s %255s %d", arg1, &n);
             FILE* f = fopen(arg1, "wb");
             if (f) {
-                uint32_t hdr[3] = { (uint32_t) (PK_WIDE_W + 2 * wideMargin), PK_WIDE_H, (uint32_t) n };
+                uint32_t hdr[3] = { (uint32_t) wideView.w, (uint32_t) wideView.h, (uint32_t) n };
                 fwrite(hdr, 4, 3, f);
                 for (int k = 0; k < n; k++) {
                     runFrame();
-                    for (uint32_t i = 0; i < hdr[0] * PK_WIDE_H; i++) {
+                    for (uint32_t i = 0; i < hdr[0] * hdr[1]; i++) {
                         uint8_t rgb[3] = { (uint8_t) wideOut[i], (uint8_t) (wideOut[i] >> 8), (uint8_t) (wideOut[i] >> 16) };
                         fwrite(rgb, 1, 3, f);
                     }
@@ -798,8 +808,8 @@ int main(int argc, char** argv) {
             }
         } else if (!strcmp(cmd, "wideinfo")) {
             // How the last frame went: its mode (0 glow, 1 map, 2 battle), tilemap score (0..1000, -1 untried), torn.
-            printf("wideinfo: frame %u mode %d score %d torn %d\n", core->frameCounter(core), pk_wide_last_mode(),
-                   pk_wide_last_score(), pk_wide_last_torn());
+            printf("wideinfo: frame %u mode %d score %d torn %d close %d\n", core->frameCounter(core), pk_wide_last_mode(),
+                   pk_wide_last_score(), pk_wide_last_torn(), pk_wide_wants_close());
             sscanf(line, "%*s %255s", arg1);
             if (!strcmp(arg1, "lines")) {   // `wideinfo lines`: BG1's scroll per line as drawn, and as latched
                 printf("wideinfo: latched BG1 %d,%d; per line:", G->memory.io[0x14 >> 1] & 0x1FF, G->memory.io[0x16 >> 1] & 0x1FF);
@@ -810,9 +820,8 @@ int main(int argc, char** argv) {
             sscanf(line, "%*s %255s", arg1);
             FILE* f = fopen(arg1, "wb");
             if (f) {
-                int w = PK_WIDE_W + 2 * wideMargin;
-                fprintf(f, "P6\n%d %d\n255\n", w, PK_WIDE_H);
-                for (int i = 0; i < w * PK_WIDE_H; i++) {
+                fprintf(f, "P6\n%d %d\n255\n", wideView.w, wideView.h);
+                for (int i = 0; i < wideView.w * wideView.h; i++) {
                     uint8_t rgb[3] = { (uint8_t) wideOut[i], (uint8_t) (wideOut[i] >> 8), (uint8_t) (wideOut[i] >> 16) };
                     fwrite(rgb, 1, 3, f);
                 }

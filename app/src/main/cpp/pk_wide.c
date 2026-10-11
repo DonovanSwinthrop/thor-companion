@@ -315,8 +315,11 @@ static void hookScanlines(struct GBA* gba) {
     hookGba = gba;
 }
 
-/** Line y's registers as drawn, or the latched ones until the hook has seen a whole frame. */
+/** Line y's registers as drawn, or the latched ones until the hook has seen a whole frame. Above and below the
+ * screen (ZOOM) the top / bottom line's go on. */
 static inline const uint16_t* lineRegs(int y) {
+    if (y < 0) y = 0;
+    if (y >= PK_WIDE_H) y = PK_WIDE_H - 1;
     return lineIoFrames > 1 ? lineIo[y] : G->memory.io;
 }
 static int bgPrio[4];
@@ -342,6 +345,8 @@ static void readBgs(void) {
 static int windowLayers(int x, int y) {
     if (x < 0) x = 0;
     if (x >= PK_WIDE_W) x = PK_WIDE_W - 1;
+    if (y < 0) y = 0;
+    if (y >= PK_WIDE_H) y = PK_WIDE_H - 1;
     uint16_t disp = io(0);
     if (!(disp & 0xE000)) return 0x3F;
     for (int w = 0; w < 2; w++) {
@@ -481,7 +486,8 @@ static int shown = 0;   // pieces[shown]: the list drawn (the last one the frame
 static void hardwareWrap(struct Piece* p) {
     int bw = p->rot == 3 ? 2 * p->w : p->w, bh = p->rot == 3 ? 2 * p->h : p->h;
     int y = p->y & 0xFF;
-    p->y = y + bh > 255 ? y - 256 : y;
+    if (y + bh > 255) y -= 256;
+    if (y != p->y && y < PK_WIDE_H && y + bh > 0) p->y = y;   // past the screen (ZOOM shows it) it stays where it is
     int x = ((p->x + 256) & 0x1FF) - 256;
     if (x != p->x && x < PK_WIDE_W && x + bw > 0) p->x = x;
 }
@@ -591,11 +597,14 @@ static bool oamAgrees(const struct Piece* p, int n) {
     return true;
 }
 
-// The rebuild of screen columns [x0, x1), all 160 rows, into dst (stride `stride`, column x0 at dst[0]).
-static uint8_t prioBuf[PK_WIDE_H][PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN];
-static uint8_t layerBuf[PK_WIDE_H][PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN];
-static uint32_t below[PK_WIDE_H][PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN];   // the BG pixel's colour, for blending
-static uint8_t takenBuf[PK_WIDE_H][PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN];
+// The rebuild of the screen rectangle [x0, x1) x [y0, y1) (screen coordinates, past the frame's edges allowed) into
+// dst (stride `stride`, (x0, y0) at dst[0]). With `skipFrame`, pixels on the real frame are left alone: it's shown there.
+#define BUF_W PK_WIDE_MAX_VIEW_W
+#define BUF_H PK_WIDE_MAX_VIEW_H
+static uint8_t prioBuf[BUF_H][BUF_W];
+static uint8_t layerBuf[BUF_H][BUF_W];
+static uint32_t below[BUF_H][BUF_W];   // the BG pixel's colour, for blending
+static uint8_t takenBuf[BUF_H][BUF_W];
 
 /** A semi-transparent sprite over a BG: BLDALPHA's EVA / EVB, if BLDCNT has that BG as a second target. */
 static uint32_t blend(uint32_t top, uint32_t bottom, int layer) {
@@ -612,48 +621,59 @@ static uint32_t blend(uint32_t top, uint32_t bottom, int layer) {
     return out;
 }
 
-static uint8_t holeBuf[PK_WIDE_H][PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN];
-static const uint32_t* realFrame;   // the core's 240x160 frame this call draws beside
+static uint8_t holeBuf[BUF_H][BUF_W];
+static const uint32_t* realFrame;   // the core's 240x160 frame this call draws around
 
-static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref, int x0, int x1, uint32_t* dst, int stride,
-                       uint32_t alpha) {
-    int w = x1 - x0;
-    for (int y = 0; y < PK_WIDE_H; y++) {
+static inline bool onFrame(int x, int y) {
+    return x >= 0 && x < PK_WIDE_W && y >= 0 && y < PK_WIDE_H;
+}
+
+static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref, int x0, int y0, int x1, int y1,
+                       bool skipFrame, uint32_t* dst, int stride, uint32_t alpha) {
+    int w = x1 - x0, h = y1 - y0;
+    for (int j = 0; j < h; j++) {
+        int y = y0 + j;
         // This line as the PPU drew it: its layers, windows and scroll (a line scrolled apart from the
-        // latched value is that much further along the map).
+        // latched value is that much further along the map). Above / below the screen: its edge line's.
         R = lineRegs(y);
         int dx = signed9((io(0x14) & 0x1FF) - href), dy = signed9((io(0x16) & 0x1FF) - vref);
         int disp = io(0);
         for (int x = 0; x < w; x++) {
+            int sx = x0 + x;
+            if (skipFrame && onFrame(sx, y)) {
+                holeBuf[j][x] = 0;
+                takenBuf[j][x] = 1;   // no sprite drawn there either
+                continue;
+            }
             int prio = 4, layer = 5, ci = 0;
-            int wl = windowLayers(x0 + x, y), enabled = (disp >> 8) & wl & 0x0E;
+            int wl = windowLayers(sx, y), enabled = (disp >> 8) & wl & 0x0E;
             // Windowed out (Flash's darkness, a transition's wedge): nothing of the map here. A hole -
             // the strips go on with the game's own edge pixel of that row.
-            holeBuf[y][x] = !enabled;
+            holeBuf[j][x] = !enabled;
             // On the real screen a line scrolled apart (a transition's slices) shows the 256x256 ring wrapped around:
             // the map where the ring holds the camera's view, past that the ring's leftover tiles - which the game may
             // have redrawn since (VRAM after a frame already has the next one's new row / column), so those pixels are
             // the real frame's own. The margins go on with the map itself, that much further along.
-            int sx = x0 + x, mx = dx + sx, my = dy + y;
-            if (sx >= 0 && sx < PK_WIDE_W) {
+            int mx = dx + sx, my = dy + y;
+            if (onFrame(sx, y)) {
                 mx = (mx + 256) & 0xFF;
                 my = (my + 256) & 0xFF;
                 if (enabled && (mx >= PK_WIDE_W || my >= PK_WIDE_H)) {
-                    dst[y * stride + x] = below[y][x] = (realFrame[y * PK_WIDE_W + sx] & 0xFFFFFF) | alpha;
-                    prioBuf[y][x] = 0;
-                    layerBuf[y][x] = 5;
-                    takenBuf[y][x] = 0;
+                    dst[j * stride + x] = below[j][x] = (realFrame[y * PK_WIDE_W + sx] & 0xFFFFFF) | alpha;
+                    prioBuf[j][x] = 0;
+                    layerBuf[j][x] = 5;
+                    takenBuf[j][x] = 0;
                     continue;
                 }
             }
             if (enabled) ci = mapPixel(s, cx + mx, cy + my, enabled, &prio, &layer);
             uint16_t c = G->video.palette[ci];
             uint32_t c32 = color(c, alpha);
-            dst[y * stride + x] = wl & 0x20 ? brightness(c32, layer) : c32;
-            prioBuf[y][x] = (uint8_t) prio;
-            layerBuf[y][x] = (uint8_t) layer;
-            below[y][x] = c32;
-            takenBuf[y][x] = 0;
+            dst[j * stride + x] = wl & 0x20 ? brightness(c32, layer) : c32;
+            prioBuf[j][x] = (uint8_t) prio;
+            layerBuf[j][x] = (uint8_t) layer;
+            below[j][x] = c32;
+            takenBuf[j][x] = 0;
         }
     }
     R = G->memory.io;
@@ -667,19 +687,19 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
         if (p[i].mode == 2) continue;   // an OBJ window shape, not drawn
         int sw = p[i].w, sh = p[i].h;
         int bw = p[i].rot == 3 ? 2 * sw : sw, bh = p[i].rot == 3 ? 2 * sh : sh;   // the box it covers on screen
-        if (p[i].x + bw <= x0 || p[i].x >= x1 || p[i].y + bh <= 0 || p[i].y >= PK_WIDE_H) continue;
+        if (p[i].x + bw <= x0 || p[i].x >= x1 || p[i].y + bh <= y0 || p[i].y >= y1) continue;
         int m = p[i].mat;   // an affine sprite's matrix: the frame's OAM affineParams from entry 4 * m
         int pa = (int16_t) oam[(4 * m) * 4 + 3], pb = (int16_t) oam[(4 * m + 1) * 4 + 3];
         int pc = (int16_t) oam[(4 * m + 2) * 4 + 3], pd = (int16_t) oam[(4 * m + 3) * 4 + 3];
         for (int yy = 0; yy < bh; yy++) {
-            int Y = p[i].y + yy;
-            if (Y < 0 || Y >= PK_WIDE_H) continue;
+            int Y = p[i].y + yy, J = Y - y0;
+            if (Y < y0 || Y >= y1) continue;
             R = lineRegs(Y);
             if (!(io(0) & 0x1000)) continue;   // OBJ off on this line
             for (int xx = 0; xx < bw; xx++) {
                 int X = p[i].x + xx - x0;
-                if (X < 0 || X >= w || takenBuf[Y][X]) continue;
-                if (p[i].copy && p[i].x + xx >= 0 && p[i].x + xx < PK_WIDE_W) continue;   // the real frame has its own
+                if (X < 0 || X >= w || takenBuf[J][X]) continue;
+                if (p[i].copy && onFrame(p[i].x + xx, Y)) continue;   // the real frame has its own
                 int wl = windowLayers(p[i].x + xx, Y);
                 if (!(wl & 0x10)) continue;
                 int px, py;
@@ -695,11 +715,11 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
                 uint8_t v = vram[0x10000 + ((uint32_t) (t * 32 + (py & 7) * 4 + (px & 7) / 2) & 0x7FFF)];
                 int ci = px & 1 ? v >> 4 : v & 15;
                 if (!ci) continue;
-                takenBuf[Y][X] = 1;
-                if (p[i].prio > prioBuf[Y][X]) continue;
+                takenBuf[J][X] = 1;
+                if (p[i].prio > prioBuf[J][X]) continue;
                 uint32_t c = color(G->video.palette[256 + p[i].pal * 16 + ci], alpha);
-                dst[Y * stride + X] = p[i].mode == 1 ? blend(c, below[Y][X], layerBuf[Y][X]) : wl & 0x20 ? brightness(c, 4) : c;
-                holeBuf[Y][X] = 0;
+                dst[J * stride + X] = p[i].mode == 1 ? blend(c, below[J][X], layerBuf[J][X]) : wl & 0x20 ? brightness(c, 4) : c;
+                holeBuf[J][X] = 0;
             }
         }
     }
@@ -722,18 +742,35 @@ static bool inBattleScreen(void) {
     return (disp & 7) == 0 && (disp & 0x0800) && ((cnt >> 2) & 3) == 2 && ((cnt >> 8) & 31) == 26 && (cnt >> 14) == 1;
 }
 
-/** The battle screen's columns [x0, x1) (screen coordinates, past the edges allowed) into dst; `hole` marks
- * pixels with nothing drawn (BG3 transparent or windowed out, no sprite). */
-static void drawBattleRegion(int x0, int x1, uint32_t* dst, int stride, uint32_t alpha) {
+/** The battle screen's rectangle [x0, x1) x [y0, y1) (screen coordinates, past the edges allowed) into dst; `hole`
+ * marks pixels with nothing drawn (BG3 transparent or windowed out, no sprite; above and below the screen, all). */
+static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uint32_t* dst, int stride, uint32_t alpha) {
     const uint8_t* vram = (const uint8_t*) G->video.vram;
-    int w = x1 - x0;
-    for (int y = 0; y < PK_WIDE_H; y++) {
+    int w = x1 - x0, h = y1 - y0;
+    for (int j = 0; j < h; j++) {
+        int y = y0 + j;
+        if (y < 0 || y >= PK_WIDE_H) {
+            for (int x = 0; x < w; x++) {
+                dst[j * stride + x] = alpha;
+                prioBuf[j][x] = 4;
+                layerBuf[j][x] = 5;
+                below[j][x] = alpha;
+                takenBuf[j][x] = 1;
+                holeBuf[j][x] = 1;
+            }
+            continue;
+        }
         R = lineRegs(y);
         uint16_t disp = io(0), cnt = io(0x0E);
         uint32_t chr = ((cnt >> 2) & 3) * 0x4000u, scr = ((cnt >> 8) & 31) * 0x800u;
         int hofs = io(0x1C) & 0x1FF, vofs = io(0x1E) & 0x1FF, my = (y + vofs) & 255;
         for (int x = 0; x < w; x++) {
             int sx = x0 + x, ci = 0;
+            if (skipFrame && onFrame(sx, y)) {
+                holeBuf[j][x] = 0;
+                takenBuf[j][x] = 1;
+                continue;
+            }
             uint16_t e = 0;
             if ((disp & 0x0800) && (windowLayers(sx, y) & 8)) {
                 int mx = (sx + hofs) & 511;
@@ -746,12 +783,12 @@ static void drawBattleRegion(int x0, int x1, uint32_t* dst, int stride, uint32_t
             }
             uint16_t c = G->video.palette[ci ? (e >> 12) * 16 + ci : 0];
             uint32_t c32 = color(c, alpha);
-            dst[y * stride + x] = brightness(c32, ci ? 3 : 5);
-            prioBuf[y][x] = (uint8_t) (ci ? cnt & 3 : 4);
-            layerBuf[y][x] = (uint8_t) (ci ? 3 : 5);
-            below[y][x] = c32;
-            takenBuf[y][x] = 0;
-            holeBuf[y][x] = !ci;
+            dst[j * stride + x] = brightness(c32, ci ? 3 : 5);
+            prioBuf[j][x] = (uint8_t) (ci ? cnt & 3 : 4);
+            layerBuf[j][x] = (uint8_t) (ci ? 3 : 5);
+            below[j][x] = c32;
+            takenBuf[j][x] = 0;
+            holeBuf[j][x] = !ci;
         }
     }
     // The frame's own OAM, front first. An OAM x of 9 bits reads as negative near its top (a sprite
@@ -768,19 +805,19 @@ static void drawBattleRegion(int x0, int x1, uint32_t* dst, int stride, uint32_t
             int ox = a1 & 0x1FF, oy = a0 & 0xFF;
             if (ox >= 512 - 128) ox -= 512;
             if (oy >= PK_WIDE_H) oy -= 256;
-            if (ox + bw <= x0 || ox >= x1 || oy + bh <= 0 || oy >= PK_WIDE_H) continue;
+            if (ox + bw <= x0 || ox >= x1 || oy + bh <= y0 || oy >= y1) continue;
             int tile = a2 & 0x3FF, prio = (a2 >> 10) & 3, pal = a2 >> 12;
             bool hf = !(rot & 1) && (a1 & 0x1000), vf = !(rot & 1) && (a1 & 0x2000);
             int m = (a1 >> 9) & 31;   // an affine sprite's matrix: the 4 OAM entries' affineParams from 4 * m
             int pa = (int16_t) oam[(4 * m) * 4 + 3], pb = (int16_t) oam[(4 * m + 1) * 4 + 3];
             int pc = (int16_t) oam[(4 * m + 2) * 4 + 3], pd = (int16_t) oam[(4 * m + 3) * 4 + 3];
             for (int yy = 0; yy < bh; yy++) {
-                int Y = oy + yy;
-                if (Y < 0 || Y >= PK_WIDE_H) continue;
+                int Y = oy + yy, J = Y - y0;
+                if (Y < 0 || Y >= PK_WIDE_H || Y < y0 || Y >= y1) continue;
                 R = lineRegs(Y);
                 for (int xx = 0; xx < bw; xx++) {
                     int X = ox + xx - x0;
-                    if (X < 0 || X >= w || takenBuf[Y][X] || !(windowLayers(ox + xx, Y) & 0x10)) continue;
+                    if (X < 0 || X >= w || takenBuf[J][X] || !(windowLayers(ox + xx, Y) & 0x10)) continue;
                     int px, py;
                     if (rot & 1) {   // mGBA's: texel = (matrix * (box pixel - box centre) + sprite centre) >> 8
                         px = (pa * (xx - bw / 2) + pb * (yy - bh / 2) + (sw << 7)) >> 8;
@@ -794,11 +831,11 @@ static void drawBattleRegion(int x0, int x1, uint32_t* dst, int stride, uint32_t
                     uint8_t v = vram[0x10000 + ((uint32_t) (t * 32 + (py & 7) * 4 + (px & 7) / 2) & 0x7FFF)];
                     int ci = px & 1 ? v >> 4 : v & 15;
                     if (!ci) continue;
-                    takenBuf[Y][X] = 1;
-                    if (prio > prioBuf[Y][X]) continue;
+                    takenBuf[J][X] = 1;
+                    if (prio > prioBuf[J][X]) continue;
                     uint32_t c = color(G->video.palette[256 + pal * 16 + ci], alpha);
-                    dst[Y * stride + X] = mode == 1 ? blend(c, below[Y][X], layerBuf[Y][X]) : brightness(c, 4);
-                    holeBuf[Y][X] = 0;
+                    dst[J * stride + X] = mode == 1 ? blend(c, below[J][X], layerBuf[J][X]) : brightness(c, 4);
+                    holeBuf[J][X] = 0;
                 }
             }
         }
@@ -808,68 +845,90 @@ static void drawBattleRegion(int x0, int x1, uint32_t* dst, int stride, uint32_t
 
 // --- ambient edges -----------------------------------------------------------------------------------
 
-// Off the map (title, menus, battles, transitions) the strips are a glow spread from the game's own
-// edge pixels: each strip column takes its row's colour from the edge band, blurred over more rows the
-// further out it is and dimmed towards the screen's edge, so it follows whatever the game shows (its
-// flames, a battle's sky, a flash, a fade) without inventing anything.
+// Off the map (title, menus, battles, transitions) the window around the frame is a glow spread from the game's
+// own edge pixels: each pixel takes its colour from the nearest edge band, blurred over more of that edge the
+// further out it is and dimmed towards the window's edge, so it follows whatever the game shows (its flames, a
+// battle's sky, a flash, a fade) without inventing anything. Past a corner the farther-off side wins.
 
-static int32_t edgeAcc[2][PK_WIDE_H][3];   // each side's edge-band colour per row, x16, smoothed over frames
+static int32_t edgeAccH[2][PK_WIDE_H][3];   // the left / right edge band's colour per row, x16, smoothed over frames
+static int32_t edgeAccV[2][PK_WIDE_W][3];   // the top / bottom band's per column
+static int32_t preH[2][PK_WIDE_H + 1][3], preV[2][PK_WIDE_W + 1][3];   // their running sums (a blur is a difference)
 static bool edgeAccOk;
 
-static void ambientEdges(const uint32_t* frame, int margin, uint32_t alpha, uint32_t* dst, int stride) {
-    int32_t pre[2][PK_WIDE_H + 1][3];
+static void ambientPrepare(const uint32_t* frame) {
     for (int side = 0; side < 2; side++) {
-        int x0 = side ? PK_WIDE_W - AMBIENT_BAND : 0;
-        for (int c = 0; c < 3; c++) pre[side][0][c] = 0;
+        int x0 = side ? PK_WIDE_W - AMBIENT_BAND : 0, y0 = side ? PK_WIDE_H - AMBIENT_BAND : 0;
+        for (int c = 0; c < 3; c++) preH[side][0][c] = preV[side][0][c] = 0;
         for (int y = 0; y < PK_WIDE_H; y++) {
             int32_t sum[3] = { 0, 0, 0 };
             for (int x = x0; x < x0 + AMBIENT_BAND; x++) {
                 uint32_t v = frame[y * PK_WIDE_W + x];
-                sum[0] += v & 0xFF;
-                sum[1] += (v >> 8) & 0xFF;
-                sum[2] += (v >> 16) & 0xFF;
+                for (int c = 0; c < 3; c++) sum[c] += (v >> (8 * c)) & 0xFF;
             }
             for (int c = 0; c < 3; c++) {
                 int32_t now = sum[c] * 16 / AMBIENT_BAND;
                 // Half the step each frame: text and sprites passing the edge don't flicker the glow.
-                edgeAcc[side][y][c] = edgeAccOk ? (edgeAcc[side][y][c] + now) / 2 : now;
-                pre[side][y + 1][c] = pre[side][y][c] + edgeAcc[side][y][c];
+                edgeAccH[side][y][c] = edgeAccOk ? (edgeAccH[side][y][c] + now) / 2 : now;
+                preH[side][y + 1][c] = preH[side][y][c] + edgeAccH[side][y][c];
+            }
+        }
+        for (int x = 0; x < PK_WIDE_W; x++) {
+            int32_t sum[3] = { 0, 0, 0 };
+            for (int y = y0; y < y0 + AMBIENT_BAND; y++) {
+                uint32_t v = frame[y * PK_WIDE_W + x];
+                for (int c = 0; c < 3; c++) sum[c] += (v >> (8 * c)) & 0xFF;
+            }
+            for (int c = 0; c < 3; c++) {
+                int32_t now = sum[c] * 16 / AMBIENT_BAND;
+                edgeAccV[side][x][c] = edgeAccOk ? (edgeAccV[side][x][c] + now) / 2 : now;
+                preV[side][x + 1][c] = preV[side][x][c] + edgeAccV[side][x][c];
             }
         }
     }
     edgeAccOk = true;
-    for (int d = 1; d <= margin; d++) {   // d: GBA pixels out from the game's edge
-        int r = 2 + d * 3 / 4;                           // the glow spreads as it goes out
-        int bright = 256 - 136 * (d - 1) / (margin > 1 ? margin - 1 : 1);   // 1.0 at the game's edge -> ~0.47
-        int seam = d >= 4 ? 256 : d * 64;                // the first pixels lean on the edge column itself
-        for (int side = 0; side < 2; side++) {
-            int col = side ? margin + d - 1 : margin - d;   // in dst: the left strip, then the right one
-            int edgeX = side ? PK_WIDE_W - 1 : 0;
-            for (int y = 0; y < PK_WIDE_H; y++) {
-                int lo = y - r < 0 ? 0 : y - r, hi = y + r >= PK_WIDE_H ? PK_WIDE_H - 1 : y + r;
-                uint32_t exact = frame[y * PK_WIDE_W + edgeX], v = 0;
-                for (int c = 0; c < 3; c++) {
-                    int32_t blur = (pre[side][hi + 1][c] - pre[side][lo][c]) / (hi - lo + 1) / 16;
-                    int32_t e = (exact >> (8 * c)) & 0xFF;
-                    int32_t mixd = (e * (256 - seam) + blur * seam) >> 8;
-                    v |= (uint32_t) ((mixd * bright) >> 8) << (8 * c);
-                }
-                dst[y * stride + col] = v | alpha;
-            }
-        }
+}
+
+static inline int clampi(int v, int lo, int hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** The glow at screen pixel (X, Y), off the frame; `reach` is how far the window goes past each edge (left, right,
+ * top, bottom), where it's dimmest. */
+static uint32_t glowAt(const uint32_t* frame, int X, int Y, const int reach[4], uint32_t alpha) {
+    int ox = X < 0 ? -X : X >= PK_WIDE_W ? X - PK_WIDE_W + 1 : 0;
+    int oy = Y < 0 ? -Y : Y >= PK_WIDE_H ? Y - PK_WIDE_H + 1 : 0;
+    bool across = ox >= oy;   // from the left / right edge, else the top / bottom one
+    int side = across ? X >= PK_WIDE_W : Y >= PK_WIDE_H;
+    int d = across ? ox : oy, len = across ? PK_WIDE_H : PK_WIDE_W;
+    int at = across ? clampi(Y, 0, PK_WIDE_H - 1) : clampi(X, 0, PK_WIDE_W - 1);
+    int32_t (*pre)[3] = across ? preH[side] : preV[side];
+    uint32_t exact = across ? frame[at * PK_WIDE_W + (side ? PK_WIDE_W - 1 : 0)] : frame[(side ? PK_WIDE_H - 1 : 0) * PK_WIDE_W + at];
+    int far = reach[across ? side : 2 + side];
+    int r = 2 + d * 3 / 4;                                            // the glow spreads as it goes out
+    int bright = 256 - 136 * (d - 1) / (far > 1 ? far - 1 : 1);       // 1.0 at the game's edge -> ~0.47 at the window's
+    if (bright < 120) bright = 120;
+    int seam = d >= 4 ? 256 : d * 64;                                 // the first pixels lean on the edge itself
+    int lo = at - r < 0 ? 0 : at - r, hi = at + r >= len ? len - 1 : at + r;
+    uint32_t v = 0;
+    for (int c = 0; c < 3; c++) {
+        int32_t blur = (pre[hi + 1][c] - pre[lo][c]) / (hi - lo + 1) / 16;
+        int32_t e = (exact >> (8 * c)) & 0xFF;
+        int32_t mixd = (e * (256 - seam) + blur * seam) >> 8;
+        v |= (uint32_t) ((mixd * bright) >> 8) << (8 * c);
     }
+    return v | alpha;
 }
 
 // --- the frame ---------------------------------------------------------------------------------------
 
-static int mix;                     // 0..256: how much of the strips is the drawn scene (the rest is the ambient glow)
+static int mix;                     // 0..256: how much of the window is the drawn scene (the rest is the ambient glow)
 static int lastScore = -1;
 static int lastTorn;
 static int lastMode;                // PK_WIDE_MODE_*
-static int rawMargin = -1;          // the margin raw[] was drawn for (-1 = nothing yet)
-static uint32_t raw[PK_WIDE_H][2 * PK_WIDE_MAX_MARGIN];   // the last strips drawn (map or battle) that checked out
-static uint8_t rawHole[PK_WIDE_H][2 * PK_WIDE_MAX_MARGIN];  // ... and where they had nothing: the glow shows there
-static uint32_t amb[PK_WIDE_H][2 * PK_WIDE_MAX_MARGIN];   // this frame's ambient strips
+static int lastClose;               // pk_wide_wants_close
+static struct PkWideView rawView;   // the window raw[] was last drawn for (w 0 = nothing yet)
+static uint32_t raw[BUF_H][BUF_W];  // the last scene drawn (map or battle) that checked out, frame pixels unused
+static uint8_t rawHole[BUF_H][BUF_W];   // ... and where it had nothing: the frame's nearest edge pixel goes on there
 
 int pk_wide_configure(uint32_t crc) {
     const struct PkWideRom* rom = lookup(crc);
@@ -892,9 +951,10 @@ void pk_wide_reset(void) {
     npieces[0] = npieces[1] = 0;
     shown = 0;
     mix = 0;
-    rawMargin = -1;
+    rawView.w = 0;
     lastMode = PK_WIDE_MODE_NONE;
     lastScore = -1;
+    lastClose = 1;
     edgeAccOk = false;
 }
 
@@ -911,21 +971,58 @@ static inline uint32_t lerp(uint32_t a, uint32_t b, int t) {
     return (a & 0xFF000000) | rb | g;
 }
 
+/** BG0 - the field's text boxes, menus, signs - shows something: enough of its visible tilemap isn't tile 0. */
+static bool textUp(void) {
+    if (!(io(0) & 0x100)) return false;
+    const uint8_t* vram = (const uint8_t*) G->video.vram;
+    uint32_t scr = ((io(0x08) >> 8) & 31) * 0x800u;
+    int hofs = io(0x10) & 0x1FF, vofs = io(0x12) & 0x1FF, n = 0;
+    for (int ty = 0; ty < 20; ty++)
+        for (int tx = 0; tx < 30; tx++) {
+            int rx = ((hofs >> 3) + tx) & 31, ry = ((vofs >> 3) + ty) & 31;
+            if (le16(vram + scr + 2 * (uint32_t) (ry * 32 + rx)) & 0x3FF) n++;
+        }
+    return n >= 8;
+}
+
+/** A screen effect is up: lines drawn with their own scroll or windows (a transition's slices, wedges, bands). */
+static bool effectsUp(void) {
+    const uint16_t* a = lineRegs(0);
+    for (int y = 1; y < PK_WIDE_H; y++) {
+        const uint16_t* l = lineRegs(y);
+        for (int r = 0x14; r <= 0x46; r += 2)
+            if ((r <= 0x16 || r >= 0x40) && l[r >> 1] != a[r >> 1]) return true;
+    }
+    return false;
+}
+
+int pk_wide_wants_close(void) { return lastClose; }
+
 int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int margin, uint32_t* centre) {
-    realFrame = frame;
     if (margin < 0) margin = 0;
     if (margin > PK_WIDE_MAX_MARGIN) margin = PK_WIDE_MAX_MARGIN;
-    int ow = PK_WIDE_W + 2 * margin;
-    for (int y = 0; y < PK_WIDE_H; y++) memcpy(out + y * ow + margin, frame + y * PK_WIDE_W, PK_WIDE_W * sizeof(uint32_t));
+    struct PkWideView v = { -margin, 0, PK_WIDE_W + 2 * margin, PK_WIDE_H };
+    return pk_wide_view(core, frame, out, v, centre);
+}
+
+int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struct PkWideView v, uint32_t* centre) {
+    realFrame = frame;
+    if (v.w > PK_WIDE_MAX_VIEW_W) v.w = PK_WIDE_MAX_VIEW_W;
+    if (v.h > PK_WIDE_MAX_VIEW_H) v.h = PK_WIDE_MAX_VIEW_H;
+    if (v.w < 1 || v.h < 1) return 0;
+    uint32_t alpha = frame[0] & 0xFF000000;
     if (!core || core->platform(core) != mPLATFORM_GBA || !configured) {
-        for (int y = 0; y < PK_WIDE_H; y++)
-            for (int x = 0; x < margin; x++) out[y * ow + x] = out[y * ow + margin + PK_WIDE_W + x] = frame[y * PK_WIDE_W] & 0xFF000000;
+        for (int j = 0; j < v.h; j++)
+            for (int i = 0; i < v.w; i++) {
+                int X = v.x + i, Y = v.y + j;
+                out[j * v.w + i] = onFrame(X, Y) ? frame[Y * PK_WIDE_W + X] : alpha;
+            }
+        lastClose = 1;
         return 0;
     }
     G = (struct GBA*) core->board;
     R = G->memory.io;
     hookScanlines(G);
-    uint32_t alpha = frame[0] & 0xFF000000;
 
     int cur = prev == 0 ? 1 : 0;
     take(&snaps[cur]);
@@ -964,6 +1061,8 @@ int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int 
     bool valid = best >= MIN_SCORE;
     bool battle = !valid && inBattleScreen();
     lastMode = valid ? PK_WIDE_MODE_MAP : battle ? PK_WIDE_MODE_BATTLE : PK_WIDE_MODE_NONE;
+    bool locked = C[PK_WIDE_CONTROLS_LOCKED] && r8((uint32_t) C[PK_WIDE_CONTROLS_LOCKED]);
+    lastClose = !valid || (locked && (textUp() || effectsUp()));
 
     // Sprites: the frame shows the snapshot before it; if its list isn't what the OAM has, the
     // RAM was caught mid-update (a lag frame repeats the last picture) - keep the last good list.
@@ -974,40 +1073,52 @@ int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int 
         else lastTorn = 1;
     }
 
-    if (valid) {
-        const struct Snap* s = &snaps[bestSnap];
-        for (int side = 0; side < 2 && margin > 0; side++) {
-            int x0 = side ? PK_WIDE_W : -margin;
-            drawRegion(s, bestCx, bestCy, bestH, bestV, x0, x0 + margin, &raw[0][side * margin], 2 * PK_WIDE_MAX_MARGIN, alpha);
-            for (int y = 0; y < PK_WIDE_H; y++)
-                for (int x = 0; x < margin; x++) rawHole[y][side * margin + x] = holeBuf[y][x];
-        }
-        if (centre) drawRegion(s, bestCx, bestCy, bestH, bestV, 0, PK_WIDE_W, centre, PK_WIDE_W, alpha);
-    } else if (battle) {
-        for (int side = 0; side < 2 && margin > 0; side++) {
-            int x0 = side ? PK_WIDE_W : -margin;
-            drawBattleRegion(x0, x0 + margin, &raw[0][side * margin], 2 * PK_WIDE_MAX_MARGIN, alpha);
-            for (int y = 0; y < PK_WIDE_H; y++)
-                for (int x = 0; x < margin; x++) rawHole[y][side * margin + x] = holeBuf[y][x];
-        }
-        if (centre) drawBattleRegion(0, PK_WIDE_W, centre, PK_WIDE_W, alpha);   // holes there show the backdrop, as the PPU does
-    }
     if (valid || battle) {
-        rawMargin = margin;
+        if (valid) {
+            const struct Snap* s = &snaps[bestSnap];
+            drawRegion(s, bestCx, bestCy, bestH, bestV, v.x, v.y, v.x + v.w, v.y + v.h, true, &raw[0][0], BUF_W, alpha);
+        } else {
+            drawBattleRegion(v.x, v.y, v.x + v.w, v.y + v.h, true, &raw[0][0], BUF_W, alpha);
+        }
+        for (int j = 0; j < v.h; j++) memcpy(rawHole[j], holeBuf[j], (size_t) v.w);
+        rawView = v;
+        if (centre) {
+            if (valid) drawRegion(&snaps[bestSnap], bestCx, bestCy, bestH, bestV, 0, 0, PK_WIDE_W, PK_WIDE_H, false, centre, PK_WIDE_W, alpha);
+            else drawBattleRegion(0, 0, PK_WIDE_W, PK_WIDE_H, false, centre, PK_WIDE_W, alpha);   // holes show the backdrop, as the PPU does
+        }
         mix = mix + MIX_STEP > 256 ? 256 : mix + MIX_STEP;
     } else {
-        mix = mix - MIX_STEP < 0 ? 0 : mix - MIX_STEP;   // the last strips, frozen, dissolve into the glow
+        mix = mix - MIX_STEP < 0 ? 0 : mix - MIX_STEP;   // the last scene, frozen, dissolves into the glow
     }
-    if (rawMargin != margin) mix = 0;   // nothing drawn at this width yet
-    if (mix < 256) ambientEdges(frame, margin, alpha, &amb[0][0], 2 * PK_WIDE_MAX_MARGIN);
-    else edgeAccOk = false;            // the glow starts from the edges as they are when it's next needed
-    for (int y = 0; y < PK_WIDE_H; y++) {
-        // A hole goes on with the row's edge pixel as the game shows it now (so it follows fades).
-        uint32_t edgeL = frame[y * PK_WIDE_W], edgeR = frame[y * PK_WIDE_W + PK_WIDE_W - 1];
-        for (int x = 0; x < margin; x++) {
-            int l = x, r = margin + x;
-            out[y * ow + x] = lerp(amb[y][l], rawHole[y][l] ? edgeL : raw[y][l], mix);
-            out[y * ow + margin + PK_WIDE_W + x] = lerp(amb[y][r], rawHole[y][r] ? edgeR : raw[y][r], mix);
+    if (!rawView.w) mix = 0;   // nothing drawn yet
+    if (mix < 256) ambientPrepare(frame);
+    else edgeAccOk = false;    // the glow starts from the edges as they are when it's next needed
+    int reach[4] = { -v.x, v.x + v.w - PK_WIDE_W, -v.y, v.y + v.h - PK_WIDE_H };
+
+    for (int j = 0; j < v.h; j++) {
+        int Y = v.y + j;
+        uint32_t* row = out + j * v.w;
+        int ry = Y - rawView.y;
+        bool rawRow = ry >= 0 && ry < rawView.h;
+        for (int i = 0; i < v.w; i++) {
+            int X = v.x + i;
+            if (onFrame(X, Y)) {
+                // The frame itself: copied a row segment at a time.
+                int n = (PK_WIDE_W - X) < (v.w - i) ? PK_WIDE_W - X : v.w - i;
+                memcpy(row + i, frame + Y * PK_WIDE_W + X, (size_t) n * sizeof(uint32_t));
+                i += n - 1;
+                continue;
+            }
+            int rx = X - rawView.x, m = mix;
+            uint32_t scene = 0;
+            if (rawRow && rx >= 0 && rx < rawView.w) {
+                // A hole goes on with the frame's nearest edge pixel as the game shows it now (so it follows fades).
+                scene = rawHole[ry][rx] ? frame[clampi(Y, 0, PK_WIDE_H - 1) * PK_WIDE_W + clampi(X, 0, PK_WIDE_W - 1)]
+                                        : raw[ry][rx];
+            } else {
+                m = 0;   // the window moved off what was last drawn: the glow
+            }
+            row[i] = m >= 256 ? scene : lerp(glowAt(frame, X, Y, reach, alpha), scene, m);
         }
     }
     if (lineIoFrames < 2) lineIoFrames++;

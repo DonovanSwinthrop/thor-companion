@@ -64,7 +64,8 @@ One command per line:
 | `wideon MARGIN` | Run the app's WIDE (`app/src/main/cpp/pk_wide.c`) after every frame from now on, MARGIN GBA px per side, for the game the ROM header names (retail FireRed rev 1 / Emerald). Repo builds only, like `cheat` |
 | `widecheck [all]` | Also rebuild the middle 240x160 every frame and compare it with the real frame pixel for pixel - how WIDE's rebuild was checked: it must match wherever it says the field checks out. Map frames only; `all` checks battle frames too, for a capture with `layers 0x18` (a battle's rebuild is BG3 + sprites) |
 | `widestats` | Print WIDE's tally: frames, unverified ones (margins faded), torn sprite lists, centre checks exact / worst, and its time per frame (frames over 2 ms are also printed as they happen) |
-| `wideinfo [lines]` | Print how the last frame went: mode (0 glow, 1 map, 2 battle), tilemap score (0..1000, -1 untried), torn sprite list; with `lines`, BG1's scroll as latched and per line as drawn |
+| `wideview X Y W H` | From now on WIDE draws this window instead of `wideon`'s strips: the frame's pixels, its top-left (0, 0), up to 800x800 - ZOOM and the look-around (e.g. `wideview -200 -100 640 360`) |
+| `wideinfo [lines]` | Print how the last frame went: mode (0 glow, 1 map, 2 battle), tilemap score (0..1000, -1 untried), torn sprite list, close (ZOOM steps back in); with `lines`, BG1's scroll as latched and per line as drawn |
 | `wideshot FILE` | Write the last wide frame (`240 + 2 * MARGIN` x 160) as a PPM |
 | `widecentre FILE` | Write the last frame's rebuild of the middle 240x160 (with `widecheck` on) as a PPM, to diff against `shot` |
 | `widerec FILE N` | Run N frames (keys as `keys` holds them) recording every wide frame into FILE - `scripts/wide_gif.py FILE out.gif` makes an animation (or a contact sheet) of it |

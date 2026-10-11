@@ -68,7 +68,7 @@ val SETTING_KEYWORDS: Map<String, String> = mapOf(
     "GAME BUTTONS" to "key bindings keybinds keybinding controls remap remapping rebind mapping input controller gamepad buttons turbo",
     "HOTKEYS" to "shortcuts combos save state load state slot rewind fast forward key bindings",
     "STATUS BAR" to "clock time battery money location top bar",
-    "ASPECT" to "stretch ratio fullscreen full screen size scale 3:2 wide widescreen 16:9",
+    "ASPECT" to "stretch ratio fullscreen full screen size scale 3:2 wide widescreen 16:9 expand zoom",
     "SHADERS" to "filter lcd crt scanlines grid gba colors color correction effects screen look",
     "COMPANION" to "portrait phone bottom position layout",
     "SWAP SCREENS" to "dual screen display switch top bottom",

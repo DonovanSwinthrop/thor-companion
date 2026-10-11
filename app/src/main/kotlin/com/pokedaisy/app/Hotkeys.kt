@@ -26,7 +26,7 @@ class Hotkeys private constructor(
         SAVE_STATE(tk("SAVE STATE")), LOAD_STATE(tk("LOAD STATE")), UNDO_SAVE(tk("UNDO SAVE")),
         UNDO_LOAD(tk("UNDO LOAD")), SLOT_NEXT(tk("SLOT NEXT")), SLOT_PREV(tk("SLOT PREV")),
         FF_HOLD(tk("FF HOLD")), FF_TOGGLE(tk("FF TOGGLE")), SPEED_CYCLE(tk("SPEED CYCLE")),
-        SLOWMO_HOLD(tk("SLOWMO HOLD")), REWIND_HOLD(tk("REWIND HOLD")), EXIT_GAME(tk("EXIT GAME"));
+        SLOWMO_HOLD(tk("SLOWMO HOLD")), REWIND_HOLD(tk("REWIND HOLD")), ZOOM(tk("ZOOM")), EXIT_GAME(tk("EXIT GAME"));
 
         val prop get() = name.lowercase()
         val label get() = name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
@@ -72,7 +72,8 @@ class Hotkeys private constructor(
             "load_state" to "BUTTON_SELECT+BUTTON_L1, F2",
             "undo_save" to "F3",
             "undo_load" to "F4",
-            "slot_next" to "BUTTON_THUMBR, RIGHT_BRACKET",
+            // R3 is ZOOM's (the right stick looks around); L3 stays SLOT PREV.
+            "slot_next" to "RIGHT_BRACKET",
             "slot_prev" to "BUTTON_THUMBL, LEFT_BRACKET",
             "ff_hold" to "BUTTON_R2, SPACE",
             "ff_toggle" to "TAB",
@@ -80,13 +81,17 @@ class Hotkeys private constructor(
             "slowmo_hold" to "MINUS",
             // RetroArch's keyboard default; a pad button is the player's pick (HOTKEYS).
             "rewind_hold" to "R",
+            // WIDE's zoom steps ([WideCamera]), on the stick that looks around.
+            "zoom" to "BUTTON_THUMBR, C",
             "exit_game" to "BUTTON_SELECT+BUTTON_START, ESCAPE",
         )
 
-        /** The first defaults (X / Y saved and loaded states), swapped for [DEFAULTS]' where a file still has them. */
+        /** Earlier defaults (X / Y saved and loaded states, R3 the next slot), swapped for [DEFAULTS]' where a file still
+         * has them - nobody changed those. */
         private val OLD_DEFAULTS = mapOf(
             "save_state" to "BUTTON_SELECT+BUTTON_R1, BUTTON_Y, F1",
             "load_state" to "BUTTON_SELECT+BUTTON_L1, BUTTON_X, F2",
+            "slot_next" to "BUTTON_THUMBR, RIGHT_BRACKET",
         )
 
         private fun file(filesDir: File) = File(filesDir, "hotkeys.properties")

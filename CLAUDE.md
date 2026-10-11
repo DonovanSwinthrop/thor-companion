@@ -491,7 +491,7 @@ the top screen - `EmulatorView.stretch` drops the quad's letterbox and `GameStag
 game all the space under the status bar. The bottom screen flips it in place; the top-screen Settings opens
 `AspectPicker` (both choices drawn as the top screen in miniature, with the newest savestate thumbnail, else a
 drawn stand-in) and the game picks it up on resume (`syncGameScreen`).
-**ASPECT > WIDE** (`GameAspect`, `Prefs.gameAspect` - it replaced the `stretch_game` boolean, which still reads
+**ASPECT > WIDE** (shown as EXPAND since it also extends a portrait phone's game up and down; `GameAspect`, `Prefs.gameAspect` - it replaced the `stretch_game` boolean, which still reads
 as STRETCH): the overworld rebuilt past the GBA's edges by `pk_wide.c` every frame (docs/DEVELOPMENT.md's "WIDE"
 section has how and why). The ground rule it was built on: **the rebuild of the middle 240x160 must equal the real
 frame pixel for pixel** - check any change with `mgba_dump`'s `wideon 22` + `widecheck` + `widestats` on walking
@@ -503,6 +503,9 @@ the hacks in `gen_wide_tables.py`'s HACKS (Unbound, Radical Red: mapped like por
 OAM, never trusted alone). ASPECT has three values now, so the companion's row is an `OptionSelector`. Off the map the
 strips are **ambient edges** (a glow from the game's own edge pixels), crossfaded with the map strips; look at transition
 changes with `widerec` + `scripts/wide_gif.py --sheet` (boot and a scripted wild battle, both games), not by guessing.
+**ZOOM + look-around** (`WideCamera`, `pk_wide_view`): any window around the frame, whole GBA pixels per step
+(`levelsFor`), eased back to 1x on `pk_wide_wants_close` (the field's `CONTROLS_LOCKED` + a text box / transition, or
+off the map); the right stick moves the view (stays standing, glides back when walking). docs/DEVELOPMENT.md's WIDE section.
 **Battles are wide** (BG3 is 512 px in VRAM): drawn like a wider PPU, with per-scanline registers from a hook on mGBA's
 `drawScanline`; check battle changes with `layers 0x18` + `widecheck all` (BG3 + OBJ only: the middle must match exactly).
 The map uses those per-line registers too (windows, scroll, layer enables - Flash caves, transition wedges); weather

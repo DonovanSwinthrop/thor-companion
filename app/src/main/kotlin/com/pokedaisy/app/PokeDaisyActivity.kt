@@ -521,8 +521,6 @@ class PokeDaisyActivity : Activity() {
         view.onVsync = { if (::engine.isInitialized) engine.onVsync() else 0L }
         // SHADERS on the companion: its grid at the game's own pixel size, so both screens match.
         view.onGamePixel = CompanionColors::setCell
-        // WIDE: as many GBA pixels beside the game as this view has room for.
-        view.onWideMargin = { MgbaCore.pkWideSetMargin(it) }
         if (debugMirror) view.setZOrderMediaOverlay(true) // see EmulatorView's z-order note
         hud = TextView(this).apply {
             setTextColor(Color.WHITE)
@@ -689,6 +687,7 @@ class PokeDaisyActivity : Activity() {
 
         engine = EmulatorEngine(input, states!!, ffMusicCache).apply {
             gba = !gameBoy
+            wideCamera = view.camera
             gen1Music = this@PokeDaisyActivity.gen1Music
             onCoreReady = { w, h ->
                 MgbaCore.pkVideoBuffer()?.let { buf ->
@@ -1050,6 +1049,9 @@ class PokeDaisyActivity : Activity() {
         // the core draws the overworld into the room beside it.
         val aspect = prefs.gameAspect.let { if (it == GameAspect.WIDE && wideGame == WideScreen.OFF) GameAspect.ORIGINAL else it }
         (statusBar.parent as? GameStageLayout)?.stretch = aspect != GameAspect.ORIGINAL
+        // A phone upright: WIDE fills everything above the companion, the map going on above and below the game.
+        (statusBar.parent as? GameStageLayout)?.expand = aspect == GameAspect.WIDE
+        if (::portraitPanel.isInitialized) portraitPanel.expand = aspect == GameAspect.WIDE
         view.stretch = aspect == GameAspect.STRETCH
         view.wide = aspect == GameAspect.WIDE
         if (::engine.isInitialized) engine.wideGame = if (aspect == GameAspect.WIDE) wideGame else WideScreen.OFF
@@ -1260,6 +1262,12 @@ class PokeDaisyActivity : Activity() {
             if ((rt > 0.5f) != rtDown) { rtDown = rt > 0.5f; engine.setFastForwardHeld(rtDown) }
             if ((lt > 0.5f) != ltDown) { ltDown = lt > 0.5f; engine.setSlowmoHeld(ltDown) }
         }
+        if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
+            // The right stick: WIDE's look-around (WideCamera). Most pads report it as Z / RZ, some as RX / RY.
+            fun axis(a: Int, b: Int) = event.getAxisValue(a).let { v -> if (kotlin.math.abs(v) > 0.05f) v else event.getAxisValue(b) }
+            view.camera.stickX = axis(MotionEvent.AXIS_Z, MotionEvent.AXIS_RX)
+            view.camera.stickY = axis(MotionEvent.AXIS_RZ, MotionEvent.AXIS_RY)
+        }
         if (input.onMotion(event)) return true
         return super.onGenericMotionEvent(event)
     }
@@ -1289,6 +1297,13 @@ class PokeDaisyActivity : Activity() {
                 if (e.pressed && !Prefs(this).rewind) showHud(com.pokedaisy.app.companion.i18n.tr("Rewind is off - turn it on in SETTINGS"))
                 else if (e.pressed) showHud(com.pokedaisy.app.companion.i18n.tr("Rewinding"))
                 engine.setRewindHeld(e.pressed)
+            }
+            Hotkeys.Action.ZOOM -> if (e.pressed) {
+                if (!view.wide) showHud(com.pokedaisy.app.companion.i18n.tr("Zoom needs ASPECT > EXPAND"))
+                else {
+                    val step = view.camera.cycle()
+                    showHud(com.pokedaisy.app.companion.i18n.tr("Zoom {0}", "%.1fx".format(java.util.Locale.ROOT, view.camera.factor(step)).replace(".0x", "x")))
+                }
             }
             Hotkeys.Action.EXIT_GAME -> if (e.pressed) exitGame()
         }

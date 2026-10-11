@@ -15,22 +15,10 @@ object WideScreen {
     /** No game: WIDE off. */
     const val OFF = 0
 
-    /** Most GBA pixels drawn per side (pk_wide.h's PK_WIDE_MAX_MARGIN; 21:9 needs 67). */
-    const val MAX_MARGIN = 96
-
     /** What to hand [MgbaCore.pkWideConfigure] for the ROM with this CRC32 ([SaveStates.crc32]'s hex form):
      * the CRC itself if pk_wide.c knows it, else [OFF]. */
     fun gameFor(crc: String): Int {
         val v = crc.toLongOrNull(16)?.toInt() ?: return OFF
         return if (v != OFF && runCatching { MgbaCore.pkWideKnows(v) }.getOrDefault(false)) v else OFF
-    }
-
-    /**
-     * GBA pixels per side for a view [w] x [h] px: as many as fit with the game at the view's full
-     * height (so its pixels stay square), the wide frame never wider than the view.
-     */
-    fun marginFor(w: Int, h: Int): Int {
-        if (w <= 0 || h <= 0) return 0
-        return ((w.toLong() * 160 / h - 240) / 2).toInt().coerceIn(0, MAX_MARGIN)
     }
 }

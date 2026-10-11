@@ -72,12 +72,12 @@ static struct {
     int rewindEntries;
     int rewindTick;
     bool rewinding;
-    // WIDE (pk_wide.c): the frame with the rebuilt overworld beside it, wideW wide (0 = not
-    // drawn: the screen shows `video`). The margin comes from the UI thread (the view's size).
+    // WIDE (pk_wide.c): the window around the frame with the rebuilt scene, wideW x wideH (0 = not
+    // drawn: the screen shows `video`). The window comes from WideCamera (ZOOM, the look-around) per frame.
     uint32_t* wide;
-    int wideW;
+    int wideW, wideH;
     uint32_t wideCrc;                   // the game WIDE draws (its ROM's CRC32; 0 = off)
-    volatile int wideMargin;
+    volatile int viewX, viewY, viewW, viewH;
 } g;
 
 #define PK_REWIND_INTERVAL 2
@@ -265,7 +265,7 @@ Java_com_pokedaisy_app_MgbaCore_pkInit(JNIEnv* env, jobject thiz,
     g.saveVf = saveVf;
     g.audioAvail = 0;
     if (pk_is_gba(core)) {
-        g.wide = calloc((size_t) (PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H, sizeof(uint32_t));
+        g.wide = calloc((size_t) PK_WIDE_MAX_VIEW_W * PK_WIDE_MAX_VIEW_H, sizeof(uint32_t));
     }
     pthread_rwlock_unlock(&pk_coreLock);
 
@@ -338,14 +338,15 @@ Java_com_pokedaisy_app_MgbaCore_pkRunFrame(JNIEnv* env, jobject thiz) {
     }
     g.core->runFrame(g.core);
     pkDrainAudio();
-    // WIDE: only with a game it knows and room beside the game. 32-bit colour, like the screen's upload.
-    int margin = g.wideMargin;
-    if (g.wide && g.wideCrc && margin > 0 && sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H) {
-        if (margin > PK_WIDE_MAX_MARGIN) margin = PK_WIDE_MAX_MARGIN;
-        pk_wide_frame(g.core, (const uint32_t*) g.video, g.wide, margin, NULL);
-        g.wideW = PK_WIDE_W + 2 * margin;
+    // WIDE: only with a game it knows and a window set. 32-bit colour, like the screen's upload.
+    struct PkWideView v = { g.viewX, g.viewY, g.viewW, g.viewH };
+    if (g.wide && g.wideCrc && v.w > 0 && v.h > 0 && v.w <= PK_WIDE_MAX_VIEW_W && v.h <= PK_WIDE_MAX_VIEW_H &&
+        sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H) {
+        pk_wide_view(g.core, (const uint32_t*) g.video, g.wide, v, NULL);
+        g.wideW = v.w;
+        g.wideH = v.h;
     } else {
-        g.wideW = 0;
+        g.wideW = g.wideH = 0;
     }
 }
 
@@ -363,25 +364,39 @@ Java_com_pokedaisy_app_MgbaCore_pkWideKnows(JNIEnv* env, jobject thiz, jint crc)
     return pk_wide_knows((uint32_t) crc) ? JNI_TRUE : JNI_FALSE;
 }
 
-// WIDE: GBA pixels to draw beside the game per side (the view's spare width); any thread.
+// WIDE: the window to draw from the next frame on, in the frame's pixels (its top-left (0, 0)); w 0 = none.
 JNIEXPORT void JNICALL
-Java_com_pokedaisy_app_MgbaCore_pkWideSetMargin(JNIEnv* env, jobject thiz, jint margin) {
-    g.wideMargin = margin < 0 ? 0 : margin > PK_WIDE_MAX_MARGIN ? PK_WIDE_MAX_MARGIN : margin;
+Java_com_pokedaisy_app_MgbaCore_pkWideSetView(JNIEnv* env, jobject thiz, jint x, jint y, jint w, jint h) {
+    g.viewX = x;
+    g.viewY = y;
+    g.viewH = h < 0 ? 0 : h > PK_WIDE_MAX_VIEW_H ? PK_WIDE_MAX_VIEW_H : h;
+    g.viewW = w < 0 ? 0 : w > PK_WIDE_MAX_VIEW_W ? PK_WIDE_MAX_VIEW_W : w;
 }
 
-// The wide frame buffer (room for the widest margin; the last frame is pkWideWidth() x 160).
+// The wide frame buffer (room for the largest window; the last frame is pkWideWidth() x pkWideHeight()).
 JNIEXPORT jobject JNICALL
 Java_com_pokedaisy_app_MgbaCore_pkWideBuffer(JNIEnv* env, jobject thiz) {
     if (!g.wide) {
         return NULL;
     }
-    return (*env)->NewDirectByteBuffer(env, g.wide, (jlong) (PK_WIDE_W + 2 * PK_WIDE_MAX_MARGIN) * PK_WIDE_H * sizeof(uint32_t));
+    return (*env)->NewDirectByteBuffer(env, g.wide, (jlong) PK_WIDE_MAX_VIEW_W * PK_WIDE_MAX_VIEW_H * sizeof(uint32_t));
 }
 
-// The last frame's wide width, or 0 when it wasn't drawn wide (the screen shows pkVideoBuffer). Emu thread.
+// The last frame's window size, or 0 when it wasn't drawn wide (the screen shows pkVideoBuffer). Emu thread.
 JNIEXPORT jint JNICALL
 Java_com_pokedaisy_app_MgbaCore_pkWideWidth(JNIEnv* env, jobject thiz) {
     return g.wideW;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideHeight(JNIEnv* env, jobject thiz) {
+    return g.wideH;
+}
+
+// ZOOM: whether the last frame wants the game close up (a battle, a menu, a text box). Emu thread.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideWantsClose(JNIEnv* env, jobject thiz) {
+    return g.wideW && !pk_wide_wants_close() ? JNI_FALSE : JNI_TRUE;
 }
 
 // REWIND: keep [entries] states (0 = off, the buffer freed). Emu thread, like pkRunFrame.

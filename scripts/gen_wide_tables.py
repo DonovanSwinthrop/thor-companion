@@ -30,7 +30,7 @@ OUT_JSON = os.path.join(ROOT, "build", "wide", "wide.json")
 
 # pk_wide.h's PK_WIDE_* address slots, in order.
 SLOTS = ["VMAP", "MAP_HEADER", "MAP_GROUPS", "SAVE_BLOCK1_PTR", "CAMERA_OFFSET", "OBJECT_EVENTS", "SPRITES",
-         "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN", "MAP_GROUPS_XOR", "NORMAL_BG3", "METATILE_SIZE", "METATILE_MASK", "PRIMARY_OVERRIDE", "PAN_OFF"]
+         "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN", "CONTROLS_LOCKED", "MAP_GROUPS_XOR", "NORMAL_BG3", "METATILE_SIZE", "METATILE_MASK", "PRIMARY_OVERRIDE", "PAN_OFF"]
 
 # The references: what was mapped onto retail from the decomp ELFs and checked headless (pk_wide.c's
 # history), plus ScriptContext_SetupScript for the checks' scripted warps and battles.
@@ -38,7 +38,8 @@ REFERENCES = {
     "FR": dict(code="BPRE", rev=1, script=0x08069AF8, a=dict(
         VMAP=0x03005040, MAP_HEADER=0x02036DFC, MAP_GROUPS=0x08352718, SAVE_BLOCK1_PTR=0x03005008,
         CAMERA_OFFSET=0x03000E90, OBJECT_EVENTS=0x02036E38, SPRITES=0x0202063C, COORD_OFFSET=0x02021BC8,
-        COORD_OFFSET_Y=0x02021BCA, SPRITE_ORDER=0x02021800, GMAIN=0x030030F0)),
+        COORD_OFFSET_Y=0x02021BCA, SPRITE_ORDER=0x02021800, GMAIN=0x030030F0,
+        CONTROLS_LOCKED=0x03000F9C)),   # sScriptContext2Enabled, from ScriptContext2_IsEnabled's literal
     "EM": dict(code="BPEE", rev=0, script=0x08098EF8, a=dict(
         VMAP=0x03005DC0, MAP_HEADER=0x02037318, MAP_GROUPS=0x08486578, SAVE_BLOCK1_PTR=0x03005D8C,
         CAMERA_OFFSET=0x03000E20, OBJECT_EVENTS=0x02037350, SPRITES=0x02020630, COORD_OFFSET=0x02021BBC,
@@ -50,6 +51,9 @@ REFERENCES = {
         CAMERA_OFFSET=0x03000590, OBJECT_EVENTS=0x030048A0, SPRITES=0x02020004, COORD_OFFSET=0x030024D0,
         COORD_OFFSET_Y=0x030027E0, SPRITE_ORDER=0x03002410, GMAIN=0x03001770)),
 }
+# Addresses a ROM may go without (0 = unknown: pk_wide.c then does without what they give).
+OPTIONAL = {"CONTROLS_LOCKED"}
+
 # The slots that aren't addresses, as retail has them.
 CONSTANTS = dict(MAP_GROUPS_XOR=0, NORMAL_BG3=0x3014, METATILE_SIZE=16, METATILE_MASK=0x3FF, PRIMARY_OVERRIDE=0, PAN_OFF=8)
 
@@ -173,10 +177,14 @@ def main():
                 val, n = CONSTANTS[slot], "-"
             elif hack and not hack.get("mapped"):
                 val, n = None, 0
+            elif slot not in ref["a"]:
+                val, n = 0, "-"   # an optional one the reference hasn't got
             elif dst.d == src.d:
                 val, n = ref["a"][slot], "ref"
             else:
                 val, n = map_literal(src, dst, ref["a"][slot])
+            if val is None and slot in OPTIONAL:
+                val, n = 0, 0
             if val is None:
                 missing.append(slot)
             addrs[slot], votes[slot] = val, n
