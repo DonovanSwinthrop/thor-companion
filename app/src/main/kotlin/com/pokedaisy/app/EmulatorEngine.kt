@@ -153,6 +153,11 @@ class EmulatorEngine(
         get() = battleInput.switchAddrs
         set(v) { battleInput.switchAddrs = v }
 
+    /** Where the battle menus keep their cursors (picks go straight there); null = the blind walk. */
+    var battleCursorAddrs: BattleInputController.CursorAddrs?
+        get() = battleInput.cursorAddrs
+        set(v) { battleInput.cursorAddrs = v }
+
     /** Switch to the party mon with this personality. Call from the UI thread. */
     fun battleSwitchTo(personality: Long) = battleInput.switchTo(personality)
 
@@ -243,6 +248,9 @@ class EmulatorEngine(
     private fun effectiveSpeed(): Float {
         // Rewinding steps back at the display's pace (2 game frames a frame), whatever FF says.
         if (rewindHeld && rewindEntries > 0) return 1f
+        // An automated switch drives the game's party menu behind the held frame: nothing to watch
+        // there, so it runs flat out (muted) and the battle comes back in a fraction of a second.
+        if (battleInput.holdFrame) return Float.POSITIVE_INFINITY
         val s = requestedSpeed()
         // SMART: menus and the region map's cursor can't be steered sped up -
         // 1x while one is up, and FF (still on) picks up again when it closes.
@@ -511,11 +519,16 @@ class EmulatorEngine(
                 servicePending()
 
                 val nowMs = System.currentTimeMillis()
-                if (nowMs - lastSample >= 1000L) {
+                // The companion's full sample: once a second, four times in a battle (HP and PP follow the
+                // game within ~1/4 s; a battle state change gets one at once anyway, see onBattleInputSample).
+                val sampleEvery = if (battleInput.gameState != com.pokedaisy.app.companion.data.BATTLE_INPUT_NONE) 250L else 1000L
+                if (nowMs - lastSample >= sampleEvery) {
                     lastSample = nowMs
                     runCatching { onSample?.invoke() }
                 }
-                if (nowMs - lastBattleInputSample >= 66L) {
+                // Every frame while a switch runs flat out behind the held frame: at that speed a
+                // 66 ms gap is dozens of game frames, and the turbo would run on into the battle.
+                if (battleInput.holdFrame || nowMs - lastBattleInputSample >= 66L) {
                     lastBattleInputSample = nowMs
                     runCatching { onBattleInputSample?.invoke() }
                 }
@@ -563,7 +576,7 @@ class EmulatorEngine(
                 // only as SPED-UP (which STEADY falls back to only for a song or ROM it can't
                 // render). Slow-mo stays muted.
                 val spedUp = speed > 1f && clip == null && mode != FfMusicMode.OFF && !awaitingClip
-                val wantPaused = rewinding || !((speed == 1f && clip == null) || spedUp)
+                val wantPaused = rewinding || battleInput.holdFrame || !((speed == 1f && clip == null) || spedUp)
                 // Refreshes per frame when the display paces 1x; 0 = the timer and blocking audio.
                 val perFrame = if (speed == 1f && track != null && bufferFrames > 0) vsyncsPerFrame() else 0
                 pacedPerFrame = perFrame

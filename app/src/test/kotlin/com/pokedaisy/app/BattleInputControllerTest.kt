@@ -22,13 +22,30 @@ class BattleInputControllerTest {
         val party = ByteArray(6 * 100)
         var slot = 0
         val presses = mutableListOf<String>()
+        // gActionSelectionCursor / gMoveSelectionCursor, a cell (column + 2 x row) per battler.
+        val actionCursor = IntArray(4)
+        val moveCursor = IntArray(4)
 
         fun pid(i: Int, v: Long) { for (k in 0 until 4) party[i * 100 + k] = (v shr (8 * k)).toByte() }
 
         override fun readCoreMemory(addr: Long, size: Int): ByteArray = when (addr) {
             MENU + 9 -> byteArrayOf(slot.toByte())
             PARTY -> party.copyOf(size)
+            in ACTION_CURSOR until ACTION_CURSOR + 4 -> byteArrayOf(actionCursor[(addr - ACTION_CURSOR).toInt()].toByte())
+            in MOVE_CURSOR until MOVE_CURSOR + 4 -> byteArrayOf(moveCursor[(addr - MOVE_CURSOR).toInt()].toByte())
             else -> ByteArray(size)
+        }
+
+        /** A 2x2 menu's cursor after [key], as the games move it: a press toward an edge it's on does nothing. */
+        fun step(cursor: IntArray, battler: Int, key: String) {
+            val c = cursor[battler]
+            cursor[battler] = when (key) {
+                "RIGHT" -> if (c and 1 == 0) c + 1 else c
+                "LEFT" -> if (c and 1 == 1) c - 1 else c
+                "DOWN" -> if (c < 2) c + 2 else c
+                "UP" -> if (c >= 2) c - 2 else c
+                else -> c
+            }
         }
     }
 
@@ -206,9 +223,157 @@ class BattleInputControllerTest {
         assertFalse(c.isBusy)
     }
 
+    /** The real party menu's list: slots 0..5, then CANCEL (7); DOWN and UP both wrap. */
+    private fun partyStep(slot: Int, key: String): Int {
+        val ring = listOf(0, 1, 2, 3, 4, 5, 7)
+        val i = ring.indexOf(slot)
+        return when (key) {
+            "DOWN" -> ring[(i + 1) % ring.size]
+            "UP" -> ring[(i + ring.size - 1) % ring.size]
+            else -> slot
+        }
+    }
+
+    @Test fun pressesTheMenuDropsWhileFadingInArePressedAgain() {
+        // The menu ignores presses for ~50 frames after it opens (FireRed / Emerald, headless).
+        c.onState(0, BATTLE_INPUT_PARTY_OPEN) // the game's own party menu (after a faint)
+        c.switchTo(0x1002L)
+        var frame = 0
+        var a = 0
+        var last = 0
+        repeat(400) {
+            c.tick()
+            frame++
+            val now = input.mask
+            val new = now and last.inv()
+            last = now
+            for ((bit, name) in KEYS) if (new and bit != 0) {
+                game.presses += name
+                if (frame > 50) game.slot = partyStep(game.slot, name)
+                if (name == "A" && ++a == 2) c.onState(0, BATTLE_INPUT_BUSY) // SHIFT taken
+            }
+        }
+        assertEquals(2, game.slot)
+        assertEquals(2, a)
+        assertTrue("dropped presses were pressed again", game.presses.count { it == "DOWN" } > 2)
+        assertFalse(c.isBusy)
+    }
+
+    @Test fun theShorterWayRoundGoesUpThroughCancel() {
+        // Slot 5 from slot 0 of six: UP, UP (0 -> CANCEL -> 5), not five DOWNs.
+        c.onState(0, BATTLE_INPUT_PARTY_OPEN)
+        c.switchTo(0x1005L)
+        run(300) { key ->
+            game.slot = partyStep(game.slot, key)
+            if (key == "A" && game.presses.count { it == "A" } == 2) c.onState(0, BATTLE_INPUT_BUSY)
+        }
+        assertEquals(listOf("UP", "UP", "A", "A"), game.presses)
+        assertEquals(5, game.slot)
+    }
+
+    // ---- picks that read the cursor (FireRed / Emerald: cursorAddrs) ----
+
+    private val fast = BattleInputController(input, game, log = {}).apply {
+        cursorAddrs = BattleInputController.CursorAddrs(action = ACTION_CURSOR, move = MOVE_CURSOR)
+    }
+
+    /** [run] for [fast], the simulated menu that's open moving its cursor with each press. */
+    private fun runFast(frames: Int, menu: IntArray, battler: Int = 0, dropFirst: String? = null, onPress: (String) -> Unit = {}) {
+        var last = 0
+        var dropped = false
+        repeat(frames) {
+            fast.tick()
+            val now = input.mask
+            val new = now and last.inv()
+            last = now
+            for ((bit, name) in KEYS) if (new and bit != 0) {
+                game.presses += name
+                // A game still fading in ignores a press: the loop has to notice and press again.
+                if (name == dropFirst && !dropped) { dropped = true; continue }
+                game.step(menu, battler, name)
+                onPress(name)
+            }
+        }
+    }
+
+    @Test fun theHighlightedChoiceIsOnePress() {
+        game.actionCursor[0] = 0
+        fast.onState(0, BATTLE_INPUT_ACTION_SELECT)
+        fast.selectAction(0) // FIGHT, already highlighted
+        runFast(60, game.actionCursor)
+        assertEquals(listOf("A"), game.presses)
+        assertFalse(fast.isBusy)
+    }
+
+    @Test fun aMoveIsReachedFromWhereTheCursorIs() {
+        // Move 1 highlighted (top right), move 2 wanted (bottom left): LEFT, DOWN, A - no UP.
+        game.moveCursor[0] = 1
+        fast.onState(0, BATTLE_INPUT_MOVE_SELECT)
+        fast.selectMove(2)
+        runFast(60, game.moveCursor) { if (it == "A") fast.onState(0, BATTLE_INPUT_BUSY) }
+        assertEquals(listOf("LEFT", "DOWN", "A"), game.presses)
+        assertEquals(2, game.moveCursor[0])
+    }
+
+    @Test fun aDroppedPressIsPressedAgain() {
+        game.actionCursor[0] = 0
+        fast.onState(0, BATTLE_INPUT_ACTION_SELECT)
+        fast.selectAction(3) // RUN: RIGHT (dropped), RIGHT, DOWN, A
+        runFast(60, game.actionCursor, dropFirst = "RIGHT") { if (it == "A") fast.onState(0, BATTLE_INPUT_BUSY) }
+        assertEquals(listOf("RIGHT", "RIGHT", "DOWN", "A"), game.presses.take(4))
+        assertEquals(3, game.actionCursor[0])
+    }
+
+    @Test fun theChoosingBattlersCursorIsTheOneRead() {
+        // A double battle's second battler: its own byte, not battler 0's.
+        game.actionCursor[0] = 3
+        game.actionCursor[1] = 1
+        fast.onState(1, BATTLE_INPUT_ACTION_SELECT)
+        fast.selectAction(1) // BAG, already highlighted for battler 1
+        runFast(60, game.actionCursor, battler = 1)
+        assertEquals(listOf("A"), game.presses)
+    }
+
+    @Test fun anUnreadableCursorFallsBackToTheBlindWalk() {
+        game.actionCursor[0] = 9 // not a cell: the wrong address
+        fast.onState(0, BATTLE_INPUT_ACTION_SELECT)
+        fast.selectAction(3)
+        runFast(200, IntArray(4)) { if (it == "A") fast.onState(0, BATTLE_INPUT_BUSY) }
+        assertEquals(listOf("LEFT", "UP", "RIGHT", "DOWN", "A"), game.presses.take(5))
+    }
+
+    @Test fun aMoveTappedOnTheActionMenuOpensFightThenPicksIt() {
+        game.actionCursor[0] = 1
+        game.moveCursor[0] = 0
+        fast.onState(0, BATTLE_INPUT_ACTION_SELECT)
+        fast.selectMove(3)
+        runFast(120, game.actionCursor)
+        // LEFT to FIGHT, A; the next state poll sees the move grid, read from then on.
+        assertEquals(listOf("LEFT", "A"), game.presses)
+        game.presses.clear()
+        fast.onState(0, BATTLE_INPUT_MOVE_SELECT)
+        runFast(120, game.moveCursor) { if (it == "A") fast.onState(0, BATTLE_INPUT_BUSY) }
+        assertEquals(listOf("RIGHT", "DOWN", "A"), game.presses)
+    }
+
+    @Test fun runClosesTheMessageOnlyAfterItsPick() {
+        game.actionCursor[0] = 0
+        fast.onState(0, BATTLE_INPUT_ACTION_SELECT)
+        fast.selectAction(3)
+        var b = 0
+        runFast(400, game.actionCursor) { key ->
+            if (key == "A") fast.onState(0, BATTLE_INPUT_BUSY)
+            if (key == "B" && ++b == 2) fast.onState(0, BATTLE_INPUT_NONE)
+        }
+        assertEquals(listOf("RIGHT", "DOWN", "A", "B", "B"), game.presses)
+        assertFalse(fast.isBusy)
+    }
+
     private companion object {
         const val MENU = 0x0203B0A0L
         const val PARTY = 0x02024284L
+        const val ACTION_CURSOR = 0x02023FF8L
+        const val MOVE_CURSOR = 0x02023FFCL
         val KEYS = listOf(
             MgbaCore.Key.A to "A", MgbaCore.Key.B to "B", MgbaCore.Key.LEFT to "LEFT",
             MgbaCore.Key.RIGHT to "RIGHT", MgbaCore.Key.UP to "UP", MgbaCore.Key.DOWN to "DOWN",

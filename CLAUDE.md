@@ -426,6 +426,23 @@ only while presses play or a closed loop steers (`exclusiveLocked`), never durin
 pending-move watches: those once held the lock through the whole turn, so a level-up or "learn a move?" message
 waiting on A left the player stuck. Watches expire after 300 frames; a 1200-frame watchdog cancels any lockout.
 `BattleInputControllerTest`simulates the party menu.
+**Faster picks (GitHub #33)**: FIGHT / BAG / RUN / a move used to walk blind - LEFT, UP, then RIGHT / DOWN, A, 20 frames
+after each direction (Unbound's move screen drops presses during its cursor fade): 46-90 frames a tap. Where the menus'
+cursors are known (`NativeConfig.actionCursor` / `moveCursor`: gActionSelectionCursor / gMoveSelectionCursor, a cell per
+battler; FireRed rev 1 + its QoL build, retail / European Emerald; zeroed on JA Emerald and LeafGreen) a pick is a closed loop
+(`drivePickLocked`): read the cursor, press only toward the cell (a dropped press is pressed again), A once there - the move
+already highlighted is one press. Headless on both retail games: presses land back to back and A on the next frame. The
+Poller hands them out only for a retail hash / other-language retail (`knownCursorAddrs`, `ramVerified`) - never a BEST
+EFFORT match or an unrecognised same-size hack on a retail config, where a wrong byte holding the wanted cell would confirm
+the wrong choice; a cursor out of 0..3 or that won't move falls back to the blind walk. SETTINGS > ONE-TAP MOVES
+(`Prefs.oneTapMoves`, off; COMPANION group, under BATTLE HINTS) puts the moves on the action menu where FIGHT is
+(`MoveCard(compact)`: name sized to fit beside PP) - a tap is FIGHT + the move in one sequence; ui-preview `*-battle-onetap`.
+**Switches run flat out**: the party menu fades in for ~50 frames (presses dropped, headless on both games), then the
+cursor moves every 3 frames, SHIFT takes A 6 frames (FireRed) / 2 (Emerald) after the mon's. So no fixed settle any more -
+NAVIGATE presses at once and re-presses what the fade drops (bounded by MENU_TIMEOUT_FRAMES), goes the shorter way round the
+list (UP wraps 0 -> CANCEL 7 -> 5), 3 frames between reads, 8 before SHIFT - and while the frame is held (`holdFrame`) the
+engine runs uncapped and muted (`effectiveSpeed`, `wantPaused`), sampling the battle state every frame so it stops as the
+battle fades back in rather than 66 ms (dozens of turbo frames) later.
 **FF MODE** (SETTINGS,`FfMode`: SMART default / NORMAL). NORMAL = fast everywhere. SMART = 1x while a
 menu screen or the region map is up, FF (still on) resuming when it closes. **A battle stays fast** (the user's
 rule): in battle the game's own battle input state decides (`smartSlows`, `SmartFf.kt`, fed by

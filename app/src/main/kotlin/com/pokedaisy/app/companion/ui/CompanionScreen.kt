@@ -508,6 +508,7 @@ fun CompanionScreen(
                                         battleInputState = snapshot.battleInputState,
                                         modifier = Modifier.fillMaxSize(),
                                         showHints = showHints,
+                                        oneTapMoves = settings?.oneTapMoves ?: false,
                                         onShowInfo = { battleShowControls = false },
                                         onShowSuggestions = { showSuggestions = true },
                                         foeParty = snapshot.enemyParty,

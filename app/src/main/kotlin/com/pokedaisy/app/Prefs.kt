@@ -123,6 +123,12 @@ class Prefs(context: Context) {
         get() = p.getBoolean("show_hints", true)
         set(v) = p.edit().putBoolean("show_hints", v).apply()
 
+    /** ONE-TAP MOVES: the battle controls' action menu shows the moves where FIGHT is, a tap
+     * picking FIGHT and the move in one go. Off by default. */
+    var oneTapMoves: Boolean
+        get() = p.getBoolean("one_tap_moves", false)
+        set(v) = p.edit().putBoolean("one_tap_moves", v).apply()
+
     /** Whether battle INFO offers the foe's IVs / EVs / nature (its STATS page).
      * Off by default - it's the one thing the game itself never tells you.
      * The party summary's own STATS page shows regardless. */

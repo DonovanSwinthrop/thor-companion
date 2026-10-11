@@ -86,6 +86,8 @@ fun BattleControlsScreen(
     foe: MonView? = null,
     /** The player's battlers on the field (their party cards say OUT). */
     active: List<MonView> = emptyList(),
+    /** ONE-TAP MOVES (SETTINGS): the action menu shows the moves where FIGHT is. */
+    oneTapMoves: Boolean = false,
 ) {
     // battleInput.busy flips the instant a tap queues a synthetic press
     // sequence and back once the game has actually caught up (see
@@ -97,9 +99,14 @@ fun BattleControlsScreen(
     // POKéMON on the action menu opens our own party pane (where the game
     // supports switchTo); the game's party screen only opens once a mon is picked.
     var choosingMon by remember { mutableStateOf(false) }
+    // FIGHT opens our move grid at once, from the moves already read - no wait for the game's
+    // move screen; a move then picks FIGHT and itself in one go, CANCEL just closes the grid.
+    var choosingMove by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(battleInputState) {
         if (battleInputState != BATTLE_INPUT_ACTION_SELECT) choosingMon = false
+        if (battleInputState != BATTLE_INPUT_ACTION_SELECT) choosingMove = false
     }
+    val movesKnown = activeMon?.moves?.isNotEmpty() == true
     val canSwitch = battleInput?.canSwitch == true
     // The POKéMON pane is the party screen, full height: no strips or INFO / SUGGESTIONS over it.
     val picking = (battleInputState == BATTLE_INPUT_ACTION_SELECT && choosingMon) ||
@@ -152,9 +159,15 @@ fun BattleControlsScreen(
                     )
                     BATTLE_INPUT_ACTION_SELECT -> if (choosingMon) {
                         PartyPicker(party, foe, active, battleInput, busy, showHints, onBack = { choosingMon = false })
+                    } else if (choosingMove) {
+                        MoveGrid(
+                            activeMon?.moves.orEmpty(), battleInput, busy, showHints,
+                            modifier = Modifier.fillMaxSize(), onCancel = { choosingMove = false },
+                        )
                     } else {
                         ActionButtons(
-                            activeMon, battleInput, busy,
+                            activeMon, battleInput, busy, showHints, oneTapMoves,
+                            onFight = if (movesKnown) ({ choosingMove = true }) else null,
                             onPokemon = if (canSwitch) ({ choosingMon = true }) else null,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -264,6 +277,10 @@ private fun ActionButtons(
     activeMon: MonView?,
     battleInput: BattleInput?,
     busy: Boolean,
+    showHints: Boolean,
+    oneTapMoves: Boolean,
+    /** FIGHT opens the companion's move grid without the game's; null = the game's FIGHT. */
+    onFight: (() -> Unit)? = null,
     /** POKéMON opens the companion's party pane instead of the game's; null = the game's. */
     onPokemon: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -277,37 +294,51 @@ private fun ActionButtons(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // ONE-TAP MOVES: the moves themselves where FIGHT was - a tap opens FIGHT and picks
+        // the move in one go (BattleInput.selectMove from the action menu).
+        if (oneTapMoves) {
+            Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (row in 0..1) Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (col in 0..1) {
+                        val idx = row * 2 + col
+                        MoveCard(activeMon?.moves?.getOrNull(idx), battleInput, idx, busy, showHints, modifier = Modifier.weight(1f).fillMaxHeight(), compact = true)
+                    }
+                }
+            }
+        } else
         // The active mon's mini icon sits to the left of the word, like the game.
         PlatinumButton(
             fill = FightRed, frame = FightRedDark,
             modifier = Modifier.fillMaxWidth(0.76f).weight(1.6f),
             enabled = enabled,
-            pressesGame = true, onClick = { battleInput?.selectAction(0) },
+            pressesGame = onFight == null, onClick = { onFight?.invoke() ?: battleInput?.selectAction(0) },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SpeciesIcon(activeMon?.iconAsset, size = 48.dp)
                 ButtonLabel(tr("FIGHT"), 52.sp, bold = true)
             }
         }
-        // All three the same height; RUN sits [RunDrop] lower than its neighbours.
+        // All three the same height; RUN sits [RunDrop] lower than its neighbours (one level, and
+        // slimmer, under ONE-TAP MOVES' cards).
+        val drop = if (oneTapMoves) 0.dp else RunDrop
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = if (oneTapMoves) Modifier.fillMaxWidth().height(60.dp) else Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             val side = PaddingValues(horizontal = 4.dp)
             PlatinumButton(
                 fill = BagOrange, frame = BagOrangeDark,
-                modifier = Modifier.weight(1f).fillMaxHeight().padding(bottom = RunDrop),
+                modifier = Modifier.weight(1f).fillMaxHeight().padding(bottom = drop),
                 enabled = enabled, contentPadding = side, pressesGame = true, onClick = { battleInput?.selectAction(1) },
             ) { ButtonLabel(tr("BAG"), 36.sp, bold = true) }
             PlatinumButton(
                 fill = RunBlue, frame = RunBlueDark,
-                modifier = Modifier.weight(1f).fillMaxHeight().padding(top = RunDrop),
+                modifier = Modifier.weight(1f).fillMaxHeight().padding(top = drop),
                 enabled = enabled, contentPadding = side, pressesGame = true, onClick = { battleInput?.selectAction(3) },
             ) { ButtonLabel(tr("RUN"), 36.sp, bold = true) }
             PlatinumButton(
                 fill = MonGreen, frame = MonGreenDark,
-                modifier = Modifier.weight(1f).fillMaxHeight().padding(bottom = RunDrop),
+                modifier = Modifier.weight(1f).fillMaxHeight().padding(bottom = drop),
                 enabled = enabled, contentPadding = side, pressesGame = onPokemon == null,
                 onClick = { onPokemon?.invoke() ?: battleInput?.selectAction(2) },
             ) { ButtonLabel(tr("POKéMON"), 30.sp, bold = true) }
@@ -322,9 +353,11 @@ private fun MoveGrid(
     busy: Boolean,
     showHints: Boolean,
     modifier: Modifier = Modifier,
+    /** The grid was opened by us (FIGHT not sent yet): CANCEL / BACK just close it; null = press B. */
+    onCancel: (() -> Unit)? = null,
 ) {
-    CompanionBackHandler(enabled = battleInput != null && !busy) { battleInput?.back() }
-    if (gen1Buttons) return Gen1MoveList(moves, battleInput, busy, showHints, modifier)
+    CompanionBackHandler(enabled = battleInput != null && !busy) { onCancel?.invoke() ?: battleInput?.back() }
+    if (gen1Buttons) return Gen1MoveList(moves, battleInput, busy, showHints, modifier, onCancel)
     Column(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (row in 0..1) {
             Row(
@@ -343,7 +376,7 @@ private fun MoveGrid(
             fill = RunBlue, frame = RunBlueDark,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = battleInput != null && !busy,
-            pressesGame = true, onClick = { battleInput?.back() },
+            pressesGame = onCancel == null, onClick = { onCancel?.invoke() ?: battleInput?.back() },
         ) { ButtonLabel(tr("CANCEL"), 34.sp) }
     }
 }
@@ -417,6 +450,8 @@ private fun MoveCard(
     busy: Boolean,
     showHints: Boolean,
     modifier: Modifier = Modifier,
+    /** Two lines (ONE-TAP MOVES, under the action buttons): the type joins the power / PP line. */
+    compact: Boolean = false,
 ) {
     val enabled = mv != null && mv.pp > 0 && battleInput != null && !busy
     // Whole-card color keyed by move type (fill stays a constant pale card
@@ -447,7 +482,19 @@ private fun MoveCard(
                 fontFamily = pixelFontFamily(), lineHeight = 1.em, fontWeight = FontWeight.Bold,
                 shadow = Shadow(MoveTextShadow, Offset(shadowPx, shadowPx), 0f),
             )
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+            if (compact) Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+                // Name and PP, then type, power and the multipliers.
+                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                    // A long name (METAL CLAW) steps its size down to fit beside PP rather than being cut.
+                    FittedText(mv.name, QolColors.text, tight, maxSize = 32, minSize = 20, modifier = Modifier.weight(1f).padding(end = 10.dp))
+                    Text(tr("PP {0}", mv.pp), color = QolColors.text, fontSize = 20.sp, style = tight, maxLines = 1)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TypeBadge(mv.type, fontSize = 16.sp)
+                    Text(tr("PWR {0}", powerLabel(mv.power)), color = QolColors.muted, fontSize = 22.sp, style = tight, maxLines = 1)
+                    if (showHints) mv.vs.forEach { v -> MultiplierChip(v.label, v.pct, fontSize = 16.sp) }
+                }
+            } else Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     mv.name, color = QolColors.text, fontSize = 32.sp, style = tight,
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -604,6 +651,7 @@ private fun Gen1MoveList(
     busy: Boolean,
     showHints: Boolean,
     modifier: Modifier,
+    onCancel: (() -> Unit)? = null,
 ) {
     val m = rememberGbaTextMetrics()
     val small = rememberGbaTextMetrics(1f)
@@ -646,7 +694,7 @@ private fun Gen1MoveList(
             fill = Color.White, frame = Color.White,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = battleInput != null && !busy,
-            pressesGame = true, onClick = { battleInput?.back() },
+            pressesGame = onCancel == null, onClick = { onCancel?.invoke() ?: battleInput?.back() },
         ) { ButtonLabel(tr("CANCEL"), 34.sp) }
     }
 }
@@ -654,6 +702,22 @@ private fun Gen1MoveList(
 /** A Game Boy game's buttons are plain text boxes ([PlatinumButton]). */
 private val gen1Buttons get() = com.pokedaisy.app.companion.data.activeGame == com.pokedaisy.app.companion.data.GameKind.YELLOW
 
+/** [text] on one line at the largest whole size from [maxSize] down to [minSize] (sp) that fits the
+ * width it's given; still too long at [minSize], it ends in an ellipsis. */
+@Composable
+private fun FittedText(text: String, color: Color, style: TextStyle, maxSize: Int, minSize: Int, modifier: Modifier = Modifier) {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val width = constraints.maxWidth
+        val size = (maxSize downTo minSize step 2).firstOrNull { s ->
+            measurer.measure(text, style.copy(fontSize = s.sp), maxLines = 1, softWrap = false).size.width <= width
+        } ?: minSize
+        Text(
+            text, color = color, fontSize = size.sp, style = style,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+    }
+}
 /** What's drawn on a [PlatinumButton]: white, or Gen 1's black on its white box. */
 internal val buttonContent: Color get() = if (gen1Buttons) OptionColors.titleText else Color.White
 

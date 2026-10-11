@@ -68,7 +68,14 @@ class TelemetryStore {
      * can cheaply reuse fields from it (e.g. [SnapshotView.inBattle] /
      * [SnapshotView.regionMapSectionId] for the FF music player) without a
      * second read. */
+    /** Full samples and fast battle checks taken so far, for the FPS / CPU panel's rates. */
+    @Volatile var samplesTaken = 0L
+        private set
+    @Volatile var battleChecksTaken = 0L
+        private set
+
     fun refresh(): SnapshotView {
+        samplesTaken++
         val s = sampler.sample(InProcessReader)
         val c = cached
         if (c != null) {
@@ -107,7 +114,10 @@ class TelemetryStore {
 
     /** Fast, non-1Hz-throttled peek at (battleActiveBattler, battleInputState)
      * — see [TelemetrySampler.sampleBattleInputFast]. Call on the emu thread. */
-    fun refreshBattleInputFast(): Pair<Int, Int>? = sampler.sampleBattleInputFast(InProcessReader)
+    fun refreshBattleInputFast(): Pair<Int, Int>? {
+        battleChecksTaken++
+        return sampler.sampleBattleInputFast(InProcessReader)
+    }
 
     /** The battle menu's cursor from that poll, for a Gen 1 game (else -1). */
     fun battleMenuCursor(): Int = sampler.battleMenuCursor
@@ -117,6 +127,9 @@ class TelemetryStore {
 
     /** The detected game's gPartyMenu + gPlayerParty, when its config has them. */
     fun knownPartyMenu(): Pair<Long, Long>? = sampler.knownPartyMenu
+
+    /** The battle menus' cursors, where the ROM's RAM is known to be its config's. */
+    fun knownCursorAddrs(): Pair<Long, Long>? = sampler.knownCursorAddrs
 
     private companion object {
         /** ~1 sample a second: a game whose data never comes in drops the copy after this long. */

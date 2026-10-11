@@ -102,6 +102,11 @@ data class NativeConfig(
     // a single battle for MOVE_TARGET_USER_OR_SELECTED moves) - without this,
     // such a move's touch-selected confirm silently stalls one screen short.
     val handleInputChooseTarget: Long = 0,
+    // gActionSelectionCursor / gMoveSelectionCursor (a cell per battler): touch picks go straight to
+    // their cell from these (BattleInputController.cursorAddrs). 0 = unknown, the picks walk there blind.
+    // Only on configs checked headless (and zeroed on the ones copying them whose RAM differs).
+    val actionCursor: Long = 0,
+    val moveCursor: Long = 0,
     // SaveBlock1 offset of `pos` (mapGroup/mapNum follow at +4/+5). Heart and
     // Soul puts 4 extra bytes at the start of SaveBlock1, so it's 4 there.
     val saveBlock1PosOff: Long = 0,
@@ -246,6 +251,10 @@ val NATIVE_FIRERED_REV1 = NATIVE_FIRERED_REV0.copy(
     // addresses differ slightly (revision-conditional code shifts things).
     handleInputChooseAction = 0x0802e44cL,
     handleInputChooseMove = 0x0802ea24L,
+    // Between gBattleStruct and gEnemyParty, as in every build of battle_main.c (the QoL build's
+    // map has them there too). Headless on retail: back-to-back presses all land, A right after.
+    actionCursor = 0x02023FF8L,
+    moveCursor = 0x02023FFCL,
     completeWhenChoseItem = 0x08030750L,
     waitForMonSelection = 0x08030698L,
     handleInputChooseTarget = 0x0802e688L,
@@ -463,6 +472,9 @@ val NATIVE_EMERALD = NativeConfig(
 // Retail Emerald only: the hacks below start from NATIVE_EMERALD, and its
 // Pokédex ROM addresses would be wrong for every one of them.
 val NATIVE_EMERALD_RETAIL = NATIVE_EMERALD.copy(
+    // From the unpatched (byte-identical) build's map; headless on retail: presses land back to back.
+    actionCursor = 0x020244ACL,
+    moveCursor = 0x020244B0L,
     trainerCard = TRAINER_CARD_EMERALD,
     pokedex = POKEDEX_EMERALD,
     guideTables = GUIDE_TABLES_EMERALD,
@@ -524,6 +536,8 @@ val NATIVE_EMERALD_IT = NATIVE_EMERALD_RETAIL.copy(
 // fonts aren't the Western ones the slot art is drawn with).
 val NATIVE_EMERALD_JA = NATIVE_EMERALD_RETAIL.copy(
     itemDescs = japaneseItems(0x0855CEE8L),
+    actionCursor = 0, moveCursor = 0, // its RAM moved; not located yet
+
     language = 'J', gameCode = "BPEJ", trainerCard = null,
     playerParty = 0x02024190L, playerPartyCount = 0x0202418DL,
     battleMons = 0x02023D28L, battlerPositions = 0x02023D1AL, battlersCount = 0x02023D10L,
@@ -558,6 +572,7 @@ val NATIVE_LEAFGREEN_REV0 = NATIVE_FIRERED_REV0.copy(
 
 val NATIVE_LEAFGREEN_REV1 = NATIVE_FIRERED_REV1.copy(
     itemDescs = vanillaItems(0x083DAED4L),
+    actionCursor = 0, moveCursor = 0, // FireRed's, probably, but not checked on LeafGreen yet
     monIconTable = 0x083D364CL,
     monIconPaletteIndices = 0x083D3D2CL,
     monIconPaletteTable = 0x083D3EE4L,
