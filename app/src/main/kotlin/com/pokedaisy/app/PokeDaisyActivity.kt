@@ -23,6 +23,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.pokedaisy.app.companion.i18n.tr
+import com.pokedaisy.app.companion.data.showsBattle
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -128,6 +129,9 @@ class PokeDaisyActivity : Activity() {
     /** Opened by a frontend through [LaunchActivity] (see [exitGame]). */
     private var fromFrontend = false
     private var romKey: String = ""      // ROM CRC32, for per-ROM prefs
+    // The battle state the companion's snapshot was last refreshed for (emu thread; see onBattleInputSample).
+    private var lastUiBattler = -1
+    private var lastUiBattleState = -1
     private var states: SaveStates? = null
 
     private val telemetry = TelemetryStore()
@@ -474,6 +478,8 @@ class PokeDaisyActivity : Activity() {
         override fun setShowFoeIvs(on: Boolean) {
             Prefs(this@PokeDaisyActivity).showFoeIvs = on
         }
+        override val oneTapMoves get() = Prefs(this@PokeDaisyActivity).oneTapMoves
+        override fun setOneTapMoves(on: Boolean) { Prefs(this@PokeDaisyActivity).oneTapMoves = on }
         override val foeDetails get() = Prefs(this@PokeDaisyActivity).foeDetails
         override fun setFoeDetails(on: Boolean) { Prefs(this@PokeDaisyActivity).foeDetails = on }
         override val cheats get() = cheatStore()?.load().orEmpty()
@@ -755,6 +761,9 @@ class PokeDaisyActivity : Activity() {
                 telemetry.knownGMain()?.let { (addr, inBattleOff) -> FfMenuWatch.useKnownGMain(addr, inBattleOff) }
                 if (snap.connected) FfMenuWatch.notePosition(snap.x, snap.y, snap.mapGroup, snap.mapNum, snap.inBattle)
                 if (snap.connected) battleSwitchAddrs = switchAddrsFor(snap.game)
+                // The menus' cursors, so a FIGHT / move tap goes straight to its cell (NativeConfig.actionCursor).
+                if (snap.connected) battleCursorAddrs = telemetry.knownCursorAddrs()
+                    ?.let { (action, move) -> BattleInputController.CursorAddrs(action = action, move = move) }
                 if (snap.connected) battleGen1Menus = snap.game == com.pokedaisy.app.companion.data.GameKind.YELLOW
                 // party.isNotEmpty(), not just connected: `connected` flips true as
                 // soon as the QOLT struct/native addresses are found, which can be
@@ -774,6 +783,17 @@ class PokeDaisyActivity : Activity() {
             onBattleInputSample = {   // runs on the emu thread, ~15x/sec
                 telemetry.refreshBattleInputFast()?.let { (battler, state) ->
                     setBattleMenuState(battler, state, telemetry.battleMenuCursor())
+                    // The companion draws from the full snapshot, sampled once a second: a new battle
+                    // state gets one at once (the BATTLE tab at a battle's start, the buttons back each
+                    // turn, the move grid after FIGHT), and so does every sample of a battle whose
+                    // battlers can't be read yet - not up to a second later.
+                    val shown = telemetry.snapshot.value
+                    val waiting = state != com.pokedaisy.app.companion.data.BATTLE_INPUT_NONE && !shown.showsBattle
+                    if (battler != lastUiBattler || state != lastUiBattleState || waiting) {
+                        lastUiBattler = battler
+                        lastUiBattleState = state
+                        telemetry.refresh()
+                    }
                 }
             }
             ffMaxSpeed = Prefs(this@PokeDaisyActivity).ffMaxSpeed
@@ -1119,10 +1139,12 @@ class PokeDaisyActivity : Activity() {
                 // Cumulative counters, read every half second: each reading is the difference.
                 var at = System.nanoTime()
                 var frames = 0L; var work = 0L; var shown = 0L; var late = 0L
+                var samples = 0L; var checks = 0L
                 fun take() {
                     at = System.nanoTime()
                     if (::engine.isInitialized) { frames = engine.framesRun; work = engine.workNanos; engine.takeMaxWorkNanos() }
                     shown = view.framesShown; late = view.lateFrames
+                    samples = telemetry.samplesTaken; checks = telemetry.battleChecksTaken
                 }
                 take()
                 withContext(Dispatchers.IO) { cpu.sample() }
@@ -1150,8 +1172,11 @@ class PokeDaisyActivity : Activity() {
                         batteryTempC = batteryTempC,
                         thermal = if (android.os.Build.VERSION.SDK_INT >= 29) power.currentThermalStatus else -1,
                         memoryMb = ((rt.totalMemory() - rt.freeMemory() + android.os.Debug.getNativeHeapAllocatedSize()) shr 20).toInt(),
+                        snapshotsPerSecond = ((telemetry.samplesTaken - samples).coerceAtLeast(0) / secs).toFloat(),
+                        battleChecksPerSecond = ((telemetry.battleChecksTaken - checks).coerceAtLeast(0) / secs).toFloat(),
                     )
                     frames = e.framesRun; work = e.workNanos; shown = view.framesShown; late = view.lateFrames
+                    samples = telemetry.samplesTaken; checks = telemetry.battleChecksTaken
                     at = System.nanoTime()
                 }
             }

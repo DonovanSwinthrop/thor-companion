@@ -124,7 +124,10 @@ class FakeSlots : StateSlots {
     override fun requestUndoLoad() {}
 }
 
-class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>? = null) : CompanionSettings {
+class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>? = null, oneTap: Boolean = false) : CompanionSettings {
+    private var oneTapOn = oneTap
+    override val oneTapMoves get() = oneTapOn
+    override fun setOneTapMoves(on: Boolean) { oneTapOn = on }
     private var ffSpeed = 4f
     private var ff = false
     private var music = com.pokedaisy.app.companion.FfMusicMode.STEADY
@@ -276,13 +279,14 @@ fun companion(
     hints: Boolean = true,
     battery: BatteryStatus = BatteryStatus(76, charging = false),
     cardBack: Boolean = false,
+    oneTap: Boolean = false,
     snap: () -> SnapshotView = ::snapshot,
 ): () -> (@Composable () -> Unit) = {
     DeviceBattery.status.value = battery
     val sv = snap()
     val back = com.pokedaisy.app.companion.ui.CompanionBack().also { previewBack = it }
     val content: @Composable () -> Unit = {
-        CompanionScreen(sv, FakeSlots(), FakeSettings(hints), FakeBattleInput(busy), initialTab = tab, initialMonIndex = mon, initialCardBack = cardBack, back = back)
+        CompanionScreen(sv, FakeSlots(), FakeSettings(hints, oneTap = oneTap), FakeBattleInput(busy), initialTab = tab, initialMonIndex = mon, initialCardBack = cardBack, back = back)
     }
     content
 }
@@ -758,6 +762,8 @@ fun main(args: Array<String>) {
         Shot("$g-battle-trainer", bw, bh, bd, companion("PARTY") { trainerBattle(BATTLE_INPUT_ACTION_SELECT, six = true).withBench() }),
         Shot("$g-battle-trainer3", bw, bh, bd, companion("PARTY") { trainerBattle(BATTLE_INPUT_ACTION_SELECT).withBench() }),
         Shot("$g-battle-moves", bw, bh, bd, companion("PARTY") { battle(BATTLE_INPUT_MOVE_SELECT) }),
+        // SETTINGS > ONE-TAP MOVES: the action menu with the moves where FIGHT was.
+        Shot("$g-battle-onetap", bw, bh, bd, companion("PARTY", oneTap = true) { battle(BATTLE_INPUT_ACTION_SELECT) }),
         // The POKéMON pane: from the action menu, and over the game's own party menu.
         Shot("$g-battle-switch", bw, bh, bd, companion("PARTY") { battle(BATTLE_INPUT_ACTION_SELECT) }) {
             onNodeWithText("POKéMON").performClick()
@@ -844,6 +850,10 @@ fun main(args: Array<String>) {
         Shot("$g-settings-bottom", bw, bh, bd, companion("SETTINGS")) { onNodeWithText("CLOSE COMPANION").performScrollTo() },
         Shot("$g-settings-close", bw, bh, bd, companion("SETTINGS")) {
             onNodeWithText("CLOSE GAME").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        },
+        // The COMPANION group, ONE-TAP MOVES under BATTLE HINTS.
+        Shot("$g-settings-companion", bw, bh, bd, companion("SETTINGS")) {
+            onNodeWithText("ONE-TAP MOVES").performScrollTo()
         },
         // TWEAKS: the small on / off preferences.
         Shot("$g-settings-tweaks", bw, bh, bd, companion("SETTINGS")) {

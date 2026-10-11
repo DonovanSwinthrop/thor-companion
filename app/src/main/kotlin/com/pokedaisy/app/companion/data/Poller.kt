@@ -33,6 +33,9 @@ class TelemetrySampler {
     private var smallBpreHashChecked = false
     // The ROM hashed as retail FireRed / Emerald: no QoL struct to wait for.
     private var retailHash = false
+    // [nativeCfg]'s RAM is known to be this ROM's: a retail hash, or another language's retail
+    // path - not an unrecognised same-size hack or a BEST EFFORT match landing on a retail config.
+    private var ramVerified = false
 
     // BEST EFFORT (BestEffort.kt) for an unsupported ROM of a Gen 3 base game: its header code and
     // SHA-1 (what the match is kept by), the match in use and the config it was made from (the
@@ -420,7 +423,7 @@ class TelemetrySampler {
                 size > 0x1000000L -> unsupportedRom(reader, code, size, null,
                     "unrecognized $code-based ROM hack (${size / (1024 * 1024)} MB) - no known RAM addresses for this build")
                 cfg == null -> unsupportedRom(reader, code, size, null, "${gameLabel(code)} revision $rev isn't supported yet")
-                else -> nativeCfg = withCheckedTables(reader, cfg)
+                else -> { nativeCfg = withCheckedTables(reader, cfg); ramVerified = true }
             }
             return
         }
@@ -590,6 +593,8 @@ class TelemetrySampler {
             else -> NATIVE_FIRERED_REV0.copy(trainerCard = TRAINER_CARD_FIRERED)
         }
         nativeCfg = withCheckedTables(reader, cfg)
+        // An unrecognised same-size hack lands here too: only a retail hash vouches for the RAM.
+        ramVerified = retailHash
     }
 
     /** An unrecognised same-size hack lands on the retail configs too: no DEX
@@ -636,6 +641,13 @@ class TelemetrySampler {
             }
         }
     }
+
+    /** The battle menus' cursors (gActionSelectionCursor, gMoveSelectionCursor), only where the RAM is
+     * known to be this ROM's ([ramVerified], never a BEST EFFORT match): a wrong address that happened
+     * to hold the cell wanted would confirm the wrong choice. */
+    val knownCursorAddrs: Pair<Long, Long>?
+        get() = nativeCfg?.takeIf { ramVerified && beMatch == null && it.actionCursor != 0L && it.moveCursor != 0L }
+            ?.let { it.actionCursor to it.moveCursor }
 
     /** The detected game's gPartyMenu + gPlayerParty when its config has them (SoulGold), or null. */
     val knownPartyMenu: Pair<Long, Long>?

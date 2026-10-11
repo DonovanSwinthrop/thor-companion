@@ -48,6 +48,10 @@ data class PerfReading(
     /** Android's thermal status (PowerManager.THERMAL_STATUS_*), -1 = unknown. */
     val thermal: Int = -1,
     val memoryMb: Int = 0,
+    /** The companion's reads of the game per second: full snapshots (1, 4 in a battle) and the fast
+     * battle-menu checks (~15, every frame while a switch runs). */
+    val snapshotsPerSecond: Float = 0f,
+    val battleChecksPerSecond: Float = 0f,
 )
 
 /**
@@ -94,6 +98,8 @@ fun PerformanceOverlay(reading: PerfReading, modifier: Modifier = Modifier, init
             Stat(tr("BATTERY"), r.batteryTempC?.let { "%.1f °C".format(Locale.ROOT, it) } ?: "--"),
             Stat(tr("THERMAL"), tr(thermalLabel(r.thermal)), warn = r.thermal >= 2),
             Stat(tr("MEMORY"), "${r.memoryMb} MB"),
+            Stat(tr("SNAPSHOTS"), "%.1f/s".format(Locale.ROOT, r.snapshotsPerSecond)),
+            Stat(tr("BATTLE CHECKS"), "%.1f/s".format(Locale.ROOT, r.battleChecksPerSecond)),
         )
         // Two columns, the labels as wide as the widest (lines are all one height, so the rows line up).
         Row {

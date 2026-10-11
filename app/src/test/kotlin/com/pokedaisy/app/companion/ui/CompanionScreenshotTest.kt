@@ -263,6 +263,8 @@ open class CompanionScreenshotTest {
                     fps = 60.0f, shownFps = 59.8f, latePerSecond = 0.2f, frameMs = 2.8f, frameMaxMs = 5.1f, emulationLoad = 17,
                     cpu = 14, cores = 8, refreshHz = 60f, refreshesPerFrame = 1, audioDropouts = 0,
                     batteryTempC = 36.5f, thermal = 1, memoryMb = 212,
+                    // In a battle: 4 snapshots a second, ~15 battle-menu checks.
+                    snapshotsPerSecond = 4.0f, battleChecksPerSecond = 15.0f,
                 ),
                 initiallyOpen = open,
             )

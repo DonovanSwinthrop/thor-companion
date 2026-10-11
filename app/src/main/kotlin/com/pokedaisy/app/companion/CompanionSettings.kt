@@ -96,6 +96,10 @@ interface CompanionSettings {
     val showFoeIvs: Boolean get() = false
     fun setShowFoeIvs(on: Boolean) {}
 
+    /** ONE-TAP MOVES - see [Prefs.oneTapMoves]. */
+    val oneTapMoves: Boolean get() = false
+    fun setOneTapMoves(on: Boolean) {}
+
     /** Whether battle INFO shows FOE DETAILS - see [Prefs.foeDetails]. */
     val foeDetails: Boolean get() = false
     fun setFoeDetails(on: Boolean) {}

@@ -384,6 +384,8 @@ private fun homeRows(
         SettingRow(tk("TAB BAR"), tr("{0} TABS", barTabs)) { navigate(Page.TABS) },
         // Move effectiveness and the foe's weak-to/resists during battle.
         SettingRow(tk("BATTLE HINTS"), onOff(s.showHints)) { s.setShowHints(!s.showHints); changed() },
+        // The battle controls' action menu shows the moves: one tap picks FIGHT and the move.
+        SettingRow(tk("ONE-TAP MOVES"), onOff(s.oneTapMoves)) { s.setOneTapMoves(!s.oneTapMoves); changed() },
         // A STATS page in battle INFO with the foe's IVs / EVs / nature.
         SettingRow(tk("FOE IVS"), onOff(s.showFoeIvs)) { s.setShowFoeIvs(!s.showFoeIvs); changed() },
         // The game's menu click on every companion button.
