@@ -52,14 +52,14 @@
 
 // Each engine's layout.
 static const int32_t FAMILIES[][PK_WIDE_CONFIG_SIZE - PK_WIDE_ADDRS] = {
-    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 4, 0x8E0, 0xEE0, 0x1000 },    // u32 attributes, layer in bits 29-30; sized border
-    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 4, 0xC70, 0x1270, 0x139C },  // u16 attributes, layer in bits 12-15; 2x2 border
+    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 4, 0x8E0, 0xEE0, 0x1000, 7 },    // u32 attributes, layer in bits 29-30; sized border
+    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 4, 0xC70, 0x1270, 0x139C, 6 },  // u16 attributes, layer in bits 12-15; 2x2 border
     // Emerald's map; a static SaveBlock1, a longer gMain, 16-bit subsprite offsets.
-    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8, 4, 0, 0, 0 },
+    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8, 4, 0, 0, 0, 6 },
     // Japanese Ruby / Sapphire: the static SaveBlock1, but gMain's inBattle and 8-bit subsprites as later games.
-    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4, 4, 0, 0, 0 },
+    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4, 4, 0, 0, 0, 6 },
     // pokeemerald-expansion: Emerald's map and sprites, ObjectEvent.spriteId at +0x23.
-    [PK_WIDE_FAMILY_EX] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 0x23, 0, 0, 0 },
+    [PK_WIDE_FAMILY_EX] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 0x23, 0, 0, 0, 6 },
 };
 
 // Every engine row and every ROM row fills its part of the config, no more, no less.
@@ -119,7 +119,14 @@ struct Conn {
     int w, h;
     uint32_t data;                 // its map cells (ROM)
     int dir;                       // 1 SOUTH 2 NORTH 3 WEST 4 EAST
+    uint32_t primary, secondary;   // its tilesets (often not the current map's: Fuchsia City <-> Route 18)
+    uint32_t header;               // its map header (its object templates)
+    int group, num;
+    int degree;                    // 1: beside the current map; 2: beside one of those (Route 20 from Fuchsia City)
+    uint32_t border;               // its border metatiles, and (FireRed) their block's size
+    int bw, bh;
 };
+#define MAX_CONNS 8
 
 /** An object on the map the game hasn't spawned - it only spawns those near its own screen - drawn where it would
  * appear from its template: a cuttable tree, a boulder, an item ball, an NPC at its home tile. */
@@ -130,17 +137,18 @@ struct Ghost {
     int prio;            // OAM priority, from its elevation
     uint32_t palTag;
 };
-#define MAX_GHOSTS 64
+#define MAX_GHOSTS 128
 
 struct Snap {
     bool ok;
     int posX, posY, xTile, yTile;
     int href, vref;                // BG1-3's scroll as the camera sets it (field_camera.c), before any line effect
+    int group, num;                // the current map
     int vw, vh;
     int width, height;             // the map itself
     uint32_t border, primary, secondary;
     int bw, bh;
-    struct Conn conn[4];
+    struct Conn conn[MAX_CONNS];
     int nconn;
     uint16_t vmap[MAX_MAP_DATA];
     uint8_t sprites[64 * 0x44];
@@ -158,9 +166,48 @@ static bool flagSet(uint32_t sb1, int flag) {
     return (r8(sb1 + (uint32_t) C[PK_WIDE_SB1_FLAGS] + (uint32_t) (flag >> 3)) >> (flag & 7)) & 1;
 }
 
-/** The map's object templates (SaveBlock1 keeps the current map's, positions as the game last saved them) that
- * aren't hidden by their flag and aren't spawned: their sprite where SpawnObjectEvent would put it - the frame of
- * the movement type's first facing, the bottom of the box on the tile's bottom, centred on it. */
+/** One object template (at `t`, its x / y relative to a map whose (0, 0) is VMap cell (ox, oy)) as a ghost, unless
+ * it's hidden by its flag: its sprite where SpawnObjectEvent would put it - the frame of the movement type's first
+ * facing, the bottom of the box on the tile's bottom, centred on it. */
+static void addGhost(struct Snap* s, uint32_t sb1, uint32_t t, int ox, int oy) {
+    if (s->nghosts >= MAX_GHOSTS) return;
+    int gfx = (int) r8(t + 1);
+    int flag = (int) r16(t + 0x14);
+    if (flag && flagSet(sb1, flag)) return;   // hidden (picked up, beaten, moved on)
+    if (gfx >= 240) gfx = (int) r16(sb1 + (uint32_t) C[PK_WIDE_SB1_VARS] + 2 * (uint32_t) (0x10 + gfx - 240));   // VAR_OBJ_GFX_ID_*
+    if (gfx < 0 || gfx > 0xFF) return;
+    uint32_t info = r32((uint32_t) C[PK_WIDE_OBJ_GFX_INFO] + 4 * (uint32_t) gfx);
+    int w = s16(info + 8), h = s16(info + 0xA);
+    if (!info || w <= 0 || h <= 0 || w > 64 || h > 64 || (w & 7) || (h & 7)) return;
+    bool inanimate = r8(info + 0xC) & 0x40;
+    uint32_t images = r32(info + 0x1C);
+    int dir = C[PK_WIDE_OBJ_FACING] ? (int) r8((uint32_t) C[PK_WIDE_OBJ_FACING] + r8(t + 9)) : 1;   // 1 S 2 N 3 W 4 E
+    int frame = inanimate ? 0 : dir == 2 ? 1 : dir == 3 || dir == 4 ? 2 : 0;   // the walking sheet's standing frames
+    uint32_t bytes = (uint32_t) (w * h / 2);
+    uint32_t img = r32(images + 8 * (uint32_t) frame);
+    bool hflip = frame == 2 && dir == 4;
+    if (r16(images + 8 * (uint32_t) frame + 4) != bytes || !mem(img, bytes)) {
+        img = r32(images);   // a sheet without that frame: its first
+        hflip = false;
+        if (r16(images + 4) != bytes || !mem(img, bytes)) return;
+    }
+    int x = s16(t + 4), y = s16(t + 6);
+    if (x < -0x400 || x > 0x400 || y < -0x400 || y > 0x400) return;
+    struct Ghost* g = &s->ghosts[s->nghosts++];
+    int cellX = x + ox, cellY = y + oy;
+    g->x = cellX * 16 + 8 - w / 2;
+    g->y = cellY * 16 + 16 - h;
+    g->w = w;
+    g->h = h;
+    g->pixels = img;
+    g->hflip = hflip;
+    g->prio = C[PK_WIDE_ELEVATION_PRIO] ? (int) (r8((uint32_t) C[PK_WIDE_ELEVATION_PRIO] + (r8(t + 8) & 15)) & 3) : 2;
+    g->palTag = r16(info + 2);
+}
+
+/** The objects the game hasn't spawned: the current map's templates (SaveBlock1 keeps them, positions as the game
+ * last saved them) that aren't spawned, then each connected map's from its header (the game never spawns those; the
+ * ones it shows across the border are the current map's clones of them, spawned like any other). */
 static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
     s->nghosts = 0;
     if (!C[PK_WIDE_OBJ_GFX_INFO] || !C[PK_WIDE_SB1_TEMPLATES] || !sb1) return;
@@ -168,45 +215,34 @@ static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
     int count = events ? (int) r8(events) : 0;
     if (count > 64) count = 64;
     int mapGroup = (int) r8(sb1 + 4), mapNum = (int) r8(sb1 + 5);
-    for (int i = 0; i < count && s->nghosts < MAX_GHOSTS; i++) {
-        uint32_t t = sb1 + (uint32_t) C[PK_WIDE_SB1_TEMPLATES] + 0x18 * (uint32_t) i;
-        int localId = (int) r8(t), gfx = (int) r8(t + 1), kind = (int) r8(t + 2);
-        if (kind != 0) continue;   // a clone of a connected map's object: that map draws it
-        int flag = (int) r16(t + 0x14);
-        if (flag && flagSet(sb1, flag)) continue;   // hidden (picked up, beaten, moved on)
+    uint32_t base = sb1 + (uint32_t) C[PK_WIDE_SB1_TEMPLATES];
+    for (int i = 0; i < count; i++) {
+        uint32_t t = base + 0x18 * (uint32_t) i;
+        int localId = (int) r8(t);
+        if (r8(t + 2) != 0) continue;   // a clone of a connected map's object: spawned when near, else that map's own
         bool live = false;
         for (int k = 0; k < 16 && !live; k++) {
             const uint8_t* oe = s->objects + 0x24 * k;
             live = (oe[0] & 1) && oe[8] == localId && oe[9] == mapNum && oe[10] == mapGroup;
         }
-        if (live) continue;
-        if (gfx >= 240) gfx = (int) r16(sb1 + (uint32_t) C[PK_WIDE_SB1_VARS] + 2 * (uint32_t) (0x10 + gfx - 240));   // VAR_OBJ_GFX_ID_*
-        if (gfx < 0 || gfx > 0xFF) continue;
-        uint32_t info = r32((uint32_t) C[PK_WIDE_OBJ_GFX_INFO] + 4 * (uint32_t) gfx);
-        int w = s16(info + 8), h = s16(info + 0xA);
-        if (!info || w <= 0 || h <= 0 || w > 64 || h > 64 || (w & 7) || (h & 7)) continue;
-        bool inanimate = r8(info + 0xC) & 0x40;
-        uint32_t images = r32(info + 0x1C);
-        int dir = C[PK_WIDE_OBJ_FACING] ? (int) r8((uint32_t) C[PK_WIDE_OBJ_FACING] + r8(t + 9)) : 1;   // 1 S 2 N 3 W 4 E
-        int frame = inanimate ? 0 : dir == 2 ? 1 : dir == 3 || dir == 4 ? 2 : 0;   // the walking sheet's standing frames
-        uint32_t bytes = (uint32_t) (w * h / 2);
-        uint32_t img = r32(images + 8 * (uint32_t) frame);
-        bool hflip = frame == 2 && dir == 4;
-        if (r16(images + 8 * (uint32_t) frame + 4) != bytes || !mem(img, bytes)) {
-            img = r32(images);   // a sheet without that frame: its first
-            hflip = false;
-            if (r16(images + 4) != bytes || !mem(img, bytes)) continue;
+        if (!live) addGhost(s, sb1, t, MAP_OFFSET, MAP_OFFSET);
+    }
+    for (int c = 0; c < s->nconn; c++) {
+        const struct Conn* k = &s->conn[c];
+        uint32_t ev = r32(k->header + 4), arr = ev ? r32(ev + 4) : 0;
+        int n = ev ? (int) r8(ev) : 0;
+        if (n > 64) n = 64;
+        for (int i = 0; i < n; i++) {
+            uint32_t t = arr + 0x18 * (uint32_t) i;
+            if (r8(t + 2) != 0) continue;
+            int localId = (int) r8(t);
+            bool cloned = false;   // the current map has a clone of it (shown, or a ghost of its own)
+            for (int m = 0; m < count && !cloned; m++) {
+                uint32_t ct = base + 0x18 * (uint32_t) m;
+                cloned = r8(ct + 2) == 1 && (int) r8(ct + 8) == localId && (int) r16(ct + 0xC) == k->num && (int) r16(ct + 0xE) == k->group;
+            }
+            if (!cloned) addGhost(s, sb1, t, k->ox, k->oy);
         }
-        struct Ghost* g = &s->ghosts[s->nghosts++];
-        int cellX = s16(t + 4) + MAP_OFFSET, cellY = s16(t + 6) + MAP_OFFSET;
-        g->x = cellX * 16 + 8 - w / 2;
-        g->y = cellY * 16 + 16 - h;
-        g->w = w;
-        g->h = h;
-        g->pixels = img;
-        g->hflip = hflip;
-        g->prio = C[PK_WIDE_ELEVATION_PRIO] ? (int) (r8((uint32_t) C[PK_WIDE_ELEVATION_PRIO] + (r8(t + 8) & 15)) & 3) : 2;
-        g->palTag = r16(info + 2);
     }
     // Front first, as the sprites' order has it: the lower on the map, the nearer.
     for (int i = 1; i < s->nghosts; i++)
@@ -217,12 +253,60 @@ static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
         }
 }
 
+/** A map's connections (its header `hdr`, w x h, its (0, 0) at VMap cell (mx, my)) added to s->conn - as fieldmap.c's
+ * Fill*Connection places them: SOUTH (offset, h), NORTH (offset, -cHeight), WEST (-cWidth, offset), EAST (w, offset). */
+static void readConnections(struct Snap* s, uint32_t hdr, int w, int h, int mx, int my, int degree) {
+    uint32_t conns = r32(hdr + 0xC);
+    int count = conns ? s32(conns) : 0;
+    uint32_t arr = conns ? r32(conns + 4) : 0;
+    for (int i = 0; i < count && i < 8 && s->nconn < MAX_CONNS; i++) {
+        uint32_t c = arr + 12 * (uint32_t) i;   // struct MapConnection { u8 direction; s32 offset; u8 mapGroup, mapNum; }
+        int dir = (int) r8(c), off = s32(c + 4);
+        if (dir < 1 || dir > 4) continue;       // DIVE / EMERGE aren't beside the map
+        if (off < -MAX_MAP_DATA || off > MAX_MAP_DATA) continue;
+        int group = (int) r8(c + 8), num = (int) r8(c + 9);
+        if (degree > 1) {   // not the current map again, nor one already here
+            bool known = group == s->group && num == s->num;
+            for (int k = 0; k < s->nconn && !known; k++) known = s->conn[k].group == group && s->conn[k].num == num;
+            if (known) continue;
+        }
+        uint32_t groupArr = r32((uint32_t) C[PK_WIDE_MAP_GROUPS] + 4 * (uint32_t) group) ^ (uint32_t) C[PK_WIDE_MAP_GROUPS_XOR];
+        uint32_t chdr = r32(groupArr + 4 * (uint32_t) num);
+        uint32_t clay = r32(chdr);
+        struct Conn* k = &s->conn[s->nconn];
+        k->w = s32(clay);
+        k->h = s32(clay + 4);
+        if (k->w <= 0 || k->h <= 0 || k->w > 0x400 || k->h > 0x400) continue;
+        k->data = r32(clay + 0xC);
+        k->primary = r32(clay + 0x10);
+        k->secondary = r32(clay + 0x14);
+        k->border = r32(clay + 8);
+        k->bw = C[PK_WIDE_BORDER_SIZED] ? (int) r8(clay + 0x18) : 2;
+        k->bh = C[PK_WIDE_BORDER_SIZED] ? (int) r8(clay + 0x19) : 2;
+        if (k->bw <= 0 || k->bh <= 0) k->border = 0;
+        k->header = chdr;
+        k->group = group;
+        k->num = num;
+        k->dir = dir;
+        k->degree = degree;
+        switch (dir) {
+        case 1: k->ox = mx + off; k->oy = my + h; break;
+        case 2: k->ox = mx + off; k->oy = my - k->h; break;
+        case 3: k->ox = mx - k->w; k->oy = my + off; break;
+        default: k->ox = mx + w; k->oy = my + off; break;
+        }
+        if (k->w * k->h <= 0x10000 && mem(k->data, (uint32_t) (k->w * k->h * 2))) s->nconn++;
+    }
+}
+
 static void take(struct Snap* s) {
     badRead = false;
     s->ok = false;
     uint32_t sb1 = C[PK_WIDE_SAVE_STATIC] ? (uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR] : r32((uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]);
     s->posX = s16(sb1);
     s->posY = s16(sb1 + 2);
+    s->group = (int) r8(sb1 + 4);
+    s->num = (int) r8(sb1 + 5);
     uint32_t co = (uint32_t) C[PK_WIDE_CAMERA_OFFSET];
     s->xTile = (int) r8(co + 2);
     s->yTile = (int) r8(co + 3);
@@ -257,31 +341,10 @@ static void take(struct Snap* s) {
     // SOUTH (offset + 7 + cx, height + 7 + cy), NORTH (offset + 7 + cx, 7 - cHeight + cy),
     // WEST (7 - cWidth + cx, offset + 7 + cy), EAST (width + 7 + cx, offset + 7 + cy).
     s->nconn = 0;
-    uint32_t conns = r32(hdr + 0xC);
-    int count = conns ? s32(conns) : 0;
-    uint32_t arr = conns ? r32(conns + 4) : 0;
-    for (int i = 0; i < count && i < 8 && s->nconn < 4; i++) {
-        uint32_t c = arr + 12 * (uint32_t) i;   // struct MapConnection { u8 direction; s32 offset; u8 mapGroup, mapNum; }
-        int dir = (int) r8(c), off = s32(c + 4);
-        if (dir < 1 || dir > 4) continue;       // DIVE / EMERGE aren't beside the map
-        if (off < -MAX_MAP_DATA || off > MAX_MAP_DATA) continue;
-        uint32_t group = r32((uint32_t) C[PK_WIDE_MAP_GROUPS] + 4 * r8(c + 8)) ^ (uint32_t) C[PK_WIDE_MAP_GROUPS_XOR];
-        uint32_t chdr = r32(group + 4 * r8(c + 9));
-        uint32_t clay = r32(chdr);
-        struct Conn* k = &s->conn[s->nconn];
-        k->w = s32(clay);
-        k->h = s32(clay + 4);
-        if (k->w <= 0 || k->h <= 0 || k->w > 0x400 || k->h > 0x400) continue;
-        k->data = r32(clay + 0xC);
-        k->dir = dir;
-        switch (dir) {
-        case 1: k->ox = off + MAP_OFFSET; k->oy = s->height + MAP_OFFSET; break;
-        case 2: k->ox = off + MAP_OFFSET; k->oy = MAP_OFFSET - k->h; break;
-        case 3: k->ox = MAP_OFFSET - k->w; k->oy = off + MAP_OFFSET; break;
-        default: k->ox = s->width + MAP_OFFSET; k->oy = off + MAP_OFFSET; break;
-        }
-        if (k->w > 0 && k->h > 0 && k->w * k->h <= 0x10000 && mem(k->data, (uint32_t) (k->w * k->h * 2))) s->nconn++;
-    }
+    readConnections(s, hdr, s->width, s->height, MAP_OFFSET, MAP_OFFSET, 1);
+    // One step further (zoomed out, the sea past Route 19 is Route 20's): their own neighbours, the current map aside.
+    for (int i = 0, n = s->nconn; i < n; i++)
+        readConnections(s, s->conn[i].header, s->conn[i].w, s->conn[i].h, s->conn[i].ox, s->conn[i].oy, 2);
 
     const uint8_t* p;
     if ((p = mem((uint32_t) C[PK_WIDE_SPRITES], sizeof(s->sprites)))) memcpy(s->sprites, p, sizeof(s->sprites));
@@ -296,22 +359,23 @@ static void take(struct Snap* s) {
 
 // --- the map, as DrawMetatile draws it ------------------------------------------------------------
 
-// Metatile id -> each BG's 2x2 tile entries (BG1 top, over sprites; BG2 middle; BG3 bottom), for
-// one tileset pair at a time (it only changes with the map).
-static uint16_t mtTiles[NUM_METATILES_TOTAL + 1][3][4];
-static uint8_t mtDone[NUM_METATILES_TOTAL + 1];
-static uint32_t mtPrimary, mtSecondary;
+// Metatile id -> each BG's 2x2 tile entries (BG1 top, over sprites; BG2 middle; BG3 bottom), for one tileset pair
+// at a time - the current map's (it only changes with the map), and one per connected map with tilesets of its own.
+struct Tilesets {
+    uint32_t primary, secondary;
+    uint16_t mt[NUM_METATILES_TOTAL + 1][3][4];
+    uint8_t done[NUM_METATILES_TOTAL + 1];
+};
+static struct Tilesets cur;
+static uint32_t mtPrimary, mtSecondary;   // what `cur` holds
 
-static const uint16_t* metatile(const struct Snap* s, int mid, int bg) {
-    if (s->primary != mtPrimary || s->secondary != mtSecondary) {
-        memset(mtDone, 0, sizeof(mtDone));
-        mtPrimary = s->primary;
-        mtSecondary = s->secondary;
-    }
+static const uint16_t* metatileIn(struct Tilesets* t, int mid, int bg) {
+    uint16_t (*mtTiles)[3][4] = t->mt;
+    uint8_t* mtDone = t->done;
     if (mid > NUM_METATILES_TOTAL) mid = 0;     // DrawMetatileAt's own clamp
     if (!mtDone[mid]) {
         int prim = C[PK_WIDE_PRIMARY_OVERRIDE] ? C[PK_WIDE_PRIMARY_OVERRIDE] : C[PK_WIDE_PRIMARY_METATILES];
-        uint32_t ts = mid < prim ? s->primary : s->secondary;
+        uint32_t ts = mid < prim ? t->primary : t->secondary;
         int i = mid < prim ? mid : mid - prim;
         uint32_t attrs = r32(ts + (uint32_t) C[PK_WIDE_ATTR_OFFSET]);
         uint32_t attr = C[PK_WIDE_ATTR_SIZE] == 4 ? r32(attrs + 4 * (uint32_t) i) : r16(attrs + 2 * (uint32_t) i);
@@ -342,29 +406,156 @@ static const uint16_t* metatile(const struct Snap* s, int mid, int bg) {
     return mtTiles[mid][bg - 1];
 }
 
-// MapGridGetMetatileIdAt in VMap coordinates; past VMap, a connected map's own cell where the
-// game would have used the border (it never shows those: they're past its 7-metatile copy).
-static int block(const struct Snap* s, int x, int y) {
-    uint32_t mask = (uint32_t) C[PK_WIDE_METATILE_MASK], b = mask;
-    if (x >= 0 && x < s->vw && y >= 0 && y < s->vh) {
-        b = s->vmap[x + s->vw * y];
+static const uint16_t* metatile(const struct Snap* s, int mid, int bg) {
+    if (s->primary != mtPrimary || s->secondary != mtSecondary) {
+        memset(cur.done, 0, sizeof(cur.done));
+        cur.primary = mtPrimary = s->primary;
+        cur.secondary = mtSecondary = s->secondary;
+    }
+    return metatileIn(&cur, mid, bg);
+}
+
+// --- a connected map's own tilesets ------------------------------------------------------------------
+//
+// The game copies 7 metatiles of each connected map into VMap and draws them with the current map's tilesets (its
+// maps are made so that strip looks right). Past that strip WIDE draws the connected map itself, which may have
+// tilesets of its own (Route 18 is Celadon's, Fuchsia City its own): its metatiles, its tiles - not in VRAM, so
+// decompressed from the ROM - and its palettes from the ROM. Whatever it shares with the current map (usually the
+// primary tileset) still comes from VRAM / palette RAM, fades and tints with it.
+
+#define LZ77_MAX 0x8000
+
+struct Foreign {
+    struct Tilesets t;
+    bool ownPrimary;                 // its primary differs from the current map's too
+    uint8_t tiles[1024 * 32];        // 4bpp tiles by tile number (its own ones only)
+    uint16_t pal[16 * 16];
+    uint32_t used;                   // last frame used (the least recent is replaced)
+};
+#define FOREIGN_SLOTS 4
+static struct Foreign foreign[FOREIGN_SLOTS];
+static uint32_t foreignFrame;   // drawRegion calls so far: a slot used in this one is never replaced (no reloading per frame)
+
+/** GBA BIOS LZ77 (type 0x10) at `src` into dst (at most `cap` bytes); bytes written, 0 if it isn't one. */
+static uint32_t lz77(uint32_t src, uint8_t* dst, uint32_t cap) {
+    uint32_t hdr = r32(src);
+    if ((hdr & 0xFF) != 0x10) return 0;
+    uint32_t size = hdr >> 8, n = 0, at = src + 4;
+    if (size > cap) size = cap;
+    while (n < size) {
+        uint32_t flags = r8(at++);
+        for (int b = 0; b < 8 && n < size; b++, flags <<= 1) {
+            if (!(flags & 0x80)) {
+                dst[n++] = (uint8_t) r8(at++);
+                continue;
+            }
+            uint32_t b0 = r8(at), b1 = r8(at + 1);
+            at += 2;
+            uint32_t disp = ((b0 & 0xF) << 8 | b1) + 1, len = (b0 >> 4) + 3;
+            if (disp > n) return n;   // corrupt: stop with what's there
+            for (uint32_t k = 0; k < len && n < size; k++, n++) dst[n] = dst[n - disp];
+        }
+        if (badRead) return n;
+    }
+    return n;
+}
+
+/** A tileset's tiles into tiles[first * 32 ...]: decompressed if it says so, else as many as fit. */
+static void loadTiles(uint32_t ts, uint8_t* tiles, int first) {
+    static uint8_t buf[LZ77_MAX];
+    uint32_t room = (uint32_t) (1024 - first) * 32;
+    uint32_t src = r32(ts + 4);
+    if (r8(ts)) {
+        uint32_t n = lz77(src, buf, LZ77_MAX);
+        memcpy(tiles + first * 32, buf, n < room ? n : room);
     } else {
-        int lx = x - MAP_OFFSET, ly = y - MAP_OFFSET;
+        for (uint32_t k = 0; k < room; k++) tiles[first * 32 + k] = (uint8_t) r8(src + k);
+    }
+}
+
+/** The connected map's tilesets: NULL when they're the current map's (VRAM has them), else a cached Foreign. */
+static struct Foreign* foreignFor(const struct Snap* s, const struct Conn* k) {
+    if (k->secondary == s->secondary && k->primary == s->primary) return NULL;
+    if (C[PK_WIDE_PRIMARY_OVERRIDE] || C[PK_WIDE_METATILE_SIZE] != 16) return NULL;   // hacks' own layouts: as the game
+    struct Foreign* f = NULL;
+    for (int i = 0; i < FOREIGN_SLOTS; i++)
+        if (foreign[i].t.primary == k->primary && foreign[i].t.secondary == k->secondary && foreign[i].ownPrimary == (k->primary != s->primary)) f = &foreign[i];
+    if (!f) {
+        for (int i = 0; i < FOREIGN_SLOTS; i++)
+            if (!f || foreign[i].used < f->used) f = &foreign[i];
+        if (f->used == foreignFrame && f->t.primary) return NULL;   // every slot busy this frame: as the game would
+        memset(f->t.done, 0, sizeof(f->t.done));
+        memset(f->t.done, 0, sizeof(f->t.done));
+        f->t.primary = k->primary;
+        f->t.secondary = k->secondary;
+        f->ownPrimary = k->primary != s->primary;
+        memset(f->tiles, 0, sizeof(f->tiles));
+        int nt = C[PK_WIDE_PRIMARY_METATILES], np = C[PK_WIDE_PRIMARY_PALS];   // tiles / palettes in a primary tileset
+        if (f->ownPrimary) loadTiles(k->primary, f->tiles, 0);
+        loadTiles(k->secondary, f->tiles, nt);
+        for (int p = 0; p < 16; p++) {
+            uint32_t from = p < np ? k->primary : k->secondary;
+            uint32_t pals = r32(from + 8);
+            for (int i = 0; i < 16; i++) f->pal[p * 16 + i] = (uint16_t) r16(pals + 32 * (uint32_t) p + 2 * (uint32_t) i);
+        }
+    }
+    f->used = foreignFrame;
+    return f;
+}
+
+// MapGridGetMetatileIdAt in VMap coordinates. On the real screen exactly as the game: VMap (with its copies of the
+// connected maps), the border past it. Off it (`real` false), what's really there: VMap's connection strips belong to
+// their maps (*conn: their own tilesets), past VMap the connected maps and theirs, and where no map is, the border of
+// the neighbour on that side - so the scenery doesn't change as you cross from one map to the next.
+static int borderAt(const struct Snap* s, uint32_t border, int bw, int bh, int x, int y, int ox, int oy) {
+    uint32_t mask = (uint32_t) C[PK_WIDE_METATILE_MASK];
+    if (!C[PK_WIDE_BORDER_SIZED]) return (int) (r16(border + 2 * (uint32_t) (((x - ox + MAP_OFFSET + 1) & 1) + (((y - oy + MAP_OFFSET + 1) & 1) << 1))) & mask);
+    int xp = ((x - ox) % bw + bw) % bw, yp = ((y - oy) % bh + bh) % bh;
+    return (int) (r16(border + 2 * (uint32_t) (xp + yp * bw)) & mask);
+}
+
+static int blockIn(const struct Snap* s, int x, int y, int* conn, bool real) {
+    uint32_t mask = (uint32_t) C[PK_WIDE_METATILE_MASK], b = mask;
+    *conn = -1;
+    int lx = x - MAP_OFFSET, ly = y - MAP_OFFSET;
+    bool outside = lx < 0 || ly < 0 || lx >= s->width || ly >= s->height;
+    bool inVmap = x >= 0 && x < s->vw && y >= 0 && y < s->vh;
+    if (inVmap) b = s->vmap[x + s->vw * y];
+    if (outside && (!inVmap || !real)) {
+        // A connected map's cell: beside the current map, then one step further.
         for (int i = 0; i < s->nconn; i++) {
             const struct Conn* k = &s->conn[i];
-            bool side = k->dir == 1 ? ly >= s->height : k->dir == 2 ? ly < 0 : k->dir == 3 ? lx < 0 : lx >= s->width;
+            bool side = k->degree > 1 || (k->dir == 1 ? ly >= s->height : k->dir == 2 ? ly < 0 : k->dir == 3 ? lx < 0 : lx >= s->width);
             int cx = x - k->ox, cy = y - k->oy;
             if (side && cx >= 0 && cx < k->w && cy >= 0 && cy < k->h) {
-                b = r16(k->data + 2 * (uint32_t) (cx + k->w * cy));
+                uint32_t v = r16(k->data + 2 * (uint32_t) (cx + k->w * cy));
+                if ((v & mask) != mask) {
+                    b = v;
+                    *conn = i;
+                }
                 break;
+            }
+        }
+        if (*conn < 0 && !real) {
+            // No map here: the border of the neighbour on this side (south / north first, as the rows run), if any.
+            int want = ly >= s->height ? 1 : ly < 0 ? 2 : lx < 0 ? 3 : 4;
+            for (int i = 0; i < s->nconn; i++) {
+                const struct Conn* k = &s->conn[i];
+                if (k->degree == 1 && k->dir == want && k->border) {
+                    *conn = i;
+                    return borderAt(s, k->border, k->bw, k->bh, x, y, k->ox, k->oy);
+                }
             }
         }
     }
     if ((b & mask) != mask) return (int) (b & mask);
-    if (!C[PK_WIDE_BORDER_SIZED]) return (int) (r16(s->border + 2 * (uint32_t) (((x + 1) & 1) + (((y + 1) & 1) << 1))) & mask);
-    int xp = (x - MAP_OFFSET + 8 * s->bw) % s->bw;
-    int yp = (y - MAP_OFFSET + 8 * s->bh) % s->bh;
-    return (int) (r16(s->border + 2 * (uint32_t) (xp + yp * s->bw)) & mask);
+    *conn = -1;
+    return borderAt(s, s->border, s->bw, s->bh, x, y, MAP_OFFSET, MAP_OFFSET);
+}
+
+static int block(const struct Snap* s, int x, int y) {
+    int conn;
+    return blockIn(s, x, y, &conn, true);
 }
 
 // --- what the frame was drawn with ----------------------------------------------------------------
@@ -517,31 +708,44 @@ static uint32_t brightness(uint32_t c, int layer) {
     return out;
 }
 
-/** One map pixel: its colour index in palette RAM (0 = the backdrop), the priority of the BG it's
+static struct Foreign* connForeign[MAX_CONNS];   // this frame's: each connection's own tilesets (NULL = the current map's)
+
+/** One map pixel: its colour (BGR555; the backdrop's when nothing's there), the priority of the BG it's
  * from (4 = backdrop) and that BG (5 = backdrop: BLDCNT's bit numbering). */
-static int mapPixel(const struct Snap* s, int mx, int my, int enabled, int* prio, int* layer) {
+static uint16_t mapPixel(const struct Snap* s, int mx, int my, int enabled, int* prio, int* layer, bool real) {
     const uint8_t* vram = (const uint8_t*) G->video.vram;
-    int mid = block(s, mx >> 4, my >> 4);
+    int conn;
+    int mid = blockIn(s, mx >> 4, my >> 4, &conn, real);
+    // On the real screen a connected map's strip is drawn as the game draws it: with the current map's tilesets.
+    struct Foreign* f = !real && conn >= 0 && conn < MAX_CONNS ? connForeign[conn] : NULL;
     int q = ((my >> 3) & 1) * 2 + ((mx >> 3) & 1);
+    int nt = C[PK_WIDE_PRIMARY_METATILES], np = C[PK_WIDE_PRIMARY_PALS];
     for (int i = 0; i < 3; i++) {
         int b = order3[i];
         if (!(enabled & (1 << b))) continue;
-        uint16_t e = metatile(s, mid, b)[q];
+        uint16_t e = f ? metatileIn(&f->t, mid, b)[q] : metatile(s, mid, b)[q];
         int px = mx & 7, py = my & 7;
         if (e & 0x400) px = 7 - px;
         if (e & 0x800) py = 7 - py;
-        uint32_t off = bgChar[b] + (e & 0x3FFu) * 32 + (uint32_t) (py * 4 + px / 2);
-        if (off >= 0x10000) continue;            // BG tiles can't reach OBJ VRAM
-        int ci = px & 1 ? vram[off] >> 4 : vram[off] & 15;
+        int tile = e & 0x3FF, pal = e >> 12, ci;
+        if (f && (f->ownPrimary || tile >= nt)) {
+            uint8_t v = f->tiles[tile * 32 + py * 4 + px / 2];
+            ci = px & 1 ? v >> 4 : v & 15;
+        } else {
+            uint32_t off = bgChar[b] + (uint32_t) tile * 32 + (uint32_t) (py * 4 + px / 2);
+            if (off >= 0x10000) continue;            // BG tiles can't reach OBJ VRAM
+            ci = px & 1 ? vram[off] >> 4 : vram[off] & 15;
+        }
         if (ci) {
             *prio = bgPrio[b];
             *layer = b;
-            return (e >> 12) * 16 + ci;
+            if (f && (f->ownPrimary || pal >= np)) return f->pal[pal * 16 + ci];
+            return G->video.palette[pal * 16 + ci];
         }
     }
     *prio = 4;
     *layer = 5;
-    return 0;
+    return G->video.palette[0];
 }
 
 struct Piece {
@@ -779,6 +983,8 @@ static void drawGhosts(const struct Snap* s, int cx, int cy, int x0, int y0, int
 static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref, int x0, int y0, int x1, int y1,
                        bool skipFrame, uint32_t* dst, int stride, uint32_t alpha) {
     int w = x1 - x0, h = y1 - y0;
+    foreignFrame++;
+    for (int i = 0; i < MAX_CONNS; i++) connForeign[i] = i < s->nconn ? foreignFor(s, &s->conn[i]) : NULL;
     for (int j = 0; j < h; j++) {
         int y = y0 + j;
         // This line as the PPU drew it: its layers, windows and scroll (a line scrolled apart from the
@@ -814,8 +1020,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
                     continue;
                 }
             }
-            if (enabled) ci = mapPixel(s, cx + mx, cy + my, enabled, &prio, &layer);
-            uint16_t c = G->video.palette[ci];
+            uint16_t c = enabled ? mapPixel(s, cx + mx, cy + my, enabled, &prio, &layer, onFrame(sx, y)) : G->video.palette[ci];
             uint32_t c32 = color(c, alpha);
             dst[j * stride + x] = wl & 0x20 ? brightness(c32, layer) : c32;
             prioBuf[j][x] = (uint8_t) prio;
@@ -1213,6 +1418,7 @@ int pk_wide_configure(uint32_t crc) {
         memcpy(C + PK_WIDE_ADDRS, FAMILIES[rom->family], sizeof(FAMILIES[0]));
     }
     mtPrimary = mtSecondary = 0;
+    for (int i = 0; i < FOREIGN_SLOTS; i++) foreign[i].t.primary = foreign[i].t.secondary = 0;   // another game's tilesets
     pk_wide_reset();
     return configured;
 }
@@ -1346,7 +1552,7 @@ int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struc
         lastClose = 1;
         if (v.w > PK_WIDE_MAX_VIEW_W) v.w = PK_WIDE_MAX_VIEW_W;
         if (v.h > PK_WIDE_MAX_VIEW_H) v.h = PK_WIDE_MAX_VIEW_H;
-        for (int y = 0; y < v.h; y++)
+        for (int y = 0; out && y < v.h; y++)
             for (int x = 0; x < v.w; x++) {
                 int X = v.x + x, Y = v.y + y;
                 out[y * v.w + x] = X >= 0 && X < PK_WIDE_W && Y >= 0 && Y < PK_WIDE_H ? frame[Y * PK_WIDE_W + X] : 0xFF000000u;
@@ -1362,8 +1568,26 @@ int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struc
 #endif
 }
 
+void pk_wide_skip(struct mCore* core, const uint32_t* frame) {
+    struct PkWideView v = { 0, 0, 1, 1 };
+    pk_wide_view(core, frame, NULL, v, NULL);
+}
+
 static int viewInner(struct mCore* core, const uint32_t* frame, uint32_t* out, struct PkWideView v, uint32_t* centre) {
     realFrame = frame;
+    if (!out) {
+        // pk_wide_skip: a frame nobody will see (fast-forward runs several per refresh). Only the RAM after it is
+        // kept - what the next frame shows - so the frame that is drawn still has its snapshot from the frame before.
+        if (!core || core->platform(core) != mPLATFORM_GBA || !configured) return 0;
+        G = (struct GBA*) core->board;
+        R = G->memory.io;
+        hookScanlines(G);
+        int cur = prev == 0 ? 1 : 0;
+        take(&snaps[cur]);
+        if (lineIoFrames < 2) lineIoFrames++;
+        prev = cur;
+        return mix;
+    }
     if (v.w > PK_WIDE_MAX_VIEW_W) v.w = PK_WIDE_MAX_VIEW_W;
     if (v.h > PK_WIDE_MAX_VIEW_H) v.h = PK_WIDE_MAX_VIEW_H;
     if (v.w < 1 || v.h < 1) return 0;

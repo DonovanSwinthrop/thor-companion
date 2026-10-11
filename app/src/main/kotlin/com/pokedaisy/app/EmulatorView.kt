@@ -154,6 +154,8 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
      * wide one when the core drew it ([MgbaCore.pkWideWidth]), with the window it shows. */
     fun publishFrame() {
         try {
+            // A fast-forward frame the window wasn't drawn for: the screen keeps the last one (never a plain frame between).
+            if (wide && MgbaCore.pkWideSkipped()) return
             val w = MgbaCore.pkWideWidth()
             val win = camera.current
             if (w > 0 && win != null) renderer.publish(w, MgbaCore.pkWideHeight(), win) else renderer.publish(0, 0, null)

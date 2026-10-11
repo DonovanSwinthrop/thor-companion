@@ -66,6 +66,7 @@ enum {
     PK_WIDE_SB1_TEMPLATES,     // SaveBlock1.objectEventTemplates (the map's, as the save keeps them); 0 = no ghosts
     PK_WIDE_SB1_FLAGS,         // SaveBlock1.flags
     PK_WIDE_SB1_VARS,          // SaveBlock1.vars (VAR_OBJ_GFX_ID_*)
+    PK_WIDE_PRIMARY_PALS,      // BG palettes a primary tileset has: 7 FireRed, 6 Emerald (the rest are the secondary's)
     PK_WIDE_CONFIG_SIZE
 };
 
@@ -100,6 +101,10 @@ struct PkWideView {
  * covers it and the rebuilt scene everywhere else - or, off the map, the glow from the frame's edges, crossfaded.
  */
 int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struct PkWideView view, uint32_t* centre);
+
+/** Instead of pk_wide_view, for a frame that won't be shown (fast-forward runs several per screen refresh): keeps the
+ * game's RAM after it, as the next frame drawn needs, without drawing anything - most of WIDE's cost. */
+void pk_wide_skip(struct mCore* core, const uint32_t* frame);
 
 /** Whether the last frame wants the game seen close up (ZOOM steps back in): anything but the plain overworld - a
  * battle, a menu screen, or the field with its controls locked (a script) and a text box or a screen effect up. */

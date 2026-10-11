@@ -60,6 +60,10 @@ object MgbaCore {
     /** The last frame's window ([pkWideBuffer] holds [pkWideWidth] x [pkWideHeight]), or 0 if it wasn't drawn wide. Emu thread. */
     external fun pkWideWidth(): Int
     external fun pkWideHeight(): Int
+    /** WIDE: draw the next frame's window, or (false) only keep its RAM - a frame the screen won't show. Emu thread. */
+    external fun pkWideSetDraw(draw: Boolean)
+    /** WIDE: the last frame was only noted ([pkWideSetDraw] false): nothing new to put on screen. Emu thread. */
+    external fun pkWideSkipped(): Boolean
     /** WIDE: the signal that made it switch itself off for this game (a fault while drawing, caught: the game goes on
      * with the plain frame), or 0. */
     external fun pkWideFault(): Int

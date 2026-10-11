@@ -864,6 +864,17 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   FireRed / LeafGreen and the CFRU hacks; 0 elsewhere so far) with BG0 showing a text box / menu or lines drawn apart (a
   transition) - a warp's fade or the map-name popup don't. The step comes back 0.5 s after. NPCs only exist ~2 tiles
   past the game's own view, so far out they pop in as you near them.
+- **Connected maps, zoomed out** (`readConnections`, `blockIn`, `foreignFor`): the game copies 7 metatiles of each
+  neighbour into VMap and draws them with the current map's tilesets; past that, a neighbour may have tilesets of its
+  own (FireRed's Route 18 is Celadon's, Fuchsia City its own), so off the real frame each connected map - its VMap strip
+  too - is drawn with its own: metatiles, tiles LZ77-decompressed from the ROM (cached, 4 tileset pairs, never replaced
+  mid-frame), palettes from the ROM; what it shares with the current map stays VRAM / palette RAM. On the real frame,
+  exactly as the game. Neighbours' neighbours are drawn too (Route 20 from Fuchsia City), and where no map is, the border
+  of the neighbour on that side - so the scenery doesn't change as you cross. Their object templates (from their headers)
+  are ghosts as well, unless the current map has a clone of them.
+- **Fast-forward** draws one window per ~12 ms (`EmulatorEngine.WIDE_DRAW_NANOS`, `pkWideSetDraw`): FF runs several
+  frames per screen refresh and only one is seen; the rest only keep the RAM after them (`pk_wide_skip`) and aren't
+  published. At 4x zoomed out it had the emulation thread at 100% of a core (the Thor ran hot, 174 fps of 240); now ~35%.
 - **Far-off objects** (`takeGhosts` / `drawGhosts`; FireRed family so far - `OBJ_GFX_INFO` and friends, mapped from the
   decomp ELF's statics): the game spawns object events only ~2 tiles past its own view, so zoomed out a cuttable tree,
   a boulder, an item ball or an NPC wasn't there until you neared it. Every template the save holds for the map

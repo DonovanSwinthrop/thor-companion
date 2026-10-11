@@ -78,6 +78,8 @@ static struct {
     int wideW, wideH;
     uint32_t wideCrc;                   // the game WIDE draws (its ROM's CRC32; 0 = off)
     volatile int viewX, viewY, viewW, viewH;
+    volatile bool wideSkipNext;         // the next frame won't be shown: only note it (pk_wide_skip); false = draw
+    bool wideSkipped;                   // the last frame was only noted, not drawn: wide / wideW still hold the one before
 } g;
 
 #define PK_REWIND_INTERVAL 2
@@ -340,7 +342,12 @@ Java_com_pokedaisy_app_MgbaCore_pkRunFrame(JNIEnv* env, jobject thiz) {
     pkDrainAudio();
     // WIDE: only with a game it knows and a window set. 32-bit colour, like the screen's upload.
     struct PkWideView v = { g.viewX, g.viewY, g.viewW, g.viewH };
+    g.wideSkipped = false;
     if (g.wide && g.wideCrc && v.w > 0 && v.h > 0 && v.w <= PK_WIDE_MAX_VIEW_W && v.h <= PK_WIDE_MAX_VIEW_H &&
+        sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H && g.wideSkipNext) {
+        pk_wide_skip(g.core, (const uint32_t*) g.video);
+        g.wideSkipped = true;
+    } else if (g.wide && g.wideCrc && v.w > 0 && v.h > 0 && v.w <= PK_WIDE_MAX_VIEW_W && v.h <= PK_WIDE_MAX_VIEW_H &&
         sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H) {
         pk_wide_view(g.core, (const uint32_t*) g.video, g.wide, v, NULL);
         g.wideW = v.w;
@@ -397,6 +404,18 @@ Java_com_pokedaisy_app_MgbaCore_pkWideWidth(JNIEnv* env, jobject thiz) {
 JNIEXPORT jint JNICALL
 Java_com_pokedaisy_app_MgbaCore_pkWideHeight(JNIEnv* env, jobject thiz) {
     return g.wideH;
+}
+
+// WIDE: draw the next frame's window (true), or only keep its RAM (false: the screen won't show it). Emu thread.
+JNIEXPORT void JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideSetDraw(JNIEnv* env, jobject thiz, jboolean draw) {
+    g.wideSkipNext = !draw;
+}
+
+// WIDE: the last frame wasn't drawn (pkWideSetDraw(false)): nothing new to publish. Emu thread.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideSkipped(JNIEnv* env, jobject thiz) {
+    return g.wideSkipped ? JNI_TRUE : JNI_FALSE;
 }
 
 // WIDE: the signal that switched it off for this game (pk_wide_view's fault guard), or 0. Any thread.

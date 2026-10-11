@@ -492,6 +492,7 @@ class EmulatorEngine(
         var rewindApplied = -1   // pkInit dropped any buffer: set it again for this core
         var wideApplied = WideScreen.OFF   // pkInit starts with WIDE off
         var wideFaultReported = false
+        var lastWideDraw = 0L
         var frame = 0L
         try {
             while (running) {
@@ -512,6 +513,12 @@ class EmulatorEngine(
                 if (wideApplied != WideScreen.OFF && camera != null) {
                     // Never worth the game: a camera that throws leaves the plain frame on screen for this run.
                     try {
+                        // Fast-forward runs several frames per screen refresh: only one of them is ever seen, so only
+                        // that one has its window drawn (the rest just keep the RAM after them) - it was most of the CPU.
+                        val now = System.nanoTime()
+                        val draw = effectiveSpeed() <= 1f || now - lastWideDraw >= WIDE_DRAW_NANOS
+                        if (draw) lastWideDraw = now
+                        MgbaCore.pkWideSetDraw(draw)
                         camera.walking = input.mask and DIRECTIONS != 0
                         val win = camera.frame(MgbaCore.pkWideWantsClose())
                         if (win != null) MgbaCore.pkWideSetView(win.x, win.y, win.w, win.h)
@@ -898,6 +905,8 @@ class EmulatorEngine(
         const val DRC_MAX = 0.005
         /** SPEED_CYCLE steps. Index 0 (1×) is the normal, audio-on state. */
         val SPEED_STEPS = floatArrayOf(1f, 1.5f, 2f, 3f, 4f)
+        /** At fast-forward, a WIDE window is drawn at most this often (~80 a second: every refresh of a 60 Hz screen). */
+        const val WIDE_DRAW_NANOS = 12_000_000L
         /** The D-pad's bits: one held = the player walking (the look-around glides back). */
         const val DIRECTIONS = MgbaCore.Key.UP or MgbaCore.Key.DOWN or MgbaCore.Key.LEFT or MgbaCore.Key.RIGHT
     }
