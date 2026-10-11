@@ -443,6 +443,13 @@ NAVIGATE presses at once and re-presses what the fade drops (bounded by MENU_TIM
 list (UP wraps 0 -> CANCEL 7 -> 5), 3 frames between reads, 8 before SHIFT - and while the frame is held (`holdFrame`) the
 engine runs uncapped and muted (`effectiveSpeed`, `wantPaused`), sampling the battle state every frame so it stops as the
 battle fades back in rather than 66 ms (dozens of turbo frames) later.
+**GAME SPEED / RTC (GitHub #50)**: the companion's FAST-FORWARD group has GAME SPEED (0.25x ... 4x, a pick-list): it sets
+`EmulatorEngine`'s speed step, saved per ROM like SPEED CYCLE's (`Prefs.speedIndexFor`). `SPEED_STEPS` appends 0.5x / 0.25x
+after the old five (saved indexes keep their meaning); SPEED CYCLE only cycles the first `CYCLE_STEPS` and goes from a slow step
+back to 1x. Below 1x the timer paces frames and audio is muted (as SLOWMO HOLD's 0.5x always was); FF, when on, wins. FF SPEED
+gained 1.5x on both screens. The RTC needs no code of ours: mGBA's GBA reset applies its overrides - RTC for AXVE / AXPE /
+BPEE by code, and for any Pokémon ROM it doesn't know by CRC (the hacks) - reading the device's time(0); saves and states keep it
+(`SAVESTATE_RTC`). Verified headless: retail Emerald's `sErrorStatus` (0x03000DB8) is 0 and `sRtc` holds the real date / time.
 **FF MODE** (SETTINGS,`FfMode`: SMART default / NORMAL). NORMAL = fast everywhere. SMART = 1x while a
 menu screen or the region map is up, FF (still on) resuming when it closes. **A battle stays fast** (the user's
 rule): in battle the game's own battle input state decides (`smartSlows`, `SmartFf.kt`, fed by
