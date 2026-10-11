@@ -44,8 +44,8 @@ android {
         targetSdk = 34
         // Bump both for every GitHub release: the updater compares versionName
         // against the release tag (v<versionName>), Android needs versionCode to grow.
-        versionCode = 9
-        versionName = "1.1.4"
+        versionCode = 10
+        versionName = "1.2.0"
         // Whether this build can send crash reports at all (CrashReports.available).
         buildConfigField("boolean", "CRASHLYTICS", crashlytics.toString())
 
