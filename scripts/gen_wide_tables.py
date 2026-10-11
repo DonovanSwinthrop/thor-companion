@@ -30,7 +30,8 @@ OUT_JSON = os.path.join(ROOT, "build", "wide", "wide.json")
 
 # pk_wide.h's PK_WIDE_* address slots, in order.
 SLOTS = ["VMAP", "MAP_HEADER", "MAP_GROUPS", "SAVE_BLOCK1_PTR", "CAMERA_OFFSET", "OBJECT_EVENTS", "SPRITES",
-         "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN", "CONTROLS_LOCKED", "MAP_GROUPS_XOR", "NORMAL_BG3", "METATILE_SIZE", "METATILE_MASK", "PRIMARY_OVERRIDE", "PAN_OFF"]
+         "COORD_OFFSET", "COORD_OFFSET_Y", "SPRITE_ORDER", "GMAIN", "CONTROLS_LOCKED", "OBJ_GFX_INFO", "OBJ_PALETTES", "OBJ_FACING",
+         "SPRITE_PAL_TAGS", "ELEVATION_PRIO", "MAP_GROUPS_XOR", "NORMAL_BG3", "METATILE_SIZE", "METATILE_MASK", "PRIMARY_OVERRIDE", "PAN_OFF"]
 
 # The references: what was mapped onto retail from the decomp ELFs and checked headless (pk_wide.c's
 # history), plus ScriptContext_SetupScript for the checks' scripted warps and battles.
@@ -39,7 +40,10 @@ REFERENCES = {
         VMAP=0x03005040, MAP_HEADER=0x02036DFC, MAP_GROUPS=0x08352718, SAVE_BLOCK1_PTR=0x03005008,
         CAMERA_OFFSET=0x03000E90, OBJECT_EVENTS=0x02036E38, SPRITES=0x0202063C, COORD_OFFSET=0x02021BC8,
         COORD_OFFSET_Y=0x02021BCA, SPRITE_ORDER=0x02021800, GMAIN=0x030030F0,
-        CONTROLS_LOCKED=0x03000F9C)),   # sScriptContext2Enabled, from ScriptContext2_IsEnabled's literal
+        CONTROLS_LOCKED=0x03000F9C,   # sScriptContext2Enabled, from ScriptContext2_IsEnabled's literal
+        # The far-off objects' tables (the decomp ELF's statics, mapped from the QoL build through the pools).
+        OBJ_GFX_INFO=0x0839FE20, OBJ_PALETTES=0x083A51C8, OBJ_FACING=0x0839FDCD, SPRITE_PAL_TAGS=0x03000DE8,
+        ELEVATION_PRIO=0x083A70EC)),
     "EM": dict(code="BPEE", rev=0, script=0x08098EF8, a=dict(
         VMAP=0x03005DC0, MAP_HEADER=0x02037318, MAP_GROUPS=0x08486578, SAVE_BLOCK1_PTR=0x03005D8C,
         CAMERA_OFFSET=0x03000E20, OBJECT_EVENTS=0x02037350, SPRITES=0x02020630, COORD_OFFSET=0x02021BBC,
@@ -52,7 +56,7 @@ REFERENCES = {
         COORD_OFFSET_Y=0x030027E0, SPRITE_ORDER=0x03002410, GMAIN=0x03001770)),
 }
 # Addresses a ROM may go without (0 = unknown: pk_wide.c then does without what they give).
-OPTIONAL = {"CONTROLS_LOCKED"}
+OPTIONAL = {"CONTROLS_LOCKED", "OBJ_GFX_INFO", "OBJ_PALETTES", "OBJ_FACING", "SPRITE_PAL_TAGS", "ELEVATION_PRIO"}
 
 # The slots that aren't addresses, as retail has them.
 CONSTANTS = dict(MAP_GROUPS_XOR=0, NORMAL_BG3=0x3014, METATILE_SIZE=16, METATILE_MASK=0x3FF, PRIMARY_OVERRIDE=0, PAN_OFF=8)

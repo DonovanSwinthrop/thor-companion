@@ -41,6 +41,8 @@
 //                        `layers 0x18`, since their rebuild is BG3 + sprites)
 //   wideview X Y W H   - from now on draw this window instead (the frame's pixels, its top-left
 //                        (0, 0); up to 800x800): ZOOM and the look-around, e.g. -200 -100 640 360
+//   widefuzz N SEED    - N frames of random windows and random bytes / pointers written over the RAM
+//                        WIDE reads: it must never crash (an ASan build reports any bad read)
 //   wideinfo [lines]   - print the last frame's mode, score, torn and close (ZOOM steps in) flags
 //   wideshot FILE      - write the last wide frame (the window) as a PPM
 //   widecentre FILE    - write the last rebuild of the middle 240x160 (widecheck on) as a PPM
@@ -146,7 +148,7 @@ static void wideAfterFrame(void) {
     if (ns > 2e6) printf("wide: frame %u took %.1f ms (score %d)\n", core->frameCounter(core), ns / 1e6, pk_wide_last_score());
     wideStats.frames++;
     if (pk_wide_last_torn()) wideStats.torn++;
-    if (pk_wide_last_mode() == PK_WIDE_MODE_NONE) {
+    if (pk_wide_last_mode() == PK_WIDE_MODE_NONE || pk_wide_last_mode() == PK_WIDE_MODE_MENU) {   // a menu's: its back layer alone
         wideStats.unverified++;
         return;
     }
@@ -757,6 +759,35 @@ int main(int argc, char** argv) {
             wideView = (struct PkWideView) { -n, 0, PK_WIDE_W + 2 * n, PK_WIDE_H };
             memset(&wideStats, 0, sizeof(wideStats));
             printf("wideon: ROM %08x %s, margin %d\n", crc, wideOn ? "known" : "NOT KNOWN (WIDE off)", n);
+        } else if (!strcmp(cmd, "widefuzz")) {
+            // widefuzz N SEED: N frames of abuse for pk_wide - a random window each frame (empty, huge, far off) and
+            // random bytes / pointers written over the RAM it reads (VMap, gMapHeader, the camera, object events,
+            // sprites, the sprite order, SaveBlock1). The game may well crash inside the emulator; pk_wide mustn't
+            // (build with -fsanitize=address,undefined -DPK_WIDE_NO_GUARD to have every bad read reported).
+            unsigned seed = 1;
+            sscanf(line, "%*s %d %u", &n, &seed);
+            srand(seed);
+            const int slots[] = { PK_WIDE_VMAP, PK_WIDE_MAP_HEADER, PK_WIDE_CAMERA_OFFSET, PK_WIDE_OBJECT_EVENTS,
+                                  PK_WIDE_SPRITES, PK_WIDE_COORD_OFFSET, PK_WIDE_SPRITE_ORDER, PK_WIDE_SAVE_BLOCK1_PTR };
+            for (int k = 0; k < n; k++) {
+                wideView = (struct PkWideView) { rand() % 2000 - 1000, rand() % 1400 - 700, rand() % 900 - 20, rand() % 900 - 20 };
+                for (int m = rand() % 6; m > 0; m--) {
+                    uint32_t base = (uint32_t) C[slots[rand() % 8]];
+                    if (!base) continue;
+                    uint32_t at = base + (uint32_t) (rand() % 0x800);
+                    if (rand() % 2) {
+                        const uint32_t ptrs[] = { 0x02000000u, 0x03000000u, 0x08000000u, 0x09000000u, 0x0E000000u, 0 };
+                        uint32_t v = ptrs[rand() % 6] | ((uint32_t) rand() & 0x01FFFFFFu);
+                        if (rand() % 4 == 0) v = (uint32_t) rand() * 2654435761u;
+                        core->busWrite32(core, at & ~3u, v);
+                    } else {
+                        core->busWrite8(core, at, (uint8_t) rand());
+                    }
+                }
+                if (rand() % 50 == 0) pk_wide_reset();
+                runFrame();
+            }
+            printf("widefuzz: %d frames done (seed %u), fault %d\n", n, seed, pk_wide_fault());
         } else if (!strcmp(cmd, "wideview")) {
             // wideview X Y W H: draw this window (the frame's pixels, its top-left (0, 0)) - ZOOM / look-around.
             struct PkWideView v = { 0, 0, 0, 0 };

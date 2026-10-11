@@ -28,6 +28,7 @@
 #include "pk_wide.h"
 
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <mgba/core/core.h>
@@ -51,15 +52,19 @@
 
 // Each engine's layout.
 static const int32_t FAMILIES[][PK_WIDE_CONFIG_SIZE - PK_WIDE_ADDRS] = {
-    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 4 },    // u32 attributes, layer in bits 29-30; sized border
-    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 4 },  // u16 attributes, layer in bits 12-15; 2x2 border
+    [PK_WIDE_FAMILY_FR] = { 640, 0x14, 4, 29, 3, 1, 0, 0x439, 4, 4, 0x8E0, 0xEE0, 0x1000 },    // u32 attributes, layer in bits 29-30; sized border
+    [PK_WIDE_FAMILY_EM] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 4, 0xC70, 0x1270, 0x139C },  // u16 attributes, layer in bits 12-15; 2x2 border
     // Emerald's map; a static SaveBlock1, a longer gMain, 16-bit subsprite offsets.
-    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8, 4 },
+    [PK_WIDE_FAMILY_RS] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x43D, 8, 4, 0, 0, 0 },
     // Japanese Ruby / Sapphire: the static SaveBlock1, but gMain's inBattle and 8-bit subsprites as later games.
-    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4, 4 },
+    [PK_WIDE_FAMILY_RS_JA] = { 512, 0x10, 2, 12, 0xF, 0, 1, 0x439, 4, 4, 0, 0, 0 },
     // pokeemerald-expansion: Emerald's map and sprites, ObjectEvent.spriteId at +0x23.
-    [PK_WIDE_FAMILY_EX] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 0x23 },
+    [PK_WIDE_FAMILY_EX] = { 512, 0x10, 2, 12, 0xF, 0, 0, 0x439, 4, 0x23, 0, 0, 0 },
 };
+
+// Every engine row and every ROM row fills its part of the config, no more, no less.
+_Static_assert(sizeof(FAMILIES[0]) / sizeof(FAMILIES[0][0]) == PK_WIDE_CONFIG_SIZE - PK_WIDE_ADDRS, "FAMILIES rows");
+_Static_assert(sizeof(PK_WIDE_ROMS[0].a) / sizeof(PK_WIDE_ROMS[0].a[0]) == PK_WIDE_ADDRS, "pk_wide_games.h rows");
 
 static const struct PkWideRom* lookup(uint32_t crc) {
     for (size_t i = 0; crc && i < sizeof(PK_WIDE_ROMS) / sizeof(PK_WIDE_ROMS[0]); i++)
@@ -69,6 +74,7 @@ static const struct PkWideRom* lookup(uint32_t crc) {
 
 static int32_t C[PK_WIDE_CONFIG_SIZE];
 static bool configured;
+static int lastFault;   // the signal that switched WIDE off (0 = none: pk_wide_view's fault guard)
 
 // --- memory -----------------------------------------------------------------------------------
 
@@ -115,6 +121,17 @@ struct Conn {
     int dir;                       // 1 SOUTH 2 NORTH 3 WEST 4 EAST
 };
 
+/** An object on the map the game hasn't spawned - it only spawns those near its own screen - drawn where it would
+ * appear from its template: a cuttable tree, a boulder, an item ball, an NPC at its home tile. */
+struct Ghost {
+    int x, y, w, h;      // its box, in VMap pixels
+    uint32_t pixels;     // its frame's 4bpp tiles (ROM)
+    bool hflip;
+    int prio;            // OAM priority, from its elevation
+    uint32_t palTag;
+};
+#define MAX_GHOSTS 64
+
 struct Snap {
     bool ok;
     int posX, posY, xTile, yTile;
@@ -130,10 +147,75 @@ struct Snap {
     uint8_t order[64];
     uint8_t objects[16 * 0x24];
     int coordX, coordY;
+    struct Ghost ghosts[MAX_GHOSTS];   // the map's objects the game hasn't spawned (far off), front first
+    int nghosts;
 };
 
 static struct Snap snaps[2];
 static int prev = -1;              // snaps[prev]: the RAM after the frame before this one
+
+static bool flagSet(uint32_t sb1, int flag) {
+    return (r8(sb1 + (uint32_t) C[PK_WIDE_SB1_FLAGS] + (uint32_t) (flag >> 3)) >> (flag & 7)) & 1;
+}
+
+/** The map's object templates (SaveBlock1 keeps the current map's, positions as the game last saved them) that
+ * aren't hidden by their flag and aren't spawned: their sprite where SpawnObjectEvent would put it - the frame of
+ * the movement type's first facing, the bottom of the box on the tile's bottom, centred on it. */
+static void takeGhosts(struct Snap* s, uint32_t sb1, uint32_t hdr) {
+    s->nghosts = 0;
+    if (!C[PK_WIDE_OBJ_GFX_INFO] || !C[PK_WIDE_SB1_TEMPLATES] || !sb1) return;
+    uint32_t events = r32(hdr + 4);
+    int count = events ? (int) r8(events) : 0;
+    if (count > 64) count = 64;
+    int mapGroup = (int) r8(sb1 + 4), mapNum = (int) r8(sb1 + 5);
+    for (int i = 0; i < count && s->nghosts < MAX_GHOSTS; i++) {
+        uint32_t t = sb1 + (uint32_t) C[PK_WIDE_SB1_TEMPLATES] + 0x18 * (uint32_t) i;
+        int localId = (int) r8(t), gfx = (int) r8(t + 1), kind = (int) r8(t + 2);
+        if (kind != 0) continue;   // a clone of a connected map's object: that map draws it
+        int flag = (int) r16(t + 0x14);
+        if (flag && flagSet(sb1, flag)) continue;   // hidden (picked up, beaten, moved on)
+        bool live = false;
+        for (int k = 0; k < 16 && !live; k++) {
+            const uint8_t* oe = s->objects + 0x24 * k;
+            live = (oe[0] & 1) && oe[8] == localId && oe[9] == mapNum && oe[10] == mapGroup;
+        }
+        if (live) continue;
+        if (gfx >= 240) gfx = (int) r16(sb1 + (uint32_t) C[PK_WIDE_SB1_VARS] + 2 * (uint32_t) (0x10 + gfx - 240));   // VAR_OBJ_GFX_ID_*
+        if (gfx < 0 || gfx > 0xFF) continue;
+        uint32_t info = r32((uint32_t) C[PK_WIDE_OBJ_GFX_INFO] + 4 * (uint32_t) gfx);
+        int w = s16(info + 8), h = s16(info + 0xA);
+        if (!info || w <= 0 || h <= 0 || w > 64 || h > 64 || (w & 7) || (h & 7)) continue;
+        bool inanimate = r8(info + 0xC) & 0x40;
+        uint32_t images = r32(info + 0x1C);
+        int dir = C[PK_WIDE_OBJ_FACING] ? (int) r8((uint32_t) C[PK_WIDE_OBJ_FACING] + r8(t + 9)) : 1;   // 1 S 2 N 3 W 4 E
+        int frame = inanimate ? 0 : dir == 2 ? 1 : dir == 3 || dir == 4 ? 2 : 0;   // the walking sheet's standing frames
+        uint32_t bytes = (uint32_t) (w * h / 2);
+        uint32_t img = r32(images + 8 * (uint32_t) frame);
+        bool hflip = frame == 2 && dir == 4;
+        if (r16(images + 8 * (uint32_t) frame + 4) != bytes || !mem(img, bytes)) {
+            img = r32(images);   // a sheet without that frame: its first
+            hflip = false;
+            if (r16(images + 4) != bytes || !mem(img, bytes)) continue;
+        }
+        struct Ghost* g = &s->ghosts[s->nghosts++];
+        int cellX = s16(t + 4) + MAP_OFFSET, cellY = s16(t + 6) + MAP_OFFSET;
+        g->x = cellX * 16 + 8 - w / 2;
+        g->y = cellY * 16 + 16 - h;
+        g->w = w;
+        g->h = h;
+        g->pixels = img;
+        g->hflip = hflip;
+        g->prio = C[PK_WIDE_ELEVATION_PRIO] ? (int) (r8((uint32_t) C[PK_WIDE_ELEVATION_PRIO] + (r8(t + 8) & 15)) & 3) : 2;
+        g->palTag = r16(info + 2);
+    }
+    // Front first, as the sprites' order has it: the lower on the map, the nearer.
+    for (int i = 1; i < s->nghosts; i++)
+        for (int j = i; j > 0 && s->ghosts[j].y + s->ghosts[j].h > s->ghosts[j - 1].y + s->ghosts[j - 1].h; j--) {
+            struct Ghost tmp = s->ghosts[j];
+            s->ghosts[j] = s->ghosts[j - 1];
+            s->ghosts[j - 1] = tmp;
+        }
+}
 
 static void take(struct Snap* s) {
     badRead = false;
@@ -152,7 +234,7 @@ static void take(struct Snap* s) {
     uint32_t vm = (uint32_t) C[PK_WIDE_VMAP];
     s->vw = s32(vm);
     s->vh = s32(vm + 4);
-    if (s->vw <= 0 || s->vh <= 0 || s->vw * s->vh > MAX_MAP_DATA) return;
+    if (s->vw <= 0 || s->vh <= 0 || s->vw > MAX_MAP_DATA || s->vh > MAX_MAP_DATA || s->vw * s->vh > MAX_MAP_DATA) return;
     const uint8_t* cells = mem(r32(vm + 8), (uint32_t) (s->vw * s->vh * 2));
     if (!cells) return;
     memcpy(s->vmap, cells, (size_t) (s->vw * s->vh * 2));
@@ -164,6 +246,8 @@ static void take(struct Snap* s) {
     s->border = r32(layout + 8);
     s->primary = r32(layout + 0x10);
     s->secondary = r32(layout + 0x14);
+    // Sizes from memory are only trusted within reason: nothing below multiplies a garbage one.
+    if (s->width <= 0 || s->height <= 0 || s->width > MAX_MAP_DATA || s->height > MAX_MAP_DATA) return;
     if (C[PK_WIDE_BORDER_SIZED]) {
         s->bw = (int) r8(layout + 0x18);
         s->bh = (int) r8(layout + 0x19);
@@ -180,12 +264,14 @@ static void take(struct Snap* s) {
         uint32_t c = arr + 12 * (uint32_t) i;   // struct MapConnection { u8 direction; s32 offset; u8 mapGroup, mapNum; }
         int dir = (int) r8(c), off = s32(c + 4);
         if (dir < 1 || dir > 4) continue;       // DIVE / EMERGE aren't beside the map
+        if (off < -MAX_MAP_DATA || off > MAX_MAP_DATA) continue;
         uint32_t group = r32((uint32_t) C[PK_WIDE_MAP_GROUPS] + 4 * r8(c + 8)) ^ (uint32_t) C[PK_WIDE_MAP_GROUPS_XOR];
         uint32_t chdr = r32(group + 4 * r8(c + 9));
         uint32_t clay = r32(chdr);
         struct Conn* k = &s->conn[s->nconn];
         k->w = s32(clay);
         k->h = s32(clay + 4);
+        if (k->w <= 0 || k->h <= 0 || k->w > 0x400 || k->h > 0x400) continue;
         k->data = r32(clay + 0xC);
         k->dir = dir;
         switch (dir) {
@@ -203,7 +289,9 @@ static void take(struct Snap* s) {
     if ((p = mem((uint32_t) C[PK_WIDE_OBJECT_EVENTS], sizeof(s->objects)))) memcpy(s->objects, p, sizeof(s->objects));
     s->coordX = s16((uint32_t) C[PK_WIDE_COORD_OFFSET]);
     s->coordY = s16((uint32_t) C[PK_WIDE_COORD_OFFSET_Y]);
-    s->ok = !badRead;
+    bool ok = !badRead;
+    takeGhosts(s, sb1, hdr);
+    s->ok = ok;   // the ghosts are extras: a bad read among them doesn't sink the map
 }
 
 // --- the map, as DrawMetatile draws it ------------------------------------------------------------
@@ -499,7 +587,7 @@ static int buildPieces(const struct Snap* s, struct Piece* out) {
     for (int i = 0; i < 16; i++) {
         const uint8_t* oe = s->objects + 0x24 * i;
         uint32_t flags = (uint32_t) oe[0] | (uint32_t) oe[1] << 8;
-        int id = oe[C[PK_WIDE_SPRITE_ID_OFF]];
+        int id = C[PK_WIDE_SPRITE_ID_OFF] >= 0 && C[PK_WIDE_SPRITE_ID_OFF] < 0x24 ? oe[C[PK_WIDE_SPRITE_ID_OFF]] : 0xFF;
         if ((flags & 1) && (flags & (1 << 14)) && !(flags & (1 << 13)) && id < 64) offscreen[id] = true;
     }
     int n = 0;
@@ -624,8 +712,68 @@ static uint32_t blend(uint32_t top, uint32_t bottom, int layer) {
 static uint8_t holeBuf[BUF_H][BUF_W];
 static const uint32_t* realFrame;   // the core's 240x160 frame this call draws around
 
+static inline int clampi(int v, int lo, int hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+}
+
 static inline bool onFrame(int x, int y) {
     return x >= 0 && x < PK_WIDE_W && y >= 0 && y < PK_WIDE_H;
+}
+
+/** A ghost's colour: the OBJ palette slot its tag is loaded in (the game's fades and tints with it), else the
+ * palette from the ROM's table; false if neither has it. */
+static bool ghostPalette(uint32_t tag, uint32_t alpha, uint32_t pal[16]) {
+    const uint8_t* tags = C[PK_WIDE_SPRITE_PAL_TAGS] ? mem((uint32_t) C[PK_WIDE_SPRITE_PAL_TAGS], 32) : NULL;
+    for (int slot = 0; tags && slot < 16; slot++) {
+        if (le16(tags + 2 * slot) != tag) continue;
+        for (int i = 0; i < 16; i++) pal[i] = color(G->video.palette[256 + slot * 16 + i], alpha);
+        return true;
+    }
+    for (int k = 0; k < 64 && C[PK_WIDE_OBJ_PALETTES]; k++) {
+        uint32_t e = (uint32_t) C[PK_WIDE_OBJ_PALETTES] + 8 * (uint32_t) k, data = r32(e);
+        if (!data) break;
+        if (r16(e + 4) != tag) continue;
+        const uint8_t* p = mem(data, 32);
+        if (!p) return false;
+        for (int i = 0; i < 16; i++) pal[i] = color((uint16_t) le16(p + 2 * i), alpha);
+        return true;
+    }
+    return false;
+}
+
+/** The snapshot's ghosts over the rectangle, behind every real sprite and each other front first (takenBuf). */
+static void drawGhosts(const struct Snap* s, int cx, int cy, int x0, int y0, int x1, int y1, uint32_t* dst, int stride,
+                       uint32_t alpha) {
+    int w = x1 - x0;
+    for (int i = 0; i < s->nghosts; i++) {
+        const struct Ghost* g = &s->ghosts[i];
+        int gx = g->x - cx, gy = g->y - cy;   // on screen
+        if (gx + g->w <= x0 || gx >= x1 || gy + g->h <= y0 || gy >= y1) continue;
+        const uint8_t* px4 = mem(g->pixels, (uint32_t) (g->w * g->h / 2));
+        uint32_t pal[16];
+        if (!px4 || !ghostPalette(g->palTag, alpha, pal)) continue;
+        for (int yy = 0; yy < g->h; yy++) {
+            int Y = gy + yy, J = Y - y0;
+            if (Y < y0 || Y >= y1) continue;
+            R = lineRegs(Y);
+            if (!(io(0) & 0x1000)) continue;
+            for (int xx = 0; xx < g->w; xx++) {
+                int X = gx + xx - x0;
+                if (X < 0 || X >= w || takenBuf[J][X]) continue;
+                int wl = windowLayers(gx + xx, Y);
+                if (!(wl & 0x10)) continue;
+                int px = g->hflip ? g->w - 1 - xx : xx;
+                int t = (yy / 8) * (g->w / 8) + px / 8;
+                uint8_t v = px4[t * 32 + (yy & 7) * 4 + (px & 7) / 2];
+                int ci = px & 1 ? v >> 4 : v & 15;
+                if (!ci) continue;
+                takenBuf[J][X] = 1;
+                if (g->prio > prioBuf[J][X]) continue;
+                dst[J * stride + X] = wl & 0x20 ? brightness(pal[ci], 4) : pal[ci];
+                holeBuf[J][X] = 0;
+            }
+        }
+    }
 }
 
 static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref, int x0, int y0, int x1, int y1,
@@ -723,6 +871,7 @@ static void drawRegion(const struct Snap* s, int cx, int cy, int href, int vref,
             }
         }
     }
+    drawGhosts(s, cx, cy, x0, y0, x1, y1, dst, stride, alpha);
     R = G->memory.io;
 }
 
@@ -843,6 +992,135 @@ static void drawBattleRegion(int x0, int y0, int x1, int y1, bool skipFrame, uin
     R = G->memory.io;
 }
 
+// --- menu screens ------------------------------------------------------------------------------------
+//
+// A menu screen (party, bag, Pokédex, summary...) sits on a background layer - stripes, a frame, a pattern - with its
+// windows and text on the layers in front. Past the frame's edges only that bottom layer goes on, drawn as a wider
+// PPU would (its own scroll, wrapping around its 256 / 512 px), so the screen continues its own backdrop instead of
+// repeating any of its text.
+
+static int menuBg = -1;   // the background layer the last menu check picked
+
+/** A menu-like screen: tiled BGs (mode 0, or mode 1's two text ones) - picks the one at the back. */
+static bool menuScreen(void) {
+    uint16_t disp = io(0);
+    int mode = disp & 7, best = -1, bestPrio = -1;
+    if (mode > 1) return false;
+    for (int b = 0; b < (mode == 0 ? 4 : 2); b++) {
+        if (!(disp & (0x100 << b))) continue;
+        int prio = io(0x08 + 2 * b) & 3;
+        if (prio >= bestPrio) { bestPrio = prio; best = b; }   // ties: the higher BG is drawn behind
+    }
+    menuBg = best;
+    return best >= 0;
+}
+
+/** The back layer's pixel at screen (sx, y) - inside the frame - as the PPU draws it: colour (BLDY applied), false if
+ * transparent or windowed out. */
+static bool menuPixel(int sx, int y, uint32_t alpha, uint32_t* out) {
+    const uint8_t* vram = (const uint8_t*) G->video.vram;
+    int b = menuBg;
+    R = lineRegs(y);
+    uint16_t disp = io(0), cnt = io(0x08 + 2 * b);
+    int wl = windowLayers(sx, y);
+    if (!(disp & (0x100 << b)) || !(wl & (1 << b))) return false;
+    uint32_t chr = ((cnt >> 2) & 3) * 0x4000u, scr = ((cnt >> 8) & 31) * 0x800u;
+    int size = cnt >> 14, bw = size & 1 ? 512 : 256, bh = size & 2 ? 512 : 256;
+    int mx = (sx + (io(0x10 + 4 * b) & 0x1FF)) & (bw - 1), my = (y + (io(0x12 + 4 * b) & 0x1FF)) & (bh - 1);
+    uint32_t block = (uint32_t) ((mx >> 8) + (bw == 512 ? 2 : 1) * (my >> 8));
+    uint32_t off = scr + block * 0x800u + 2 * (uint32_t) (((my >> 3) & 31) * 32 + ((mx >> 3) & 31));
+    uint16_t e = off + 1 < 0x10000 ? (uint16_t) le16(vram + off) : 0;
+    int px = mx & 7, py = my & 7, ci, palBase = 0;
+    if (e & 0x400) px = 7 - px;
+    if (e & 0x800) py = 7 - py;
+    if (cnt & 0x80) {
+        uint32_t t = chr + (e & 0x3FFu) * 64 + (uint32_t) (py * 8 + px);
+        ci = t < 0x10000 ? vram[t] : 0;
+    } else {
+        uint32_t t = chr + (e & 0x3FFu) * 32 + (uint32_t) (py * 4 + px / 2);
+        ci = t < 0x10000 ? (px & 1 ? vram[t] >> 4 : vram[t] & 15) : 0;
+        palBase = (e >> 12) * 16;
+    }
+    if (!ci) return false;
+    uint32_t c = color(G->video.palette[palBase + ci], alpha);
+    *out = wl & 0x20 ? brightness(c, b) : c;
+    return true;
+}
+
+/** How many pixels the back layer repeats every, at screen row y, along `from` (a column just inside the frame's
+ * edge) going inwards by `dir`: the smallest of 8..32 whose shifted copy matches the next 32 pixels - else 0. */
+static int menuPeriod(int y, int from, int dir, uint32_t alpha) {
+    uint32_t px[64];
+    bool has[64];
+    for (int k = 0; k < 64; k++) has[k] = menuPixel(from + dir * k, y, alpha, &px[k]);
+    for (int p = 8; p <= 32; p += 8) {
+        bool same = true;
+        for (int k = 0; k < 32 && same; k++) same = has[k] == has[k + p] && (!has[k] || px[k] == px[k + p]);
+        if (same) return p;
+    }
+    return 0;
+}
+
+/** The menu's back layer over [x0, x1) x [y0, y1), past the frame continued from its own edges: each row repeats the
+ * pattern found along its edge (menuPeriod), rows above / below the frame its top / bottom row's. No sprites (cursors,
+ * icons stay put); transparent = the backdrop colour. */
+static void drawMenuRegion(int x0, int y0, int x1, int y1, bool skipFrame, uint32_t* dst, int stride, uint32_t alpha) {
+    int w = x1 - x0, h = y1 - y0;
+    // Per row and side: the pattern's width, and the row it's taken from - a row whose edge doesn't repeat (a button,
+    // a panel's corner reaching it) borrows the nearest one that does, so the backdrop goes on behind it; with none
+    // anywhere, the edge tile column itself goes on.
+    static int periodL[PK_WIDE_H], periodR[PK_WIDE_H], rowL[PK_WIDE_H], rowR[PK_WIDE_H];
+    for (int y = 0; y < PK_WIDE_H; y++) {
+        periodL[y] = menuPeriod(y, 0, 1, alpha);
+        periodR[y] = menuPeriod(y, PK_WIDE_W - 1, -1, alpha);
+    }
+    for (int side = 0; side < 2; side++) {
+        int* per = side ? periodR : periodL;
+        int* row = side ? rowR : rowL;
+        for (int y = 0; y < PK_WIDE_H; y++) {
+            row[y] = y;
+            if (per[y]) continue;
+            for (int d = 1; d < PK_WIDE_H; d++) {
+                if (y - d >= 0 && per[y - d]) { row[y] = y - d; break; }
+                if (y + d < PK_WIDE_H && per[y + d]) { row[y] = y + d; break; }
+            }
+        }
+        for (int y = 0; y < PK_WIDE_H; y++) {
+            int p = per[row[y]];
+            per[y] = per[y] ? per[y] : p ? -p : -8;   // negative: borrowed (kept apart from the rows found)
+        }
+    }
+    for (int j = 0; j < h; j++) {
+        int y = y0 + j, fy = clampi(y, 0, PK_WIDE_H - 1);
+        for (int x = 0; x < w; x++) {
+            int sx = x0 + x;
+            if (skipFrame && onFrame(sx, y)) {
+                holeBuf[j][x] = 0;
+                continue;
+            }
+            int fx = sx, ry = fy;
+            if (sx < 0) {                                                       // the left edge's pattern
+                int pl = abs(periodL[fy]);
+                ry = rowL[fy];
+                fx = ((sx % pl) + pl) % pl;
+            } else if (sx >= PK_WIDE_W) {
+                int pr = abs(periodR[fy]);
+                ry = rowR[fy];
+                fx = PK_WIDE_W - 1 - (((PK_WIDE_W - 1 - sx) % pr) + pr) % pr;
+            }
+            uint32_t c;
+            if (!menuPixel(fx, ry, alpha, &c)) {
+                R = lineRegs(ry);
+                c = color(G->video.palette[0], alpha);
+                if (windowLayers(fx, ry) & 0x20) c = brightness(c, 5);
+            }
+            dst[j * stride + x] = c;
+            holeBuf[j][x] = 0;
+        }
+    }
+    R = G->memory.io;
+}
+
 // --- ambient edges -----------------------------------------------------------------------------------
 
 // Off the map (title, menus, battles, transitions) the window around the frame is a glow spread from the game's
@@ -888,10 +1166,6 @@ static void ambientPrepare(const uint32_t* frame) {
     edgeAccOk = true;
 }
 
-static inline int clampi(int v, int lo, int hi) {
-    return v < lo ? lo : v > hi ? hi : v;
-}
-
 /** The glow at screen pixel (X, Y), off the frame; `reach` is how far the window goes past each edge (left, right,
  * top, bottom), where it's dimmest. */
 static uint32_t glowAt(const uint32_t* frame, int X, int Y, const int reach[4], uint32_t alpha) {
@@ -932,6 +1206,7 @@ static uint8_t rawHole[BUF_H][BUF_W];   // ... and where it had nothing: the fra
 
 int pk_wide_configure(uint32_t crc) {
     const struct PkWideRom* rom = lookup(crc);
+    lastFault = 0;
     configured = rom != NULL;
     if (configured) {
         memcpy(C, rom->a, sizeof(rom->a));
@@ -1005,7 +1280,89 @@ int pk_wide_frame(struct mCore* core, const uint32_t* frame, uint32_t* out, int 
     return pk_wide_view(core, frame, out, v, centre);
 }
 
+// --- the fault guard ----------------------------------------------------------------------------------
+//
+// Everything above reads the game's memory through bounds-checked helpers and clamps every index, so a bad pointer
+// or a torn snapshot only draws something wrong. As a last resort a fault inside pk_wide_view (SIGSEGV / SIGBUS /
+// SIGFPE / SIGILL on this thread, while drawing) doesn't take the app down: the handler jumps back out, WIDE switches
+// itself off for the game (pk_wide_fault says why) and the screen shows the plain frame. A fault anywhere else goes
+// on to the handler that was there before (the system's crash reporting), as if this one weren't installed.
+
+#ifndef PK_WIDE_NO_GUARD   // mgba_dump's AddressSanitizer build reports faults itself
+#include <setjmp.h>
+#include <signal.h>
+
+static __thread sigjmp_buf* guardJmp;   // set only while this thread is inside pk_wide_view
+static const int GUARDED[4] = { SIGSEGV, SIGBUS, SIGFPE, SIGILL };
+static struct sigaction guardOld[4];
+static bool guardInstalled;
+
+static void onFault(int sig, siginfo_t* info, void* ctx) {
+    sigjmp_buf* j = guardJmp;
+    if (j) {
+        guardJmp = NULL;
+        siglongjmp(*j, sig);
+    }
+    for (int i = 0; i < 4; i++) {
+        if (GUARDED[i] != sig) continue;
+        const struct sigaction* old = &guardOld[i];
+        if ((old->sa_flags & SA_SIGINFO) && old->sa_sigaction) {
+            old->sa_sigaction(sig, info, ctx);
+        } else if (old->sa_handler != SIG_DFL && old->sa_handler != SIG_IGN && old->sa_handler) {
+            old->sa_handler(sig);
+        } else {
+            sigaction(sig, old, NULL);   // the default action: put it back; the faulting instruction runs into it again
+        }
+        return;
+    }
+}
+
+static void installGuard(void) {
+    if (guardInstalled) return;
+    guardInstalled = true;
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = onFault;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigemptyset(&sa.sa_mask);
+    for (int i = 0; i < 4; i++) sigaction(GUARDED[i], &sa, &guardOld[i]);
+}
+#endif
+
+int pk_wide_fault(void) { return lastFault; }
+
+static int viewInner(struct mCore* core, const uint32_t* frame, uint32_t* out, struct PkWideView v, uint32_t* centre);
+
 int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struct PkWideView v, uint32_t* centre) {
+#ifndef PK_WIDE_NO_GUARD
+    installGuard();
+    sigjmp_buf j;
+    int sig = sigsetjmp(j, 1);
+    if (sig) {
+        guardJmp = NULL;
+        lastFault = sig;
+        configured = false;   // off for this game until it's configured again: never the same fault twice
+        lastMode = PK_WIDE_MODE_NONE;
+        lastClose = 1;
+        if (v.w > PK_WIDE_MAX_VIEW_W) v.w = PK_WIDE_MAX_VIEW_W;
+        if (v.h > PK_WIDE_MAX_VIEW_H) v.h = PK_WIDE_MAX_VIEW_H;
+        for (int y = 0; y < v.h; y++)
+            for (int x = 0; x < v.w; x++) {
+                int X = v.x + x, Y = v.y + y;
+                out[y * v.w + x] = X >= 0 && X < PK_WIDE_W && Y >= 0 && Y < PK_WIDE_H ? frame[Y * PK_WIDE_W + X] : 0xFF000000u;
+            }
+        return 0;
+    }
+    guardJmp = &j;
+    int r = viewInner(core, frame, out, v, centre);
+    guardJmp = NULL;
+    return r;
+#else
+    return viewInner(core, frame, out, v, centre);
+#endif
+}
+
+static int viewInner(struct mCore* core, const uint32_t* frame, uint32_t* out, struct PkWideView v, uint32_t* centre) {
     realFrame = frame;
     if (v.w > PK_WIDE_MAX_VIEW_W) v.w = PK_WIDE_MAX_VIEW_W;
     if (v.h > PK_WIDE_MAX_VIEW_H) v.h = PK_WIDE_MAX_VIEW_H;
@@ -1060,7 +1417,8 @@ int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struc
     }
     bool valid = best >= MIN_SCORE;
     bool battle = !valid && inBattleScreen();
-    lastMode = valid ? PK_WIDE_MODE_MAP : battle ? PK_WIDE_MODE_BATTLE : PK_WIDE_MODE_NONE;
+    bool menu = !valid && !battle && menuScreen();
+    lastMode = valid ? PK_WIDE_MODE_MAP : battle ? PK_WIDE_MODE_BATTLE : menu ? PK_WIDE_MODE_MENU : PK_WIDE_MODE_NONE;
     bool locked = C[PK_WIDE_CONTROLS_LOCKED] && r8((uint32_t) C[PK_WIDE_CONTROLS_LOCKED]);
     lastClose = !valid || (locked && (textUp() || effectsUp()));
 
@@ -1073,18 +1431,21 @@ int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struc
         else lastTorn = 1;
     }
 
-    if (valid || battle) {
+    if (valid || battle || menu) {
         if (valid) {
             const struct Snap* s = &snaps[bestSnap];
             drawRegion(s, bestCx, bestCy, bestH, bestV, v.x, v.y, v.x + v.w, v.y + v.h, true, &raw[0][0], BUF_W, alpha);
-        } else {
+        } else if (battle) {
             drawBattleRegion(v.x, v.y, v.x + v.w, v.y + v.h, true, &raw[0][0], BUF_W, alpha);
+        } else {
+            drawMenuRegion(v.x, v.y, v.x + v.w, v.y + v.h, true, &raw[0][0], BUF_W, alpha);
         }
         for (int j = 0; j < v.h; j++) memcpy(rawHole[j], holeBuf[j], (size_t) v.w);
         rawView = v;
         if (centre) {
             if (valid) drawRegion(&snaps[bestSnap], bestCx, bestCy, bestH, bestV, 0, 0, PK_WIDE_W, PK_WIDE_H, false, centre, PK_WIDE_W, alpha);
-            else drawBattleRegion(0, 0, PK_WIDE_W, PK_WIDE_H, false, centre, PK_WIDE_W, alpha);   // holes show the backdrop, as the PPU does
+            else if (battle) drawBattleRegion(0, 0, PK_WIDE_W, PK_WIDE_H, false, centre, PK_WIDE_W, alpha);   // holes show the backdrop, as the PPU does
+            else drawMenuRegion(0, 0, PK_WIDE_W, PK_WIDE_H, false, centre, PK_WIDE_W, alpha);
         }
         mix = mix + MIX_STEP > 256 ? 256 : mix + MIX_STEP;
     } else {

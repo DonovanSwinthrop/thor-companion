@@ -144,6 +144,8 @@ class WideCamera {
         /** The game frame and pk_wide.h's largest window (PK_WIDE_MAX_VIEW_W / _H). */
         const val PK_W = 240
         const val PK_H = 160
+        /** GBA px per side drawn if the camera ever fails: plain strips, as before ZOOM. */
+        const val MARGIN_FALLBACK = 22
         const val MAX_W = 800
         const val MAX_H = 800
 

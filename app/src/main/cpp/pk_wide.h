@@ -39,6 +39,12 @@ enum {
     PK_WIDE_SPRITE_ORDER,      // u8[64], BuildOamBuffer's order
     PK_WIDE_GMAIN,             // gMain: inBattle is bit 1 of +PK_WIDE_INBATTLE_OFF
     PK_WIDE_CONTROLS_LOCKED,   // ArePlayerFieldControlsLocked's u8 (FireRed's sScriptContext2Enabled); 0 = unknown
+    // The objects the game hasn't spawned (far off, ZOOM shows them), drawn from the map's templates; 0 = not drawn:
+    PK_WIDE_OBJ_GFX_INFO,      // gObjectEventGraphicsInfoPointers (ROM)
+    PK_WIDE_OBJ_PALETTES,      // sObjectEventSpritePalettes { const u16 *data; u16 tag; } (ROM)
+    PK_WIDE_OBJ_FACING,        // gInitialMovementTypeFacingDirections (ROM, u8 per movement type)
+    PK_WIDE_SPRITE_PAL_TAGS,   // sSpritePaletteTags (u16[16]: which OBJ palette slot holds which tag)
+    PK_WIDE_ELEVATION_PRIO,    // sElevationToPriority (ROM, u8[16])
     PK_WIDE_MAP_GROUPS_XOR,    // not an address: what gMapGroups' entries are XORed with (Unbound), else 0
     PK_WIDE_NORMAL_BG3,        // not an address: what DrawMetatile puts on BG3 under a NORMAL metatile (0x3014; Unbound 0)
     PK_WIDE_METATILE_SIZE,     // not an address: 16 (two layers), 24 (triple-layer: BG3, BG2, BG1 - Lazarus)
@@ -57,6 +63,9 @@ enum {
     PK_WIDE_INBATTLE_OFF,      // gMain's inBattle byte: 0x439, Ruby / Sapphire 0x43D
     PK_WIDE_SUBSPRITE_SIZE,    // struct Subsprite: 4 (s8 x, y), Ruby / Sapphire 8 (u16 x, y; agbcc pads it to 4 bytes)
     PK_WIDE_SPRITE_ID_OFF,     // ObjectEvent.spriteId: 4, expansion 0x23 (its graphicsId is a u16)
+    PK_WIDE_SB1_TEMPLATES,     // SaveBlock1.objectEventTemplates (the map's, as the save keeps them); 0 = no ghosts
+    PK_WIDE_SB1_FLAGS,         // SaveBlock1.flags
+    PK_WIDE_SB1_VARS,          // SaveBlock1.vars (VAR_OBJ_GFX_ID_*)
     PK_WIDE_CONFIG_SIZE
 };
 
@@ -96,8 +105,12 @@ int pk_wide_view(struct mCore* core, const uint32_t* frame, uint32_t* out, struc
  * battle, a menu screen, or the field with its controls locked (a script) and a text box or a screen effect up. */
 int pk_wide_wants_close(void);
 
-/** What the last frame's strips showed: nothing drawn (the glow), the map, or a battle. */
-enum { PK_WIDE_MODE_NONE, PK_WIDE_MODE_MAP, PK_WIDE_MODE_BATTLE };
+/** The signal (SIGSEGV...) that made pk_wide_view switch WIDE off for this game, or 0. A fault while drawing never
+ * takes the app down: the frame is shown plain until the game is configured again. */
+int pk_wide_fault(void);
+
+/** What the last frame's strips showed: nothing drawn (the glow), the map, a battle, or a menu screen's back layer. */
+enum { PK_WIDE_MODE_NONE, PK_WIDE_MODE_MAP, PK_WIDE_MODE_BATTLE, PK_WIDE_MODE_MENU };
 int pk_wide_last_mode(void);
 
 /** How the last frame went, for logs and mgba_dump: tilemap match 0..1000, -1 if none was tried. */

@@ -345,6 +345,12 @@ Java_com_pokedaisy_app_MgbaCore_pkRunFrame(JNIEnv* env, jobject thiz) {
         pk_wide_view(g.core, (const uint32_t*) g.video, g.wide, v, NULL);
         g.wideW = v.w;
         g.wideH = v.h;
+        if (pk_wide_fault()) {
+            // It faulted drawing (and switched itself off): this game shows the plain frame from now on.
+            LOGI("WIDE switched off: signal %d while drawing", pk_wide_fault());
+            g.wideCrc = 0;
+            g.wideW = g.wideH = 0;
+        }
     } else {
         g.wideW = g.wideH = 0;
     }
@@ -391,6 +397,12 @@ Java_com_pokedaisy_app_MgbaCore_pkWideWidth(JNIEnv* env, jobject thiz) {
 JNIEXPORT jint JNICALL
 Java_com_pokedaisy_app_MgbaCore_pkWideHeight(JNIEnv* env, jobject thiz) {
     return g.wideH;
+}
+
+// WIDE: the signal that switched it off for this game (pk_wide_view's fault guard), or 0. Any thread.
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideFault(JNIEnv* env, jobject thiz) {
+    return pk_wide_fault();
 }
 
 // ZOOM: whether the last frame wants the game close up (a battle, a menu, a text box). Emu thread.

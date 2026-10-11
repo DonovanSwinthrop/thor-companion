@@ -72,6 +72,10 @@ class EmulatorEngine(
     /** ZOOM and the look-around over WIDE: asked for the window to draw before each frame ([EmulatorView.camera]). */
     @Volatile var wideCamera: WideCamera? = null
 
+    /** Called (emu thread) once WIDE has switched itself off for this game: a fault while drawing, caught
+     * ([MgbaCore.pkWideFault]), or the camera failing - the game goes on with its plain frame. */
+    var onWideOff: ((String) -> Unit)? = null
+
     /** What fast-forward sounds like (Settings: STEADY / SPED-UP / OFF). */
     @Volatile var ffMusicMode = FfMusicMode.STEADY
     /** SMART: 1x while a menu screen or the region map is up ([FfMenuWatch], [RegionMapWatch]). */
@@ -487,6 +491,7 @@ class EmulatorEngine(
         val silence = ShortArray(bufferFrames * 2)
         var rewindApplied = -1   // pkInit dropped any buffer: set it again for this core
         var wideApplied = WideScreen.OFF   // pkInit starts with WIDE off
+        var wideFaultReported = false
         var frame = 0L
         try {
             while (running) {
@@ -505,10 +510,18 @@ class EmulatorEngine(
                 }
                 val camera = wideCamera
                 if (wideApplied != WideScreen.OFF && camera != null) {
-                    camera.walking = input.mask and DIRECTIONS != 0
-                    val win = camera.frame(MgbaCore.pkWideWantsClose())
-                    if (win != null) MgbaCore.pkWideSetView(win.x, win.y, win.w, win.h)
-                    else MgbaCore.pkWideSetView(0, 0, 0, 0)
+                    // Never worth the game: a camera that throws leaves the plain frame on screen for this run.
+                    try {
+                        camera.walking = input.mask and DIRECTIONS != 0
+                        val win = camera.frame(MgbaCore.pkWideWantsClose())
+                        if (win != null) MgbaCore.pkWideSetView(win.x, win.y, win.w, win.h)
+                        else MgbaCore.pkWideSetView(0, 0, 0, 0)
+                    } catch (t: Throwable) {
+                        Log.e("pokedaisy", "WIDE camera failed; zoom off for this run", t)
+                        wideCamera = null
+                        MgbaCore.pkWideSetView(-WideCamera.MARGIN_FALLBACK, 0, WideCamera.PK_W + 2 * WideCamera.MARGIN_FALLBACK, WideCamera.PK_H)
+                        runCatching { onWideOff?.invoke("camera") }
+                    }
                 }
                 val rewinding = rewindHeld && rewindWanted > 0
                 MgbaCore.pkSetRewinding(rewinding)
@@ -528,6 +541,11 @@ class EmulatorEngine(
                 }
 
                 servicePending()
+                if (wideApplied != WideScreen.OFF && !wideFaultReported && MgbaCore.pkWideFault() != 0) {
+                    wideFaultReported = true
+                    Log.e("pokedaisy", "WIDE switched itself off: signal ${MgbaCore.pkWideFault()} while drawing")
+                    runCatching { onWideOff?.invoke("fault") }
+                }
 
                 val nowMs = System.currentTimeMillis()
                 if (nowMs - lastSample >= 1000L) {

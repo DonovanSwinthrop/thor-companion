@@ -126,6 +126,11 @@ interface CompanionSettings {
     /** Whether WIDE knows the running game (WideScreen.gameFor); it shows as ORIGINAL otherwise. */
     val wideSupported: Boolean get() = false
 
+    /** EXPAND's one-time offer in a game it knows, while EXPAND is off ([com.pokedaisy.app.Prefs.expandGameOfferSeen]):
+     * true while it's up (Compose state). Shown once ever - the setting is global. */
+    val expandOffer: Boolean get() = false
+    fun answerExpandOffer(turnOn: Boolean) {}
+
     /** The GBA LCD's colours on the game - see [Prefs.gbaColors]. */
     val gbaColors: Boolean
     fun setGbaColors(on: Boolean)

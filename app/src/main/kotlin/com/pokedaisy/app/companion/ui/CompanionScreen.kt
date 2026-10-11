@@ -543,6 +543,14 @@ fun CompanionScreen(
                 },
             )
 
+            // EXPAND's one-time offer, in a game it knows (the Library's "NOT NOW" doesn't stop this one, once).
+            if (settings?.expandOffer == true) {
+                ExpandIntro(
+                    rememberGbaTextMetrics(), rememberGbaTextMetrics(textScale = 1f), inGame = true,
+                    onTurnOn = { settings.answerExpandOffer(true) }, onNotNow = { settings.answerExpandOffer(false) },
+                )
+            }
+
             // TRY BEST EFFORT just found a match: what the game is read as, and what's off.
             snapshot.bestEffort?.takeIf { it.fresh }?.let { be ->
                 var seen by remember(be.title) { mutableStateOf(false) }

@@ -222,6 +222,8 @@ class LibraryActivity : ComponentActivity() {
         }
 
         if (intent?.action != Intent.ACTION_VIEW && !prefs.setupDone && listRoms().isEmpty()) startSetup()
+        // EXPAND's introduction, once: to everyone not already on it (first-time setup goes first).
+        expandIntro = !prefs.expandIntroSeen && prefs.gameAspect != com.pokedaisy.app.companion.GameAspect.WIDE
 
         setContent {
             QolTheme {
@@ -378,6 +380,18 @@ class LibraryActivity : ComponentActivity() {
                 ) }
 
             UpdateDialog(updates, m, small)
+
+            if (expandIntro && setup == null) {
+                com.pokedaisy.app.companion.ui.ExpandIntro(
+                    m, small,
+                    onTurnOn = {
+                        prefs.gameAspect = com.pokedaisy.app.companion.GameAspect.WIDE
+                        prefs.expandIntroSeen = true
+                        expandIntro = false
+                    },
+                    onNotNow = { prefs.expandIntroSeen = true; expandIntro = false },
+                )
+            }
 
             backupPick?.let { b ->
                 OptionSelector(
@@ -865,6 +879,8 @@ class LibraryActivity : ComponentActivity() {
     /** Canned picker data for the ui-preview harness (no network there). */
     internal var coverSourceOverride: CoverSource? = null
     private var coverSaving by mutableStateOf(false)
+    /** EXPAND's one-time introduction is up ([com.pokedaisy.app.companion.ui.ExpandIntro]). */
+    private var expandIntro by mutableStateOf(false)
     private var coverError by mutableStateOf<String?>(null)
 
     /** Downloads the picked icon over [rom]'s cover (only swapped once it has

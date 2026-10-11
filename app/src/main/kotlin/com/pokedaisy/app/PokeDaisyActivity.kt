@@ -126,6 +126,8 @@ class PokeDaisyActivity : Activity() {
     private var romKey: String = ""      // ROM CRC32, for per-ROM prefs
     /** WIDE's native tables for this ROM ([WideScreen.gameFor]); OFF for a game it doesn't know. */
     private var wideGame = WideScreen.OFF
+    /** EXPAND's one-time offer is up on the companion ([CompanionSettings.expandOffer]). */
+    private val expandOfferUp = androidx.compose.runtime.mutableStateOf(false)
     private var states: SaveStates? = null
 
     private val telemetry = TelemetryStore()
@@ -398,6 +400,15 @@ class PokeDaisyActivity : Activity() {
             runOnUiThread { syncGameScreen() }
         }
         override val wideSupported get() = wideGame != WideScreen.OFF
+        override val expandOffer get() = expandOfferUp.value
+        override fun answerExpandOffer(turnOn: Boolean) {
+            val prefs = Prefs(this@PokeDaisyActivity)
+            // Either answer settles both offers: the Library's too (never asked twice).
+            prefs.expandGameOfferSeen = true
+            prefs.expandIntroSeen = true
+            expandOfferUp.value = false
+            if (turnOn) setGameAspect(com.pokedaisy.app.companion.GameAspect.WIDE)
+        }
         override val gbaColors get() = Prefs(this@PokeDaisyActivity).gbaColors
         override fun setGbaColors(on: Boolean) {
             Prefs(this@PokeDaisyActivity).gbaColors = on
@@ -653,6 +664,10 @@ class PokeDaisyActivity : Activity() {
         val gameBoy = RomIdentity.isGameBoy(r)
         romIsGameBoy = gameBoy
         wideGame = if (gameBoy) WideScreen.OFF else WideScreen.gameFor(crc)
+        Prefs(this).let { p ->
+            expandOfferUp.value = wideGame != WideScreen.OFF && !p.expandGameOfferSeen &&
+                p.gameAspect != com.pokedaisy.app.companion.GameAspect.WIDE
+        }
         // FireRed / Emerald party-menu art and region maps come from the ROM
         // itself, once per ROM (see RomArt) - nothing of the game is bundled.
         if (!gameBoy) RomArt.prefetch(filesDir, crc, r) else com.pokedaisy.app.companion.data.Gen1Art.prefetch(filesDir, r)
@@ -688,6 +703,7 @@ class PokeDaisyActivity : Activity() {
         engine = EmulatorEngine(input, states!!, ffMusicCache).apply {
             gba = !gameBoy
             wideCamera = view.camera
+            onWideOff = { runOnUiThread { showHud(com.pokedaisy.app.companion.i18n.tr("EXPAND hit a problem and is off for this game")) } }
             gen1Music = this@PokeDaisyActivity.gen1Music
             onCoreReady = { w, h ->
                 MgbaCore.pkVideoBuffer()?.let { buf ->
@@ -1298,7 +1314,7 @@ class PokeDaisyActivity : Activity() {
                 else if (e.pressed) showHud(com.pokedaisy.app.companion.i18n.tr("Rewinding"))
                 engine.setRewindHeld(e.pressed)
             }
-            Hotkeys.Action.ZOOM -> if (e.pressed) {
+            Hotkeys.Action.ZOOM -> if (e.pressed) runCatching {
                 if (!view.wide) showHud(com.pokedaisy.app.companion.i18n.tr("Zoom needs ASPECT > EXPAND"))
                 else {
                     val step = view.camera.cycle()

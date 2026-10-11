@@ -153,9 +153,15 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
     /** Emu thread, right after a frame has run: hands the finished frame to the GL thread - the
      * wide one when the core drew it ([MgbaCore.pkWideWidth]), with the window it shows. */
     fun publishFrame() {
-        val w = MgbaCore.pkWideWidth()
-        val win = camera.current
-        if (w > 0 && win != null) renderer.publish(w, MgbaCore.pkWideHeight(), win) else renderer.publish(0, 0, null)
+        try {
+            val w = MgbaCore.pkWideWidth()
+            val win = camera.current
+            if (w > 0 && win != null) renderer.publish(w, MgbaCore.pkWideHeight(), win) else renderer.publish(0, 0, null)
+        } catch (t: Exception) {
+            // Whatever went wrong with the window, the game's own frame still goes up.
+            Log.e("pokedaisy", "WIDE frame not published", t)
+            runCatching { renderer.publish(0, 0, null) }
+        }
     }
 
     /**
@@ -416,8 +422,13 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
                 }
             }
             val win = shownWin
-            if (win != null) windowQuad(win)
-            else if (placedWin != null) recomputeQuad()
+            try {
+                if (win != null) windowQuad(win)
+                else if (placedWin != null) recomputeQuad()
+            } catch (t: Exception) {
+                Log.e("pokedaisy", "WIDE window not placed", t)
+                recomputeQuad()
+            }
 
             var input = texId
             var last = plain

@@ -115,7 +115,10 @@ class FakeSlots : StateSlots {
     override fun requestUndoLoad() {}
 }
 
-class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>? = null) : CompanionSettings {
+class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>? = null, expandOffer: Boolean = false) : CompanionSettings {
+    private val offer = androidx.compose.runtime.mutableStateOf(expandOffer)
+    override val expandOffer get() = offer.value
+    override fun answerExpandOffer(turnOn: Boolean) { offer.value = false }
     private var ffSpeed = 4f
     private var ff = false
     private var music = com.pokedaisy.app.companion.FfMusicMode.STEADY
@@ -260,13 +263,14 @@ fun companion(
     hints: Boolean = true,
     battery: BatteryStatus = BatteryStatus(76, charging = false),
     cardBack: Boolean = false,
+    expandOffer: Boolean = false,
     snap: () -> SnapshotView = ::snapshot,
 ): () -> (@Composable () -> Unit) = {
     DeviceBattery.status.value = battery
     val sv = snap()
     val back = com.pokedaisy.app.companion.ui.CompanionBack().also { previewBack = it }
     val content: @Composable () -> Unit = {
-        CompanionScreen(sv, FakeSlots(), FakeSettings(hints), FakeBattleInput(busy), initialTab = tab, initialMonIndex = mon, initialCardBack = cardBack, back = back)
+        CompanionScreen(sv, FakeSlots(), FakeSettings(hints, expandOffer = expandOffer), FakeBattleInput(busy), initialTab = tab, initialMonIndex = mon, initialCardBack = cardBack, back = back)
     }
     content
 }
@@ -519,7 +523,7 @@ fun withHidden(make: () -> androidx.activity.ComponentActivity): androidx.activi
 }
 
 /** Runs the activity's onCreate against a fake library and returns what it passed to setContent. */
-fun activity(make: () -> androidx.activity.ComponentActivity): () -> (@Composable () -> Unit) = {
+fun activity(expandIntro: Boolean = false, make: () -> androidx.activity.ComponentActivity): () -> (@Composable () -> Unit) = {
     val ctx = android.content.Context()
     val roms = File(ctx.filesDir, "roms").apply { mkdirs() }
     // Dump-style file names, as players have them; firered-qol stays unrecognised (a QoL build).
@@ -538,6 +542,8 @@ fun activity(make: () -> androidx.activity.ComponentActivity): () -> (@Composabl
     File(ctx.filesDir, "saves").mkdirs()
     File(ctx.filesDir, "saves/firered-qol.sav").writeText("x")
     val prefs = Prefs(ctx)
+    // EXPAND's one-time introduction covers the Library: only its own shot shows it.
+    prefs.expandIntroSeen = !expandIntro
     prefs.steamGridDbApiKey = null
     prefs.libraryViewMode = 0
     prefs.romsFolder = null
@@ -627,6 +633,7 @@ fun main(args: Array<String>) {
     val tw = 1920; val th = 1080; val td = 2.5f
     val shots = listOf(
         Shot("$g-party", bw, bh, bd, companion("PARTY")),
+        Shot("$g-expand-offer", bw, bh, bd, companion("PARTY", expandOffer = true)),
         Shot("$g-party-detail", bw, bh, bd, companion("PARTY", mon = 0)),
         Shot("$g-party-detail-next", bw, bh, bd, companion("PARTY", mon = 0)) {
             onNodeWithContentDescription("Next Pokémon").performClick()
@@ -891,6 +898,7 @@ fun main(args: Array<String>) {
             }
         }),
         Shot("library-list", tw, th, td, activity { LibraryActivity() }),
+        Shot("library-expand-intro", tw, th, td, activity(expandIntro = true) { LibraryActivity() }),
         // A ROM imported with "add anyway?": the library tags what the second screen can't read.
         Shot("library-tag-unsupported", tw, th * 2, td, activity {
             val ctx = android.content.Context()

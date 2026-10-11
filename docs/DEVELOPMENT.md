@@ -864,6 +864,28 @@ only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would
   FireRed / LeafGreen and the CFRU hacks; 0 elsewhere so far) with BG0 showing a text box / menu or lines drawn apart (a
   transition) - a warp's fade or the map-name popup don't. The step comes back 0.5 s after. NPCs only exist ~2 tiles
   past the game's own view, so far out they pop in as you near them.
+- **Far-off objects** (`takeGhosts` / `drawGhosts`; FireRed family so far - `OBJ_GFX_INFO` and friends, mapped from the
+  decomp ELF's statics): the game spawns object events only ~2 tiles past its own view, so zoomed out a cuttable tree,
+  a boulder, an item ball or an NPC wasn't there until you neared it. Every template the save holds for the map
+  (`SaveBlock1.objectEventTemplates`: home tiles, a boulder where Strength left it) that isn't hidden by its flag or
+  already spawned is drawn from the ROM's graphics (`gObjectEventGraphicsInfoPointers`, its movement type's first
+  facing), where SpawnObjectEvent would put it, in its palette slot if loaded (fades, tints) else the ROM's palette, behind
+  every real sprite. NPCs come back at their home tile when you walk up, so that's where they're drawn.
+- **Menu screens** (`PK_WIDE_MODE_MENU`, `drawMenuRegion`): instead of the glow, the back BG layer goes on past the
+  edges, each row repeating the pattern found along its edge (`menuPeriod`: the smallest 8..32 px that repeats); a row
+  whose edge doesn't (a button reaching it) borrows the nearest row that does, so stripes and frames carry on without
+  copying any text or panel. Mode 0 / 1 tiled screens; anything else still glows.
+- **Never a crash**: every read goes through bounds-checked helpers and every index is clamped; sizes from memory are
+  bounded before they're multiplied; `_Static_assert`s keep the config rows in step with the slots. On top, `pk_wide_view`
+  runs under a fault guard (SIGSEGV / SIGBUS / SIGFPE / SIGILL on its thread while drawing jump back out; WIDE switches
+  itself off for the game - `pk_wide_fault` -> `MgbaCore.pkWideFault` -> a HUD notice - and the plain frame shows); a
+  fault anywhere else goes on to the handler before it. The camera, the frame hand-off and the GL placement each catch
+  and fall back. `mgba_dump`'s `widefuzz N SEED` throws random windows and random bytes / pointers at the RAM WIDE reads;
+  built with `-fsanitize=address,undefined -DPK_WIDE_NO_GUARD` it ran 33,000 frames over six games (map and menus) clean.
+- **Telling players** (`ExpandIntro`): once on the Library for anyone not on EXPAND (`Prefs.expandIntroSeen`; after
+  first-time setup), and once more on the companion the first time a game EXPAND knows opens while it's still off
+  (`Prefs.expandGameOfferSeen`, `CompanionSettings.expandOffer`) - "NOT NOW" on the Library doesn't stop that one, but
+  any answer to it settles both. TURN ON sets ASPECT > EXPAND. ui-preview: `library-expand-intro`, `*-expand-offer`.
 - **A phone upright** (`PortraitPanel.expand`, `GameStageLayout.expand`, `PortraitLayout.arrange(expand)`): the game
   takes everything above the companion (COMPANION's AT BOTTOM / UNDER GAME land in the same place then) and the touch
   pad lies over it; 1x is the frame at the view's full width (`levelsFor` takes the smaller fit), so the window goes

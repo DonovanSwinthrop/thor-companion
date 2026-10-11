@@ -292,6 +292,16 @@ class Prefs(context: Context) {
         set(v) = p.edit().putString("hidden_roms", v.joinToString("\n")).apply()
 
     /** First-time setup finished or skipped; it only shows while this is false and the library is empty. */
+    /** The Library's one-time EXPAND introduction ([com.pokedaisy.app.companion.ui.ExpandIntro]) has been answered. */
+    var expandIntroSeen: Boolean
+        get() = p.getBoolean("expand_intro_seen", false)
+        set(v) = p.edit().putBoolean("expand_intro_seen", v).apply()
+
+    /** EXPAND's one-time offer in a game it knows (the companion's ExpandIntro) has been answered. */
+    var expandGameOfferSeen: Boolean
+        get() = p.getBoolean("expand_game_offer_seen", false)
+        set(v) = p.edit().putBoolean("expand_game_offer_seen", v).apply()
+
     var setupDone: Boolean
         get() = p.getBoolean("setup_done", false)
         set(v) = p.edit().putBoolean("setup_done", v).apply()
