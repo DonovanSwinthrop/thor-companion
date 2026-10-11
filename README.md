@@ -126,7 +126,19 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
 - **Fast-forward music** (alpha) that keeps playing the song at its normal speed, instead of chipmunk sound.
 - **Save states** on hotkeys, with undo.
 - **Status bar** (optional): game, location, money, clock and battery above the game.
-- **Aspect**: the GBA's own 3:2, or stretched to fill a 16:9 top screen (Settings shows a preview of both).
+- **Aspect**: the GBA's own 3:2, stretched to fill a 16:9 top screen, or **EXPAND**: the overworld drawn past the
+  GBA's edges - beside the game on a wide screen, above and below it on a phone held upright - so the screen shows
+  more of the map with the pixels kept square (FireRed, LeafGreen, Emerald, Ruby and
+  Sapphire, every language and revision, plus Unbound, Radical Red, Lazarus, SoulGold, Heart and Soul, Gaia, Odyssey,
+  Amethyst 1.3.0, Glazed, Seaglass, Emerald Imperium, Emerald Rogue, Too Many Types 2, Recharged Yellow, Super Mariomon,
+  Ultra Violet, Sword and Shield Ultimate Plus and Celia's hack).
+  The extra strips are rebuilt every frame from the game's own map, tiles and sprites. Battles are wide too: their
+  scenery runs on past the edges and Pokémon, trainers and healthboxes slide in from off screen. Fog, ash and rain
+  reach the screen's edges, and dark caves stay dark around Flash's light. On the title
+  screen and in menus the strips glow with the colours at the game's edges, crossfading as you go in and out.
+  Settings shows a preview of each. With EXPAND on, **ZOOM** (R3, the right stick's click; any button under HOTKEYS) steps out to see more of the surroundings,
+  easing back in for battles, conversations and menus, and the **right stick** looks around (the view stays put until
+  you walk; held while walking, it looks ahead with your character kept on screen).
 - **Shaders** (optional): an LCD grid (plain or on paper), scanlines or a CRT look, and the colours as the GBA's own screen
   showed them - on the game and, if you like, the companion screen too.
 - **Controls**: remap every GBA button and hotkey, or turn hotkeys off. X and Y

@@ -17,7 +17,9 @@
 // sampling are two different execution contexts).
 //
 // stdin commands, one per line:
-//   wait N            - advance N frames with no keys held
+//   wait N            - advance N frames (no keys held, unless `keys` holds some)
+//   keys KEYS          - hold KEYS from now on, through every `wait` (NONE releases them) -
+//                        for frame-by-frame captures: `hold KEYS 1` runs 2 frames (it releases)
 //   press KEYS        - press KEYS for one frame then release (comma-separated:
 //                        A,B,SELECT,START,UP,DOWN,LEFT,RIGHT,L,R)
 //   hold KEYS N        - hold KEYS for N frames then release
@@ -25,9 +27,28 @@
 //                        a GB/GBC ROM writes DIR/wram.bin (C000-DFFF) + hram.bin (FF80-FFFE)
 //   vdump DIR          - write DIR/{vram,pal,oam,io}.bin (video memory, palette
 //                        RAM, OAM and the first 0x400 I/O registers) - what the
-//                        PPU is drawing from, for pulling a screen's graphics
+//                        PPU is drawing from, for pulling a screen's graphics - and
+//                        iolatch.bin, the registers as last written (write-only
+//                        ones like the BG scroll offsets read back as open bus)
 //   poke8/poke16/poke32 ADDR VAL - write RAM (hex or decimal), e.g. to put a
 //                        party mon into a state worth screenshotting
+//   wideon MARGIN      - run the app's WIDE (pk_wide.c) after every frame from now on, MARGIN
+//                        GBA px per side, for the game the ROM header names (repo builds only)
+//   widecheck [all]    - also rebuild the middle 240x160 each frame and compare it with the real
+//                        frame, pixel for pixel, printing frames that differ (the first 4 saved as
+//                        /work/miss_<frame>.ppm: real | rebuild); `widestats` prints
+//                        the tally since. Map frames only, unless `all` (battles: capture with
+//                        `layers 0x18`, since their rebuild is BG3 + sprites)
+//   wideview X Y W H   - from now on draw this window instead (the frame's pixels, its top-left
+//                        (0, 0); up to 800x800): ZOOM and the look-around, e.g. -200 -100 640 360
+//   widefuzz N SEED    - N frames of random windows and random bytes / pointers written over the RAM
+//                        WIDE reads: it must never crash (an ASan build reports any bad read)
+//   wideinfo [lines]   - print the last frame's mode, score, torn and close (ZOOM steps in) flags
+//   wideshot FILE      - write the last wide frame (the window) as a PPM
+//   widecentre FILE    - write the last rebuild of the middle 240x160 (widecheck on) as a PPM
+//   widerec FILE N     - run N frames, recording every wide frame into FILE (scripts/wide_gif.py)
+//   layers MASK        - draw only the video layers in MASK from the next frame on
+//                        (bit 0-3 = BG0-BG3, bit 4 = OBJ; 0x1F = all, the default)
 //   shot FILE          - write the current frame to FILE as a binary PPM (P6) -
 //                        no PNG dependency; `python3 -c 'from PIL import Image;
 //                        Image.open("x.ppm").save("x.png")'` converts it
@@ -52,16 +73,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <stdarg.h>
 
+// The library's build flags, before any mGBA header: struct mCore has fields under
+// USE_DEBUGGERS etc., and without them every member past those (enableVideoLayer, ...)
+// is read at the wrong offset.
+#if defined(__has_include)
+#if __has_include(<mgba/flags.h>)
+#include <mgba/flags.h>
+#endif
+#endif
 #include <mgba/core/core.h>
 #include <mgba/core/config.h>
 #include <mgba/core/blip_buf.h>
 #include <mgba/core/log.h>
 #include <mgba-util/vfs.h>
+#include <mgba-util/crc32.h>
 #include <mgba/internal/arm/arm.h>
 #include <mgba/internal/arm/isa-inlines.h>
+#include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gb/gb.h>
 #include <mgba/internal/gb/io.h>
 #include <mgba/internal/sm83/sm83.h>
@@ -73,6 +105,10 @@
 #if __has_include("../app/src/main/cpp/pk_cheats.c")
 #include "../app/src/main/cpp/pk_cheats.c"
 #define HAVE_PK_CHEATS 1
+#endif
+#if __has_include("../app/src/main/cpp/pk_wide.c")
+#include "../app/src/main/cpp/pk_wide.c"
+#define HAVE_PK_WIDE 1
 #endif
 #endif
 
@@ -90,6 +126,99 @@ enum {
 static struct mCore* core;
 static color_t* video;
 static unsigned videoW, videoH;
+
+#ifdef HAVE_PK_WIDE
+// WIDE (the app's pk_wide.c): run after every frame once `wideon`, as the app does.
+static bool wideOn, wideCheck, wideCheckBattles;
+static int wideDumped;   // misses saved as images since the last widecheck
+static struct PkWideView wideView;   // the window drawn: `wideon`'s strips, or `wideview`'s
+static uint32_t wideOut[PK_WIDE_MAX_VIEW_W * PK_WIDE_MAX_VIEW_H];
+static uint32_t wideCentre[PK_WIDE_W * PK_WIDE_H];
+static struct { int frames, checked, exact, unverified, battle, torn, worst, worstFrame; double ns, maxNs; } wideStats;
+
+static void wideAfterFrame(void) {
+    if (!wideOn) return;
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    pk_wide_view(core, (const uint32_t*) video, wideOut, wideView, wideCheck ? wideCentre : NULL);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double ns = (t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec);
+    wideStats.ns += ns;
+    if (ns > wideStats.maxNs) wideStats.maxNs = ns;
+    if (ns > 2e6) printf("wide: frame %u took %.1f ms (score %d)\n", core->frameCounter(core), ns / 1e6, pk_wide_last_score());
+    wideStats.frames++;
+    if (pk_wide_last_torn()) wideStats.torn++;
+    if (pk_wide_last_mode() == PK_WIDE_MODE_NONE || pk_wide_last_mode() == PK_WIDE_MODE_MENU) {   // a menu's: its back layer alone
+        wideStats.unverified++;
+        return;
+    }
+    if (pk_wide_last_mode() == PK_WIDE_MODE_BATTLE) wideStats.battle++;
+    // A battle's rebuild draws BG3 and sprites only: compare it only when asked (a capture with `layers 0x18`).
+    if (!wideCheck || (pk_wide_last_mode() == PK_WIDE_MODE_BATTLE && !wideCheckBattles)) return;
+    // The rebuild of the middle against the real frame, pixel for pixel (RGB).
+    int miss = 0, x0 = PK_WIDE_W, x1 = -1, y0 = PK_WIDE_H, y1 = -1;
+    for (int i = 0; i < PK_WIDE_W * PK_WIDE_H; i++) {
+        if (!(((wideCentre[i] ^ (uint32_t) video[(i / PK_WIDE_W) * videoW + i % PK_WIDE_W]) & 0xFFFFFF))) continue;
+        miss++;
+        int x = i % PK_WIDE_W, y = i / PK_WIDE_W;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+    }
+    // Every difference inside the partly shown tile column (row) at an edge the field is scrolled by: the game hasn't
+    // drawn that ring column into VRAM yet (Sword and Shield's "performance" builds wait for a whole tile) - its own
+    // stale tiles, not the rebuild's to match.
+    int hs = G->memory.io[0x14 >> 1] & 7, vs = G->memory.io[0x16 >> 1] & 7;   // BG1's scroll within a tile
+    bool staleEdge = miss && ((hs && ((x0 >= PK_WIDE_W - hs) || (x1 < 8 - hs))) || (vs && ((y0 >= PK_WIDE_H - vs) || (y1 < 8 - vs))));
+    wideStats.checked++;
+    if (!miss) wideStats.exact++;
+    else if (staleEdge && pk_wide_last_mode() == PK_WIDE_MODE_MAP) {
+        wideStats.checked--;
+        wideStats.unverified++;
+        printf("widecheck: frame %u: %d px differ in the scrolled-in edge tile (x %d-%d, y %d-%d), the game's stale ring (not counted)\n",
+               core->frameCounter(core), miss, x0, x1, y0, y1);
+    }
+    else if (pk_wide_last_vram_torn()) {
+        // VRAM written while the frame was drawn: its lines show two sets of tiles - not the rebuild's to match.
+        wideStats.checked--;
+        wideStats.unverified++;
+        printf("widecheck: frame %u: %d px differ, VRAM written mid-frame (not counted)\n", core->frameCounter(core), miss);
+    } else {
+        printf("widecheck: frame %u (%s): %d px differ\n", core->frameCounter(core),
+               pk_wide_last_mode() == PK_WIDE_MODE_BATTLE ? "battle" : "map", miss);
+        // The first few as images: the real frame, then the rebuild, side by side. A battle check (`widecheck all`,
+        // BG3 + sprites) saves only its battle frames: its map frames lack BG1-2 by design.
+        if (wideDumped < 4 && !(wideCheckBattles && pk_wide_last_mode() != PK_WIDE_MODE_BATTLE)) {
+            char path[64];
+            snprintf(path, sizeof(path), "/work/miss_%u.ppm", core->frameCounter(core));
+            FILE* f = fopen(path, "wb");
+            if (f) {
+                wideDumped++;
+                fprintf(f, "P6\n%d %d\n255\n", 2 * PK_WIDE_W, PK_WIDE_H);
+                for (int y = 0; y < PK_WIDE_H; y++)
+                    for (int x = 0; x < 2 * PK_WIDE_W; x++) {
+                        uint32_t c = x < PK_WIDE_W ? (uint32_t) video[y * videoW + x] : wideCentre[y * PK_WIDE_W + x - PK_WIDE_W];
+                        uint8_t rgb[3] = { (uint8_t) c, (uint8_t) (c >> 8), (uint8_t) (c >> 16) };
+                        fwrite(rgb, 1, 3, f);
+                    }
+                fclose(f);
+            }
+        }
+    }
+    if (miss > wideStats.worst) {
+        wideStats.worst = miss;
+        wideStats.worstFrame = (int) core->frameCounter(core);
+    }
+}
+#else
+static void wideAfterFrame(void) {}
+#endif
+
+static void runFrame(void) {
+    core->runFrame(core);
+    wideAfterFrame();
+}
 
 // mGBA's default logger is noisy (every unmapped I/O register write, DMA,
 // etc, straight to stdout/stderr) - fine for interactive debugging, useless
@@ -230,6 +359,14 @@ static void cmdVdump(const char* outDir) {
     dumpRegion(0x07000000, 0x400, path);
     snprintf(path, sizeof(path), "%s/io.bin", outDir);
     dumpRegion(0x04000000, 0x400, path);
+    // The registers as last written, write-only ones included (a bus read of BGxHOFS etc.
+    // is open bus): mGBA keeps every write in memory.io, so this is what the PPU drew with.
+    snprintf(path, sizeof(path), "%s/iolatch.bin", outDir);
+    FILE* f = fopen(path, "wb");
+    if (f) {
+        fwrite(((struct GBA*) core->board)->memory.io, 1, 0x400, f);
+        fclose(f);
+    }
     fprintf(stderr, "mgba_dump: dumped vram+pal+oam+io to %s (frame %u)\n", outDir, core->frameCounter(core));
 }
 
@@ -539,21 +676,24 @@ int main(int argc, char** argv) {
 
         if (!strcmp(cmd, "wait")) {
             sscanf(line, "%*s %d", &n);
-            for (int i = 0; i < n; i++) core->runFrame(core);
+            for (int i = 0; i < n; i++) runFrame();
+        } else if (!strcmp(cmd, "keys")) {
+            sscanf(line, "%*s %255s", arg1);
+            core->setKeys(core, strcmp(arg1, "NONE") ? parseKeys(arg1) : 0);
         } else if (!strcmp(cmd, "press")) {
             sscanf(line, "%*s %255s", arg1);
             uint32_t mask = parseKeys(arg1);
             core->setKeys(core, mask);
-            core->runFrame(core);
+            runFrame();
             core->setKeys(core, 0);
-            core->runFrame(core);
+            runFrame();
         } else if (!strcmp(cmd, "hold")) {
             sscanf(line, "%*s %255s %d", arg1, &n);
             uint32_t mask = parseKeys(arg1);
             core->setKeys(core, mask);
-            for (int i = 0; i < n; i++) core->runFrame(core);
+            for (int i = 0; i < n; i++) runFrame();
             core->setKeys(core, 0);
-            core->runFrame(core);
+            runFrame();
         } else if (!strcmp(cmd, "dump")) {
             sscanf(line, "%*s %255s", arg1);
             cmdDump(arg1);
@@ -630,6 +770,144 @@ int main(int argc, char** argv) {
             sscanf(line, "%*s %255[^\n]", arg1);
             cmdRomCheck(arg1);
 #endif
+#ifdef HAVE_PK_WIDE
+        } else if (!strcmp(cmd, "wideon")) {
+            sscanf(line, "%*s %d", &n);
+            // The game by its ROM's CRC32, as the app picks it (pk_wide_games.h).
+            size_t size = core->romSize(core);
+            uint8_t* bytes = malloc(size);
+            for (size_t i = 0; bytes && i < size; i++) bytes[i] = (uint8_t) core->busRead8(core, 0x08000000u + (uint32_t) i);
+            uint32_t crc = bytes ? doCrc32(bytes, size) : 0;
+            free(bytes);
+            wideOn = pk_wide_configure(crc);
+            wideView = (struct PkWideView) { -n, 0, PK_WIDE_W + 2 * n, PK_WIDE_H };
+            memset(&wideStats, 0, sizeof(wideStats));
+            printf("wideon: ROM %08x %s, margin %d\n", crc, wideOn ? "known" : "NOT KNOWN (WIDE off)", n);
+        } else if (!strcmp(cmd, "widefuzz")) {
+            // widefuzz N SEED: N frames of abuse for pk_wide - a random window each frame (empty, huge, far off) and
+            // random bytes / pointers written over the RAM it reads (VMap, gMapHeader, the camera, object events,
+            // sprites, the sprite order, SaveBlock1). The game may well crash inside the emulator; pk_wide mustn't
+            // (build with -fsanitize=address,undefined -DPK_WIDE_NO_GUARD to have every bad read reported).
+            unsigned seed = 1;
+            sscanf(line, "%*s %d %u", &n, &seed);
+            srand(seed);
+            const int slots[] = { PK_WIDE_VMAP, PK_WIDE_MAP_HEADER, PK_WIDE_CAMERA_OFFSET, PK_WIDE_OBJECT_EVENTS,
+                                  PK_WIDE_SPRITES, PK_WIDE_COORD_OFFSET, PK_WIDE_SPRITE_ORDER, PK_WIDE_SAVE_BLOCK1_PTR,
+                                  PK_WIDE_SPRITE_PAL_TAGS, PK_WIDE_SB1_TEMPLATES };
+            for (int k = 0; k < n; k++) {
+                wideView = (struct PkWideView) { rand() % 2000 - 1000, rand() % 1400 - 700, rand() % 900 - 20, rand() % 900 - 20 };
+                for (int m = rand() % 6; m > 0; m--) {
+                    int slot = slots[rand() % 10];
+                    uint32_t base = (uint32_t) C[slot];
+                    if (slot == PK_WIDE_SB1_TEMPLATES) {   // the far-off objects' templates, flags and vars in SaveBlock1
+                        uint32_t sb1 = C[PK_WIDE_SAVE_STATIC] ? (uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]
+                                                              : r32((uint32_t) C[PK_WIDE_SAVE_BLOCK1_PTR]);
+                        base = base && sb1 ? sb1 + base : 0;
+                    }
+                    if (!base) continue;
+                    uint32_t at = base + (uint32_t) (rand() % 0x800);
+                    if (rand() % 2) {
+                        const uint32_t ptrs[] = { 0x02000000u, 0x03000000u, 0x08000000u, 0x09000000u, 0x0E000000u, 0 };
+                        uint32_t v = ptrs[rand() % 6] | ((uint32_t) rand() & 0x01FFFFFFu);
+                        if (rand() % 4 == 0) v = (uint32_t) rand() * 2654435761u;
+                        core->busWrite32(core, at & ~3u, v);
+                    } else {
+                        core->busWrite8(core, at, (uint8_t) rand());
+                    }
+                }
+                if (rand() % 50 == 0) pk_wide_reset();
+                runFrame();
+            }
+            printf("widefuzz: %d frames done (seed %u), fault %d\n", n, seed, pk_wide_fault());
+        } else if (!strcmp(cmd, "wideview")) {
+            // wideview X Y W H: draw this window (the frame's pixels, its top-left (0, 0)) - ZOOM / look-around.
+            struct PkWideView v = { 0, 0, 0, 0 };
+            sscanf(line, "%*s %d %d %d %d", &v.x, &v.y, &v.w, &v.h);
+            if (v.w > PK_WIDE_MAX_VIEW_W) v.w = PK_WIDE_MAX_VIEW_W;
+            if (v.h > PK_WIDE_MAX_VIEW_H) v.h = PK_WIDE_MAX_VIEW_H;
+            if (v.w > 0 && v.h > 0) wideView = v;
+        } else if (!strcmp(cmd, "widecheck")) {
+            char what[16] = {0};
+            sscanf(line, "%*s %15s", what);
+            wideCheck = true;
+            wideCheckBattles = !strcmp(what, "all");
+            wideDumped = 0;   // each widecheck saves its own first few misses
+            memset(&wideStats, 0, sizeof(wideStats));
+        } else if (!strcmp(cmd, "widestats")) {
+            printf("wide: %d frames, %d battle, %d unverified (ambient edges), %d with torn sprite lists; centre checked on %d: "
+                   "%d exact, worst %d px (frame %d); %.0f us a frame on average, %.0f at most%s\n", wideStats.frames,
+                   wideStats.battle, wideStats.unverified, wideStats.torn, wideStats.checked, wideStats.exact, wideStats.worst,
+                   wideStats.worstFrame, wideStats.frames ? wideStats.ns / wideStats.frames / 1000 : 0,
+                   wideStats.maxNs / 1000, wideCheck ? " (with the centre check)" : "");
+        } else if (!strcmp(cmd, "widecentre")) {
+            // The last frame's rebuild of the middle 240x160 (widecheck on) as a PPM, to diff with `shot`.
+            sscanf(line, "%*s %255s", arg1);
+            FILE* f = fopen(arg1, "wb");
+            if (f) {
+                fprintf(f, "P6\n%d %d\n255\n", PK_WIDE_W, PK_WIDE_H);
+                for (int i = 0; i < PK_WIDE_W * PK_WIDE_H; i++) {
+                    uint8_t rgb[3] = { (uint8_t) wideCentre[i], (uint8_t) (wideCentre[i] >> 8), (uint8_t) (wideCentre[i] >> 16) };
+                    fwrite(rgb, 1, 3, f);
+                }
+                fclose(f);
+            }
+        } else if (!strcmp(cmd, "widerec")) {
+            // N frames (keys as `keys` holds them), every wide frame's RGB appended to FILE after a
+            // u32 width, height, count header - scripts/wide_gif.py turns it into an animation.
+            sscanf(line, "%*s %255s %d", arg1, &n);
+            FILE* f = fopen(arg1, "wb");
+            if (f) {
+                uint32_t hdr[3] = { (uint32_t) wideView.w, (uint32_t) wideView.h, (uint32_t) n };
+                fwrite(hdr, 4, 3, f);
+                for (int k = 0; k < n; k++) {
+                    runFrame();
+                    for (uint32_t i = 0; i < hdr[0] * hdr[1]; i++) {
+                        uint8_t rgb[3] = { (uint8_t) wideOut[i], (uint8_t) (wideOut[i] >> 8), (uint8_t) (wideOut[i] >> 16) };
+                        fwrite(rgb, 1, 3, f);
+                    }
+                }
+                fclose(f);
+            }
+        } else if (!strcmp(cmd, "wideinfo")) {
+            // How the last frame went: its mode (0 glow, 1 map, 2 battle), tilemap score (0..1000, -1 untried), torn.
+            printf("wideinfo: frame %u mode %d score %d torn %d close %d\n", core->frameCounter(core), pk_wide_last_mode(),
+                   pk_wide_last_score(), pk_wide_last_torn(), pk_wide_wants_close());
+            sscanf(line, "%*s %255s", arg1);
+            if (!strcmp(arg1, "lines")) {   // `wideinfo lines`: BG1's scroll per line as drawn, and as latched
+                printf("wideinfo: latched BG1 %d,%d; per line:", G->memory.io[0x14 >> 1] & 0x1FF, G->memory.io[0x16 >> 1] & 0x1FF);
+                for (int y = 0; y < PK_WIDE_H; y++) printf(" %d,%d", lineRegs(y)[0x14 >> 1] & 0x1FF, lineRegs(y)[0x16 >> 1] & 0x1FF);
+                printf("\n");
+            }
+        } else if (!strcmp(cmd, "wideghosts")) {
+            // The far-off objects the last snapshot holds (not spawned): box in VMap pixels, palette tag, whether it has colours.
+            const struct Snap* s = prev >= 0 ? &snaps[prev] : NULL;
+            printf("wideghosts: %d\n", s ? s->nghosts : -1);
+            for (int c = 0; s && c < s->nconn; c++)   // the maps they come from: where each sits in VMap cells
+                printf("wideghosts: conn %d.%d dir %d degree %d at %d,%d size %dx%d\n", s->conn[c].group, s->conn[c].num,
+                       s->conn[c].dir, s->conn[c].degree, s->conn[c].ox, s->conn[c].oy, s->conn[c].w, s->conn[c].h);
+            for (int i = 0; s && i < s->nghosts; i++) {
+                uint32_t pal[16];
+                const struct Ghost* g = &s->ghosts[i];
+                printf("wideghosts: %d,%d %dx%d tag %#x prio %d%s%s\n", g->x, g->y, g->w, g->h, g->palTag, g->prio,
+                       g->hflip ? " hflip" : "", ghostPalette(g->palTag, 0xFF000000u, pal) ? "" : " NO PALETTE");
+            }
+        } else if (!strcmp(cmd, "wideshot")) {
+            sscanf(line, "%*s %255s", arg1);
+            FILE* f = fopen(arg1, "wb");
+            if (f) {
+                fprintf(f, "P6\n%d %d\n255\n", wideView.w, wideView.h);
+                for (int i = 0; i < wideView.w * wideView.h; i++) {
+                    uint8_t rgb[3] = { (uint8_t) wideOut[i], (uint8_t) (wideOut[i] >> 8), (uint8_t) (wideOut[i] >> 16) };
+                    fwrite(rgb, 1, 3, f);
+                }
+                fclose(f);
+            }
+#endif
+        } else if (!strcmp(cmd, "layers")) {
+            char m[64] = {0};
+            sscanf(line, "%*s %63s", m);
+            unsigned mask = (unsigned) strtoul(m, NULL, 0);
+            for (size_t i = 0; i < 5; i++) core->enableVideoLayer(core, i, (mask >> i) & 1);
         } else if (!strcmp(cmd, "shot")) {
             sscanf(line, "%*s %255s", arg1);
             cmdShot(arg1);

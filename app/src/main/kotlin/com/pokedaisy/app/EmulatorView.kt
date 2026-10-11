@@ -23,7 +23,9 @@ import kotlin.math.roundToInt
 /**
  * Draws the mGBA RGBA framebuffer as an aspect-fit (or, with [stretch], view-filling)
  * nearest-filtered quad, optionally through [gbaColors] and a screen effect, and an [overlay]
- * around it (the game then sits in the overlay's window instead of the whole view).
+ * around it (the game then sits in the overlay's window instead of the whole view). With [wide]
+ * (SETTINGS > ASPECT > WIDE) it draws the wide frame instead whenever the core made one: the
+ * window [camera] picked around the game (ZOOM, the look-around), placed as it says, with no overlay.
  * Continuous render mode. The GL thread never reads the core's own buffer, which the emu
  * thread draws into line by line: each finished frame is copied out ([publishFrame]) and
  * that copy is what's uploaded. Uploading the live buffer showed a frame half drawn - the
@@ -38,7 +40,7 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
         get() = renderer.holdFrame
         set(v) { renderer.holdFrame = v }
 
-    /** Fill the whole view instead of keeping the GBA's 3:2 ([Prefs.stretchGame]). */
+    /** Fill the whole view instead of keeping the GBA's 3:2 (ASPECT > STRETCH, [Prefs.gameAspect]). */
     var stretch: Boolean = false
         set(v) {
             if (field == v) return
@@ -46,6 +48,21 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
             renderer.setStretch(v)
             reportGamePixel()
         }
+
+    /**
+     * WIDE ([WideScreen]): the core draws the window [camera] picks for this view each frame (the engine asks it,
+     * [EmulatorEngine.wideCamera]); frames drawn wide are shown where the window says.
+     */
+    var wide: Boolean = false
+        set(v) {
+            if (field == v) return
+            field = v
+            camera.reset()
+            reportGamePixel()
+        }
+
+    /** ZOOM and the look-around: which window of the scene this view shows. */
+    val camera = WideCamera()
 
     /** Called (UI thread) with one GBA pixel's height on screen, in view px, whenever it changes -
      * SHADERS on the companion draw their grid at that size ([CompanionColors]). */
@@ -55,11 +72,12 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
 
     private fun reportGamePixel() {
         if (frameW == 0 || width == 0 || height == 0) return
-        // As FrameRenderer.recomputeQuad: the game's height on screen, letterboxed or stretched, or in the overlay.
+        // As FrameRenderer.recomputeQuad: the game's height on screen, letterboxed or stretched, or in the overlay
+        // (WIDE's frame is never wider than the view and has no overlay, so it's always the view's height).
         val img = overlayImage
         val h = when {
+            wide || stretch && img == null -> height.toFloat()
             img != null -> placement(img, width, height, frameW, frameH, stretch).game.h
-            stretch -> height.toFloat()
             else -> minOf(height.toFloat(), width * frameH.toFloat() / frameW)
         }
         onGamePixel?.invoke(h / frameH)
@@ -67,6 +85,8 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        camera.viewW = w
+        camera.viewH = h
         refreshOverlay()
         reportGamePixel()
     }
@@ -220,17 +240,30 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
     // thread that has already exited - a bind or unbind sent then was lost (and
     // the next GL thread could read a freed buffer). See PokeDaisyActivity.arrangeScreens.
 
-    /** Called once after the core is up. */
-    fun bindCore(buffer: ByteBuffer, width: Int, height: Int) {
-        renderer.bind(buffer, width, height)
+    /** Called once after the core is up; [wideBuffer] is [MgbaCore.pkWideBuffer] (null: no WIDE for this core). */
+    fun bindCore(buffer: ByteBuffer, wideBuffer: ByteBuffer?, width: Int, height: Int) {
+        renderer.bind(buffer, wideBuffer, width, height)
         frameW = width
         frameH = height
         // A built-in frame is drawn around the game's own size (a Game Boy's is smaller).
         post { refreshOverlay(); reportGamePixel() }
     }
 
-    /** Emu thread, right after a frame has run: hands the finished frame to the GL thread. */
-    fun publishFrame() = renderer.publish()
+    /** Emu thread, right after a frame has run: hands the finished frame to the GL thread - the
+     * wide one when the core drew it ([MgbaCore.pkWideWidth]), with the window it shows. */
+    fun publishFrame() {
+        try {
+            // A fast-forward frame the window wasn't drawn for: the screen keeps the last one (never a plain frame between).
+            if (wide && MgbaCore.pkWideSkipped()) return
+            val w = MgbaCore.pkWideWidth()
+            val win = camera.current
+            if (w > 0 && win != null) renderer.publish(w, MgbaCore.pkWideHeight(), win) else renderer.publish(0, 0, null)
+        } catch (t: Exception) {
+            // Whatever went wrong with the window, the game's own frame still goes up.
+            Log.e("pokedaisy", "WIDE frame not published", t)
+            runCatching { renderer.publish(0, 0, null) }
+        }
+    }
 
     /**
      * GL thread, once per draw: in RENDERMODE_CONTINUOUSLY the previous swap has just
@@ -278,10 +311,20 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
     private class FrameRenderer : Renderer {
         /** The core's own frame buffer, read only by [publish] (the emu thread). */
         private var buffer: ByteBuffer? = null
-        /** The last finished frame, copied out of [buffer]; what the GL thread uploads. */
+        /** The core's WIDE frame buffer ([MgbaCore.pkWideBuffer]), read only by [publish]; null without WIDE. */
+        private var wideBuffer: ByteBuffer? = null
+        /** The last finished frame, copied out of [buffer] or [wideBuffer]; what the GL thread uploads. */
         private var ready: ByteBuffer? = null
         /** [ready] holds a frame the texture doesn't have yet. */
         private var fresh = false
+        /** The core's frame size, and [ready]'s (a WIDE window's, with [readyWin]). Under [frameLock]. */
+        private var frameW = 0
+        private var frameH = 0
+        private var readyW = 0
+        private var readyH = 0
+        private var readyWin: WideCamera.Window? = null
+        /** The window the texture holds (null: the plain frame, placed by [recomputeQuad]). */
+        private var shownWin: WideCamera.Window? = null
         private var texW = 0
         private var texH = 0
         private var surfaceW = 0
@@ -347,26 +390,42 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
         /** Guards [ready] / [fresh] only, so a copy never waits on a whole draw (taken after [lock]). */
         private val frameLock = Any()
 
-        fun bind(buf: ByteBuffer, w: Int, h: Int) = synchronized(lock) {
+        fun bind(buf: ByteBuffer, wide: ByteBuffer?, w: Int, h: Int) = synchronized(lock) {
             synchronized(frameLock) {
                 buffer = buf.also { it.order(ByteOrder.nativeOrder()) }
+                wideBuffer = wide?.also { it.order(ByteOrder.nativeOrder()) }
                 // A new one each time: a restarted core mustn't show the last game's frame first.
-                ready = ByteBuffer.allocateDirect(buf.capacity()).order(ByteOrder.nativeOrder())
+                ready = ByteBuffer.allocateDirect(maxOf(buf.capacity(), wide?.capacity() ?: 0)).order(ByteOrder.nativeOrder())
                 fresh = false
+                frameW = w
+                frameH = h
+                readyW = w
+                readyH = h
+                readyWin = null
             }
+            shownWin = null
             texW = w
             texH = h
             texAllocated = false
             dirtyGeometry = true
         }
 
-        /** Emu thread, between frames (so [buffer] is whole): copies it into [ready]. */
-        fun publish() = synchronized(frameLock) {
-            val src = buffer ?: return
+        /** Emu thread, between frames (so [buffer] is whole): copies it - or, with [win], the WIDE window
+         * [wideW] x [wideH] - into [ready]. */
+        fun publish(wideW: Int, wideH: Int, win: WideCamera.Window?) = synchronized(frameLock) {
+            val wideSrc = wideBuffer?.takeIf { wideW > 0 && wideH > 0 && win != null }
+            val src = wideSrc ?: buffer ?: return
             val dst = ready ?: return
+            val w = if (wideSrc != null) wideW else frameW
+            val h = if (wideSrc != null) wideH else frameH
             src.position(0)
+            src.limit(minOf(src.capacity(), dst.capacity(), w * h * 4))
             dst.position(0)
             dst.put(src)
+            src.limit(src.capacity())
+            readyW = w
+            readyH = h
+            readyWin = if (wideSrc != null) win else null
             fresh = true
             (frameLock as Object).notifyAll()
         }
@@ -468,6 +527,12 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
             // is held only for the copy into GL, not the passes below.
             synchronized(frameLock) {
                 val buf = ready ?: return  // set with buffer by bind
+                if (fresh && !holdFrame() && (readyW != texW || readyH != texH)) {
+                    // WIDE came on or off, or ZOOM / the look-around changed the window's size: a texture of the new size.
+                    texW = readyW
+                    texH = readyH
+                    texAllocated = false
+                }
                 if (!texAllocated) {
                     // The last frame published (a new GL context after SWAP SCREENS has none yet).
                     buf.position(0)
@@ -477,6 +542,8 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
                     )
                     texAllocated = true
                     fresh = false
+                    shownWin = readyWin
+                    framesShown += 1
                 } else if (fresh && !holdFrame()) {
                     // A held frame keeps the texture as is: the last frame shown stays up.
                     buf.position(0)
@@ -485,12 +552,21 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
                         GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf,
                     )
                     fresh = false
+                    shownWin = readyWin
                     framesShown++
                 }
             }
+            val win = shownWin
+            try {
+                if (win != null) windowQuad(win)
+                else if (placedWin != null) recomputeQuad()
+            } catch (t: Exception) {
+                Log.e("pokedaisy", "WIDE window not placed", t)
+                recomputeQuad()
+            }
 
-            // No window: the overlay is a background, under the game.
-            if (!overlayOnTop) drawOverlay()
+            // No window: the overlay is a background, under the game. A WIDE window has none (it fills the view).
+            if (!overlayOnTop && win == null) drawOverlay()
 
             var input = texId
             var last = plain
@@ -524,7 +600,7 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
             GLES20.glViewport(0, 0, surfaceW, surfaceH)
             drawQuad(last, input, viewUv, pos, smooth, smoothed = smoothed != 0 && !prescaled)
-            if (overlayOnTop) drawOverlay()
+            if (overlayOnTop && win == null) drawOverlay()
         }
 
         /** The overlay, if any, over what's drawn (premultiplied alpha, as Android's bitmaps are). */
@@ -648,7 +724,30 @@ class EmulatorView(context: Context) : GLSurfaceView(context) {
             return effectProgram
         }
 
+        private var placedWin: WideCamera.Window? = null
+        private val winQuad = FloatArray(8)
+        private val winPos: FloatBuffer = floats(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
+
+        /** A WIDE window's quad: [WideCamera.Window.offX] / [offY] from the view's top-left, its pixels [scale] each. */
+        private fun windowQuad(win: WideCamera.Window) {
+            if (win === placedWin) return
+            placedWin = win
+            val x0 = -1f + 2f * win.offX / surfaceW
+            val x1 = x0 + 2f * win.w * win.scale / surfaceW
+            val y1 = 1f - 2f * win.offY / surfaceH
+            val y0 = y1 - 2f * win.h * win.scale / surfaceH
+            winQuad[0] = x0; winQuad[1] = y0; winQuad[2] = x1; winQuad[3] = y0
+            winQuad[4] = x0; winQuad[5] = y1; winQuad[6] = x1; winQuad[7] = y1
+            winPos.position(0)
+            winPos.put(winQuad)
+            winPos.position(0)
+            pos = winPos
+            quadW = win.w * win.scale
+            quadH = win.h * win.scale
+        }
+
         private fun recomputeQuad() {
+            placedWin = null
             val img = overlay
             if (img != null) {
                 val p = placement(img, surfaceW, surfaceH, texW, texH, stretch)

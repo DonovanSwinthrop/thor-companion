@@ -2,6 +2,7 @@ package com.pokedaisy.app
 
 import android.content.Context
 import com.pokedaisy.app.companion.FfMode
+import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.GridStrength
 import com.pokedaisy.app.companion.ScreenFilter
 import com.pokedaisy.app.companion.Smoothing
@@ -192,10 +193,12 @@ class Prefs(context: Context) {
         get() = p.getBoolean("status_bar_on_companion", false)
         set(v) = p.edit().putBoolean("status_bar_on_companion", v).apply()
 
-    /** Whether the game is stretched to fill the top screen (16:9) instead of kept at the GBA's 3:2. */
-    var stretchGame: Boolean
-        get() = p.getBoolean("stretch_game", false)
-        set(v) = p.edit().putBoolean("stretch_game", v).apply()
+    /** How the game sits on the top screen: the GBA's 3:2, stretched to fill it, or WIDE (more of the
+     * map at the sides). Before WIDE this was a boolean, "stretch_game", which still picks STRETCH. */
+    var gameAspect: GameAspect
+        get() = GameAspect.entries.firstOrNull { it.name == p.getString("game_aspect", null) }
+            ?: if (p.getBoolean("stretch_game", false)) GameAspect.STRETCH else GameAspect.ORIGINAL
+        set(v) = p.edit().putString("game_aspect", v.name).remove("stretch_game").apply()
 
     /** SCREEN > OVERLAY: the frame around the game, an [com.pokedaisy.app.overlay.OverlayChoice.key] - "" (none, the
      * default), a built-in frame ("builtin:DAISY") or an imported overlay ("user:<its folder>"). */
@@ -341,6 +344,16 @@ class Prefs(context: Context) {
         set(v) = p.edit().putInt("app_open_count", v).apply()
 
     /** First-time setup finished or skipped; it only shows while this is false and the library is empty. */
+    /** The Library's one-time EXPAND introduction ([com.pokedaisy.app.companion.ui.ExpandIntro]) has been answered. */
+    var expandIntroSeen: Boolean
+        get() = p.getBoolean("expand_intro_seen", false)
+        set(v) = p.edit().putBoolean("expand_intro_seen", v).apply()
+
+    /** EXPAND's one-time offer in a game it knows (the companion's ExpandIntro) has been answered. */
+    var expandGameOfferSeen: Boolean
+        get() = p.getBoolean("expand_game_offer_seen", false)
+        set(v) = p.edit().putBoolean("expand_game_offer_seen", v).apply()
+
     var setupDone: Boolean
         get() = p.getBoolean("setup_done", false)
         set(v) = p.edit().putBoolean("setup_done", v).apply()

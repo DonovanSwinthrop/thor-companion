@@ -746,12 +746,13 @@ rebindable in Settings > HOTKEYS. Values are Android key names, comma-separated.
 | `save_state` (current slot) | `SELECT`+`R1`, `BUTTON_Y`, keyboard `F1` |
 | `load_state` (current slot) | `SELECT`+`L1`, `BUTTON_X`, keyboard `F2` |
 | `undo_save` / `undo_load`   | keyboard `F3` / `F4`                     |
-| `slot_next`                 | `BUTTON_THUMBR` (right-stick click), `]` |
+| `slot_next`                 | keyboard `]`                             |
 | `slot_prev`                 | `BUTTON_THUMBL` (left-stick click), `[`  |
 | `ff_hold`                   | `BUTTON_R2`, keyboard `SPACE`            |
 | `ff_toggle`                 | keyboard `TAB`                           |
 | `speed_cycle`               | `BUTTON_L2`, keyboard `=`                |
 | `slowmo_hold`               | keyboard `-`                             |
+| `zoom` (WIDE's zoom steps)  | `BUTTON_THUMBR` (right-stick click), `C` |
 | `exit_game`                 | `SELECT`+`START`, keyboard `ESC`         |
 
 Single-button defaults use only buttons the GBA itself doesn't need; the SELECT
@@ -798,6 +799,211 @@ ON, imported ones OFF. `Prefs.cheatsEnabled` is the master switch (off by defaul
   for a game with a set, and the ACHIEVEMENTS tab shows PAUSED: CHEATS ON.
 - **Savestates** don't carry cheats (`SAVESTATE_CHEATS` isn't in the flags); a state made with a
   cheat on does carry the memory it wrote, like any emulator.
+
+## WIDE (ASPECT > EXPAND)
+
+SETTINGS > ASPECT > EXPAND (`GameAspect.WIDE` / WIDE in the code and prefs; renamed on screen once it also went
+up and down on phones) fills a wide screen with the game at full height and square pixels: the middle is the
+game's own 240x160 frame, the strips beside it (22 GBA px per side on the Thor's 1920x1080) are the overworld,
+rebuilt every frame from the game's memory by `app/src/main/cpp/pk_wide.c`. A wider PPU can't do it: the field
+only keeps a 256x256 ring of tiles in VRAM (`field_camera.c`), so the rest would be wrap-around garbage.
+
+- **What it draws from**: the map grid in `VMap` (the map + 7 metatiles of stitched connections per side); past
+  that, the connected maps' own cells from the ROM (`gMapHeader.connections`, the inverse of `fieldmap.c`'s
+  `Fill*Connection`), else the border. Metatiles from the layout's tilesets (ROM), drawn as `DrawMetatile` does
+  (BG1 top / BG2 middle / BG3 bottom by layer type; FireRed names its buffers misleadingly: `gBGTilemapBuffers2`
+  is BG1). Pixels from VRAM and palette RAM, so animated tiles and fades are the game's. Sprites: `gSprites` in
+  `gSpriteOrder` with subsprites and semi-transparent blending, like `BuildOamBuffer`; NPCs the game hid only for
+  being more than 16 px off screen (`ObjectEvent.offScreen`) are shown - they stay loaded ~2 metatiles out.
+- **Timing**: the main loop computes frame N while N-1 is on screen and the VBlank handler uploads it, so the RAM
+  after frame N-1 describes the frame now drawn: `pk_wide.c` keeps that snapshot. When a step's row redraw runs the
+  main loop past VBlank, a snapshot is caught mid-update (pos moved, the ring offsets not yet). So the camera comes
+  from the BG scroll registers the frame was drawn with (mGBA's `memory.io`: write-only, open bus on a bus read)
+  plus the ring's anchor from RAM, and every candidate (both snapshots, pos +-1 metatile) is scored against the
+  frame's own BG1-3 tilemaps in VRAM; the sprite list must match the frame's OAM, else the last good one is kept.
+- **Off the map: ambient edges.** Anything that doesn't check out - not mode 0 with BG1-3 on, windows hiding a layer
+  at the screen's edges (a Flash-dark cave, a battle transition), under 90% of the tilemap matching (title, menu
+  screens, battles) - crossfades the strips (16 frames) from the last map strips, frozen, to a glow spread from the
+  game's own edge columns (`ambientEdges`): each strip column takes its row's colour from the 12-px edge band,
+  blurred over more rows the further out it is, from full brightness at the game's edge to ~47% at the screen's,
+  smoothed over frames so text passing the edge doesn't flicker it. It follows whatever the game shows (the title's
+  flames, a battle's sky, flashes and fades) and invents nothing. Back on the map it crossfades to the map strips.
+  The map strips also take BLDCNT's brightness fades (BLDY), not only palette ones.
+- **Battles are wide too.** The battle background (BG3, `battle_bg.c`'s template: char base 2, screen base 26, a
+  64x32 tilemap) is 512 px wide in VRAM - sky, terrain and both platforms all the way across - so with
+  `gMain.inBattle` (bit 1 of `gMain + 0x439`) set and BG3 in that layout, the strips are what a wider PPU would draw:
+  BG3 from VRAM, the frame's real OAM where sprites reach past the edges (affine ones too, with mGBA's own transform
+  math: the battlers), windows continued past the edges (the opening band spans the whole width), blending and
+  brightness. BG0-2 (text, menus, animations) aren't drawn past 240; where BG3 is transparent (the text box rows)
+  the strip goes on with the game's own edge pixel of that row - the solid dark band the text box and menus sit on
+  (the glow there looked muddy, the user's call). Per-scanline registers: games rewrite scroll / windows between lines (the intro's sliding
+  halves), so a hook on mGBA's `drawScanline` copies DISPCNT..BLDY as each line is drawn (it runs at HBlank's start,
+  before that HBlank's DMA writes the next line's values). Checked like the map: captured with only BG3 + OBJ on
+  (`layers 0x18`), the rebuild of the middle matched every battle frame of both games pixel for pixel - intro slide,
+  send-out, menu, RUN, exit.
+- **Line by line, on the map too.** The map rebuild draws each scanline with its own registers (the `drawScanline`
+  hook): layer enables, windows and scroll (a line scrolled apart from the latched value - a transition's slices - is
+  that much further along the map), and the camera score samples them the same way. So battle-start wedges and
+  Flash's dark circle are drawn as the game draws them, and a pixel the windows leave without a map layer is a hole
+  that continues the row's edge pixel (dark caves stay dark to the screen's edges). Sprites: affine ones are drawn
+  (mGBA's transform), and screen-space sprites (not following the camera) wrap like OAM's 9 / 8-bit positions.
+  Blending and brightness are done on the widened 8-bit colour, as mGBA's 32-bit renderer does, so they round alike.
+- **Weather** is screen-space sprites (`GFXTAG_*` 0x1201-0x1206: fog, ash, sandstorm, bubbles, rain) laid only over the
+  game's 240 px - fog / ash / sandstorm as 64 px grids, rain at random - so each is drawn again 256 px either way, in
+  the margins only: it goes on seamlessly however wide the screen.
+- **The sweep** (both games, `mgba_dump` with BG0 off so text boxes and popups don't count): warp in with the game's
+  own `warp` script command (`0x39 group num warpId x y`), walk a loop with `widecheck` on. Pixel-exact on every map
+  frame in towns, forests, lit and Flash-dark caves, gyms, fog (Lost Cave), shade (Berry Forest, Abandoned Ship),
+  ash (Route 113, Mt. Chimney), rain (Routes 119, 120), sandstorm route, Seafoam, Meteor Falls. Known leftovers, all
+  in the middle and never seen in the margins: a door's opening animation (drawn into VRAM, not the map data -
+  arriving by warp shows one), the Pokémon Mansion's top line while the camera is at the map's top edge (the game's
+  own stale tile row), a diving bubble a pixel off underwater, and Granite Cave B1F's Flash circle for the frames it
+  fades back in after a battle.
+- **Transitions, recorded**: `mgba_dump`'s `widerec` records every wide frame; `scripts/wide_gif.py` makes a GIF or a
+  contact sheet. Checked on both games: boot (intro, title, Continue, FireRed's recap) to the map, and map -> a
+  scripted wild battle (`setwildbattle` / `dowildbattle` / `end` poked at `0x0203FF00`, `call
+  ScriptContext_SetupScript`: FireRed rev 1 `0x08069AF9`, Emerald `0x08098EF9`) -> RUN -> map.
+- **Games**: every retail FireRed, LeafGreen, Emerald, Ruby and Sapphire the user owns (English, Japanese, Spanish,
+  German, French, Italian; every revision): `app/src/main/cpp/pk_wide_games.h`, one row of addresses per ROM by CRC32, generated by
+  `scripts/gen_wide_tables.py <roms dirs>` from the English references (FireRed rev 1, Emerald: from the decomp ELFs,
+  QoL builds, mapped onto retail through the literal pools - only FireRed's `VMap` / `gSaveBlock1Ptr` differ; Ruby
+  rev 1: pret/pokeruby's `ruby_rev1` ELF, byte-identical to retail) through
+  each ROM's literal pools (`port_retail.py`'s `map_literal`). Retail only, by the SHA-1s the app lists (GameTitles,
+  RetailPortsGen): hacks and the QoL builds share the game codes but move addresses. `gMapGroups` gets one pool vote,
+  so it's also checked by the shapes of the maps it leads to. Each engine's layout (metatiles, attributes, border) is
+  `pk_wide.c`'s `FAMILIES`. Ruby / Sapphire are Emerald's layout with their own quirks: `gSaveBlock1` is static (no
+  pointer), `gSpriteCoordOffsetY` isn't next to X, `gMain.inBattle` is at +0x43D, and a `struct Subsprite` is 8 bytes
+  (u16 x, y + the bits, padded to 4 by agbcc - the menu cursor's RAM table showed it); Japanese R/S keep
+  FireRed / Emerald's gMain and 4-byte subsprites (`PK_WIDE_FAMILY_RS_JA`). Kotlin asks native (`WideScreen.gameFor` -> `pkWideKnows`); a game WIDE doesn't know shows
+  as ORIGINAL (the companion's pick-list tags WIDE NOT YET). `scripts/verify_wide.py` boots every ROM in the table
+  headless with its save and checks a walk (BG0 off) and a scripted battle (BG3 + OBJ) frame by frame - all 81 in the
+  table pass (build/wide/verify.md; a hack marked `pending` is checked too - its row is under `PK_WIDE_PENDING`, which only
+  verify_wide.py's build defines - but the app doesn't have it). Rerun both after
+  touching pk_wide.c.
+- **ROM hacks** (`HACKS` in `gen_wide_tables.py`, by SHA-1, each with its host_roms.conf save and any boot presses):
+  - *CFRU* (Unbound, its French build, Radical Red) keep FireRed rev 0's RAM and code, so their addresses map through the
+    literal pools like a retail port's; only `gMapGroups` is overridden (the app's GuideTables value - Unbound repoints it
+    and XORs its entries with 0x00B749DE: `MAP_GROUPS_XOR`). Unbound's DrawMetatile writes 0 to BG3 under a NORMAL
+    metatile where retail writes 0x3014 (`NORMAL_BG3`), and its snow lives in world space, relying on OAM's 9 / 8-bit wrap
+    (a flake at y -232 shows at 24): world sprites are wrapped like the PPU does wherever that lands on the real screen
+    (`hardwareWrap`), except NPCs we show past the edge on purpose.
+  - *Binary FireRed hacks* (Odyssey, Gaia, Amethyst 1.3.0, Celia, Sword and Shield Ultimate Plus, Ultra Violet - under
+    its own game code PUVV) and *binary Emerald hacks* (Glazed, Emerald Kaizo - booted with retail Emerald's save -, Super Mariomon, whose RAM sits 0x80 lower from the
+    sprites on: `sSpriteOrder` from find_wide_addrs.py) map through the literal pools the same way, `gMapGroups` from the
+    app's GuideTables. Super Mariomon 1.3 / 1.2.x boot the 1.5.1 save cut to their SaveBlock1 (`trim_save_block1.py`).
+  - *pokeemerald-expansion* (Lazarus, SoulGold's four builds, Seaglass, Imperium, Rogue, Heart and Soul, Too Many Types 2;
+    `PK_WIDE_FAMILY_EX`) and *Recharged Yellow* (a gcc pokefirered: FireRed's map and triple-layer metatiles with
+    expansion's objects, `PK_WIDE_FAMILY_FR_EX`): gcc builds share no code with retail,
+    so `scripts/find_wide_addrs.py` finds each address in headless dumps (boot, a step right, a step down: VMap by the
+    layout's size, the camera by HOFS / tile offsets, gSprites by the OAM, the coord offsets from the player's sprite,
+    sSpriteOrder as a permutation). Expansion moved `ObjectEvent.spriteId` to +0x23 (graphicsId is a u16). Both hacks use
+    triple-layer metatiles - 24 bytes, BG3 / BG2 / BG1 (`METATILE_SIZE`) - and SoulGold 11-bit metatile ids with 1024
+    primary metatiles (`METATILE_MASK`, `PRIMARY_OVERRIDE`). gcc places the camera pans where it likes (`PAN_OFF`: +8 in
+    agbcc builds and Lazarus, -4 in SoulGold, 12 in Heart and Soul). Heart and Soul keeps SaveBlock1's pos 4 bytes in
+    (`SB1_POS`; find_wide_addrs.py's `--pos`) and mixes layouts: its own (MapLayout +0x18 = 2) split the primary tileset
+    at 640 metatiles like FireRed, the Emerald ones it kept (0) at 512 (`LAYOUT_VERSIONED`: the split is per snapshot,
+    `syncSplit`). Its boot is `rhh_splash.txt` (`boot_file`: default.txt's A presses talk to the follower). Rogue's
+    gMapGroups came from its save: the current map's header in ROM -> its group's array -> the table.
+  - *Pending* (mapped, checked, not in the app): Orange Islands (the top row, half the walk), Quetzal (its own SaveBlock1,
+    pos 0x470 in: most map frames differ), R.O.W.E. (12-bit metatile ids - `METATILE_MASK` 0xFFF, elevation in the top
+    nibble - and a 2048-metatile primary tileset get its map found, `NUM_METATILES_TOTAL` 4096; one NPC's sprite and a
+    building's metatiles still differ).
+  - *The game's own stale edge*: Sword and Shield's "performance" builds (and Amethyst 1.4.1 once) don't draw the tile
+    column scrolling in until a whole tile has - the real frame shows the ring's old tiles there and the rebuild the map.
+    `widecheck` doesn't count a frame whose differences all lie inside the partly shown edge tile column / row of BG1's
+    scroll (`x >= 240 - (HOFS & 7)` or `x < 8 - (HOFS & 7)`, the same for rows), and says so.
+- **Transitions that slide lines** (Unbound's wild battle start): the latched scroll is only the last line's, and the
+  lines slide both ways around the camera, so the camera's own scroll is also taken from RAM (sFieldCameraOffset +
+  sHorizontal / sVerticalCameraPan + 8, as FieldUpdateBgTilemapScroll writes it) and scored as a candidate. On the real
+  screen a slid line shows the 256-px ring wrapped around (the map where it holds the camera's view, leftover tiles past
+  it - which the next frame may already have redrawn, so those pixels are the real frame's); the margins show the map
+  slid along. `mgba_dump`'s `wideinfo lines` prints each line's scroll.
+- **The window** (`WideCamera`, `pk_wide_view`): pk_wide.c draws any rectangle around the frame - beside, above,
+  below, or one the frame only partly covers (rows past the screen take its edge line's registers; holes go on with
+  the frame's nearest edge pixel; the glow spreads from all four edges). Before each frame the engine asks
+  `EmulatorView.camera` for the window (`pkWideSetView`), and `publishFrame` hands the GL thread the drawn window with
+  where it goes: whole GBA pixels drawn, the quad offset by the fraction (`WideCamera.Window.offX` / `offY`), so zoom
+  and look glide instead of stepping. Up to 800x800 (`PK_WIDE_MAX_VIEW_W` / `_H`). Savestate thumbnails stay 240x160.
+- **ZOOM** (the ZOOM hotkey: R3 - the right stick's click, which used to be SLOT NEXT - or C on a keyboard): steps out from 1x (the game at the view's full height) to
+  whole screen pixels per GBA pixel showing >= 1.2x more each (`WideCamera.levelsFor`: the Thor's 6.75 -> 5 / 4 / 3,
+  ~1.35x / 1.7x / 2.25x the map). It eases back to 1x whenever `pk_wide_wants_close`: not on the map (battles, menu
+  screens) or the field's controls locked (`CONTROLS_LOCKED`: sLockFieldControls / sScriptContext2Enabled - every game
+  in the table: the decomp ELFs for retail, the Lock / Unlock / ArePlayerFieldControlsLocked trio for the gcc builds,
+  and for Recharged Yellow, whose lock is inlined, the byte that's 1 under a scripted message and 0 through the test walk) with BG0 showing a text box / menu or lines drawn apart (a
+  transition) - a warp's fade or the map-name popup don't. The step comes back 0.5 s after. NPCs only exist ~2 tiles
+  past the game's own view, so far out they pop in as you near them.
+- **Connected maps, zoomed out** (`readConnections`, `blockIn`, `foreignFor`): the game copies 7 metatiles of each
+  neighbour into VMap and draws them with the current map's tilesets; past that, a neighbour may have tilesets of its
+  own (FireRed's Route 18 is Celadon's, Fuchsia City its own), so off the real frame each connected map - its VMap strip
+  too - is drawn with its own: metatiles, tiles LZ77-decompressed from the ROM (cached, 4 tileset pairs, never replaced
+  mid-frame), palettes from the ROM; what it shares with the current map stays VRAM / palette RAM. On the real frame,
+  exactly as the game. Neighbours' neighbours are drawn too (Route 20 from Fuchsia City), and where no map is, the border
+  of the neighbour on that side - so the scenery doesn't change as you cross. Their object templates (from their headers)
+  are ghosts as well, unless the current map has a clone of them.
+- **Fast-forward** draws one window per ~12 ms (`EmulatorEngine.WIDE_DRAW_NANOS`, `pkWideSetDraw`): FF runs several
+  frames per screen refresh and only one is seen; the rest only keep the RAM after them (`pk_wide_skip`) and aren't
+  published. At 4x zoomed out it had the emulation thread at 100% of a core (the Thor ran hot, 174 fps of 240); now ~35%.
+- **Far-off objects** (`takeGhosts` / `drawGhosts`; `OBJ_GFX_INFO` and friends - the decomp ELFs' statics for retail
+  FireRed / Emerald / Ruby, mapped to every language and checked by content in gen_wide_tables.py, since the graphics
+  table gets one pool vote; `scripts/find_wide_objects.py` for gcc builds, from a fixture's live objects): the game spawns object events only ~2 tiles past its own view, so zoomed out a cuttable tree,
+  a boulder, an item ball or an NPC wasn't there until you neared it. Every template the save holds for the map
+  (`SaveBlock1.objectEventTemplates`: home tiles, a boulder where Strength left it) that isn't hidden by its flag or
+  already spawned is drawn from the ROM's graphics (`gObjectEventGraphicsInfoPointers`, its movement type's first
+  facing), where SpawnObjectEvent would put it, in its palette slot if loaded (fades, tints) else the ROM's palette, behind
+  every real sprite. NPCs come back at their home tile when you walk up, so that's where they're drawn.
+  Never on the real frame (the game shows what's there), and only with an NPC palette from the ROM's table - Lazarus's
+  lamp lights are templates too (palette tag 0x8001, shown by the game as blended glows), which drew over the real
+  glows. A ROM palette is tinted as the game tinted its loaded ones (`measureTint`: palette RAM vs the ROM, per channel,
+  darkening only): SoulGold's night, a fade. CFRU's ids are 16-bit (`OBJ_GFX_TABLES`: template byte 3 picks a table,
+  0xFF a var; Unbound, Radical Red, Amethyst, Orange Islands, Sword and Shield), expansion's too (`TEMPLATE_KIND` 3:
+  graphicsId at +1, kind at +3; ids past `OBJ_GFX_VAR_FROM` + 16 are overworld Pokémon, not drawn). Unbound's palette
+  table runs on past an empty entry (0x1200s after 0x1100s); `romPalette` caches 64 tags. Each hack's SaveBlock1 is its
+  own (`SB1_OFFSETS`; Recharged Yellow keeps its flags before its templates: `SB1_FLAGS_AT`); `mgba_dump`'s `wideghosts`
+  lists them and the connected maps they come from, `NO PALETTE` where neither source has one.
+  A template outside its own map isn't drawn (Too Many Types 2 parks cutscene trucks at y -1). The graphics tables of the
+  gcc builds run into other data past their end, so each has its length (`OBJ_GFX_COUNT`): Rogue 0x269, Heart and Soul
+  0x224, Too Many Types 2 0x10D, Recharged Yellow 0x159 (its code: ids to 0x158, vars from 0x15A, Pokémon from 0x200);
+  where a game's var ids aren't known, `OBJ_GFX_VAR_FROM` 0xFFFF leaves them undrawn rather than guessed. Rogue's
+  templates hold graphicsId at +2 (`TEMPLATE_KIND_AT` 1). find_wide_objects.py takes several dumps (a walk dumped every
+  step: more live objects to vote). With no palette tag list (or none loaded) the tint comes from the map: BG palette RAM
+  against the tilesets' colours in ROM.
+- **Torn frames**: a lag frame can change palette RAM or OAM while it's drawn (Recharged Yellow's and Rogue's battle-exit
+  fade, Seaglass's healthboxes), so the scanline hook keeps a copy of each whenever a line's differs from the last
+  (`linePalBuf` / `lineOamBuf`, up to 8 a frame) and every line is drawn with its own (`useLine` sets the registers `R`
+  and the palette `P`; a battle's sprites draw each OAM on its own lines). VRAM written mid-frame (a tile upload) can't
+  be redrawn from anything taken after the frame: `pk_wide_last_vram_torn` reports it, and `widecheck` doesn't count
+  such a frame. Brightness is mGBA's per channel in place (white darkened by 1 is 240, 239, 239: Imperium's flash), and
+  a window's effects bit holds in battles too.
+- **Menu screens** (`PK_WIDE_MODE_MENU`, `drawMenuRegion`): instead of the glow, the back BG layer goes on past the
+  edges, each row repeating the pattern found along its edge (`menuPeriod`: the smallest 8..32 px that repeats); a row
+  whose edge doesn't (a button reaching it) borrows the nearest row that does, so stripes and frames carry on without
+  copying any text or panel. Mode 0 / 1 tiled screens; anything else still glows.
+- **Never a crash**: every read goes through bounds-checked helpers and every index is clamped; sizes from memory are
+  bounded before they're multiplied; `_Static_assert`s keep the config rows in step with the slots. On top, `pk_wide_view`
+  runs under a fault guard (SIGSEGV / SIGBUS / SIGFPE / SIGILL on its thread while drawing jump back out; WIDE switches
+  itself off for the game - `pk_wide_fault` -> `MgbaCore.pkWideFault` -> a HUD notice - and the plain frame shows); a
+  fault anywhere else goes on to the handler before it. The camera, the frame hand-off and the GL placement each catch
+  and fall back. `mgba_dump`'s `widefuzz N SEED` throws random windows and random bytes / pointers at the RAM WIDE reads;
+  built with `-fsanitize=address,undefined -DPK_WIDE_NO_GUARD` it ran 33,000 frames over six games (map and menus) clean,
+  and since the far-off objects went to every engine (it also hits SaveBlock1's templates / flags / vars and the palette
+  tag list) 66,000 more over eleven: retail Emerald and Ruby, Unbound, Radical Red, Amethyst, Lazarus, SoulGold, Seaglass,
+  Rogue, Heart and Soul, Recharged Yellow.
+- **Telling players** (`ExpandIntro`): once on the Library for anyone not on EXPAND (`Prefs.expandIntroSeen`; after
+  first-time setup), and once more on the companion the first time a game EXPAND knows opens while it's still off
+  (`Prefs.expandGameOfferSeen`, `CompanionSettings.expandOffer`) - "NOT NOW" on the Library doesn't stop that one, but
+  any answer to it settles both. TURN ON sets ASPECT > EXPAND. ui-preview: `library-expand-intro`, `*-expand-offer`.
+- **A phone upright** (`PortraitPanel.expand`, `GameStageLayout.expand`, `PortraitLayout.arrange(expand)`): the game
+  takes everything above the companion (COMPANION's AT BOTTOM / UNDER GAME land in the same place then) and the touch
+  pad lies over it; 1x is the frame at the view's full width (`levelsFor` takes the smaller fit), so the window goes
+  on above and below it (a 1080-wide phone: 4.5 -> 3 / 2).
+- **Look-around** (the right stick, AXIS_Z / RZ or RX / RY): standing, it moves the view and leaves it there; walking
+  (a direction held) glides it back - with the stick held while walking it follows the stick, the player kept 28 px
+  inside. Checked headless with `mgba_dump`'s `wideview X Y W H`.
+- **Checks**: `scripts/widescreen_proto.py` is the Python original (reads `mgba_dump` captures). The C is checked
+  headless with `mgba_dump`'s `wideon` / `widecheck` / `widestats` (`native-capture/README.md`): it rebuilds the
+  middle 240x160 too and compares it with the real frame. Walking, running and NPCs moving, every frame matched
+  pixel for pixel on both games (2026-10-09). Not covered yet: weather drawn over the field (rain sprites, fog on
+  BG0) stops at the GBA's edges; scanline effects aren't extended.
 
 ## Overlays
 

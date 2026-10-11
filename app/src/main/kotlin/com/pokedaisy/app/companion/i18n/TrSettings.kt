@@ -87,6 +87,8 @@ internal val trSettings: Map<String, Tr> = mapOf(
     "ASPECT" to Tr(ja = "アスペクト", fr = "FORMAT", de = "FORMAT", it = "FORMATO", es = "FORMATO"),
     "STRETCH" to Tr(ja = "ひきのばし", fr = "ÉTIRÉ", de = "GESTRECKT", it = "ESTESO", es = "ESTIRADO"),
     "ORIGINAL" to Tr(ja = "オリジナル", fr = "ORIGINAL", de = "ORIGINAL", it = "ORIGINALE", es = "ORIGINAL"),
+    "EXPAND" to Tr(ja = "ひろげる", fr = "ÉTENDRE", de = "ERWEITERN", it = "ESPANDI", es = "AMPLIAR"),
+    "NOT YET" to Tr(ja = "まだ", fr = "PAS ENCORE", de = "NOCH NICHT", it = "NON ANCORA", es = "AÚN NO"),
     "THEME" to Tr(ja = "テーマ", fr = "THÈME", de = "THEMA", it = "TEMA", es = "TEMA"),
     // FPS / CPU's performance panel (PerformanceOverlay).
     "PERFORMANCE" to Tr(ja = "パフォーマンス", fr = "PERFORMANCES", de = "LEISTUNG", it = "PRESTAZIONI", es = "RENDIMIENTO"),
@@ -120,6 +122,7 @@ internal val trSettings: Map<String, Tr> = mapOf(
     // ASPECT picker
     "Fills the screen, drawn wider" to Tr(ja = "がめん いっぱい、 よこに のばして ひょうじ", fr = "Remplit l'écran, image élargie", de = "Füllt den Bildschirm, breiter gezeichnet", it = "Riempie lo schermo, più largo", es = "Llena la pantalla, más ancho"),
     "The GBA's 3:2, bars at the sides" to Tr(ja = "GBAの 3:2、 りょうがわに くろい おび", fr = "Le 3:2 de la GBA, bandes sur les côtés", de = "Das 3:2 des GBA, Balken an den Seiten", it = "Il 3:2 del GBA, bande ai lati", es = "El 3:2 de la GBA, franjas a los lados"),
+    "More of the map around the game (not every game yet)" to Tr(ja = "まわりの マップも みえる(まだ いちぶの ゲームのみ)", fr = "Plus de carte autour du jeu (pas encore tous les jeux)", de = "Mehr Karte rund ums Spiel (noch nicht alle Spiele)", it = "Più mappa intorno al gioco (non ancora tutti i giochi)", es = "Más mapa alrededor del juego (aún no todos los juegos)"),
 
     // Footer
     "POKéDAISY {0}  ·  by {1}" to Tr(ja = "POKéDAISY {0}  ·  さくしゃ {1}", fr = "POKéDAISY {0}  ·  par {1}", de = "POKéDAISY {0}  ·  von {1}", it = "POKéDAISY {0}  ·  di {1}", es = "POKéDAISY {0}  ·  por {1}"),
@@ -174,6 +177,7 @@ internal val trSettings: Map<String, Tr> = mapOf(
     "REWIND HOLD" to Tr(ja = "まきもどし ホールド", fr = "RETOUR MAINTENU", de = "ZURÜCK HALTEN", it = "RIAVVOLGI TIENI", es = "REBOBINAR MANTENER"),
     "REWIND" to Tr(ja = "まきもどし", fr = "RETOUR ARRIÈRE", de = "ZURÜCKSPULEN", it = "RIAVVOLGI", es = "REBOBINAR"),
     "SLOWMO HOLD" to Tr(ja = "スロー ホールド", fr = "RALENTI MAINTENU", de = "ZEITLUPE HALTEN", it = "RALLENTA TIENI", es = "LENTO MANTENER"),
+    "ZOOM" to Tr(ja = "ズーム", fr = "ZOOM", de = "ZOOM", it = "ZOOM", es = "ZOOM"),
     "EXIT GAME" to Tr(ja = "ゲーム しゅうりょう", fr = "QUITTER LE JEU", de = "SPIEL BEENDEN", it = "ESCI DAL GIOCO", es = "SALIR DEL JUEGO"),
 
     // Folders

@@ -98,7 +98,10 @@ object PortraitLayout {
      * ([underGame]), the grip hangs below the companion (room kept for it) and
      * dragging it down makes it taller.
      */
-    fun arrange(w: Int, h: Int, gameH: Int, gripH: Int, ratio: Float, underGame: Boolean): Arrangement {
+    fun arrange(w: Int, h: Int, gameH: Int, gripH: Int, ratio: Float, underGame: Boolean, expand: Boolean = false): Arrangement {
+        // WIDE ([expand]): the game takes everything above the companion, which is along the bottom then (right
+        // under the game is the same place), and the touch pad lies over the game.
+        @Suppress("NAME_SHADOWING") val underGame = underGame && !expand
         val reserve = if (underGame) gripH else 0
         val c = companionHeight(w, h, gameH, ratio, reserve)
         val gameBottom = minOf(gameH, h - c - reserve)
@@ -114,7 +117,7 @@ object PortraitLayout {
         val companionTop = h - c
         val inside = companionTop - gameBottom < gripH
         val gripTop = if (inside) companionTop else companionTop - gripH
-        val inGap = padInGap(w, gripTop - gameBottom)
+        val inGap = !expand && padInGap(w, gripTop - gameBottom)
         return Arrangement(
             gameBottom, gripTop, companionTop, c, if (inside) Grip.INSIDE else Grip.ABOVE, gripTop,
             if (inGap) gameBottom else 0, gripTop,

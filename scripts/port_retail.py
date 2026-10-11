@@ -134,7 +134,7 @@ class Rom:
         self.sha1 = hashlib.sha1(self.d).hexdigest()
         self.lang = self.code[3]
         # Ruby / Sapphire share Emerald's per-language POKéBLOCK glyphs (LANG_CHARS).
-        self.chars = JAPANESE if self.lang == "J" else {**CHARS, **LANG_CHARS.get(LANG_KEY[self.lang], {})}
+        self.chars = JAPANESE if self.lang == "J" else {**CHARS, **LANG_CHARS.get(LANG_KEY.get(self.lang), {})}
         self.code_end = min(len(self.d), 0x400000)
         self._words = None
         self._ctx = None

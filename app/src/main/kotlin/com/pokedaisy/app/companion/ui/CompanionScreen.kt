@@ -569,6 +569,14 @@ fun CompanionScreen(
                 },
             )
 
+            // EXPAND's one-time offer, in a game it knows (the Library's "NOT NOW" doesn't stop this one, once).
+            if (settings?.expandOffer == true) {
+                ExpandIntro(
+                    rememberGbaTextMetrics(), rememberGbaTextMetrics(textScale = 1f), inGame = true,
+                    onTurnOn = { settings.answerExpandOffer(true) }, onNotNow = { settings.answerExpandOffer(false) },
+                )
+            }
+
             // BEST EFFORT's notices (a match it made, a party that doubts it) and WHICH GAME IS THIS? over the tabs.
             if (gamePick != null) {
                 snapshot.bestEffort?.let { be -> if (!pickerOpen) BestEffortNotices(be, gamePick, shareBestEffort, onPick = { pickerOpen = true }) }

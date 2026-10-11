@@ -124,10 +124,13 @@ class FakeSlots : StateSlots {
     override fun requestUndoLoad() {}
 }
 
-class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>? = null, oneTap: Boolean = false) : CompanionSettings {
+class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>? = null, oneTap: Boolean = false, expandOffer: Boolean = false) : CompanionSettings {
     private var oneTapOn = oneTap
     override val oneTapMoves get() = oneTapOn
     override fun setOneTapMoves(on: Boolean) { oneTapOn = on }
+    private val offer = androidx.compose.runtime.mutableStateOf(expandOffer)
+    override val expandOffer get() = offer.value
+    override fun answerExpandOffer(turnOn: Boolean) { offer.value = false }
     private var ffSpeed = 4f
     private var ff = false
     private var music = com.pokedaisy.app.companion.FfMusicMode.STEADY
@@ -165,9 +168,9 @@ class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>
     private var bar = false
     override val statusBar get() = bar
     override fun setStatusBar(on: Boolean) { bar = on }
-    private var stretch = false
-    override val stretchGame get() = stretch
-    override fun setStretchGame(on: Boolean) { stretch = on }
+    private var aspect = com.pokedaisy.app.companion.GameAspect.ORIGINAL
+    override val gameAspect get() = aspect
+    override fun setGameAspect(aspect: com.pokedaisy.app.companion.GameAspect) { this.aspect = aspect }
     private var colors = false
     override val gbaColors get() = colors
     override fun setGbaColors(on: Boolean) { colors = on }
@@ -280,13 +283,14 @@ fun companion(
     battery: BatteryStatus = BatteryStatus(76, charging = false),
     cardBack: Boolean = false,
     oneTap: Boolean = false,
+    expandOffer: Boolean = false,
     snap: () -> SnapshotView = ::snapshot,
 ): () -> (@Composable () -> Unit) = {
     DeviceBattery.status.value = battery
     val sv = snap()
     val back = com.pokedaisy.app.companion.ui.CompanionBack().also { previewBack = it }
     val content: @Composable () -> Unit = {
-        CompanionScreen(sv, FakeSlots(), FakeSettings(hints, oneTap = oneTap), FakeBattleInput(busy), initialTab = tab, initialMonIndex = mon, initialCardBack = cardBack, back = back)
+        CompanionScreen(sv, FakeSlots(), FakeSettings(hints, oneTap = oneTap, expandOffer = expandOffer), FakeBattleInput(busy), initialTab = tab, initialMonIndex = mon, initialCardBack = cardBack, back = back)
     }
     content
 }
@@ -494,12 +498,12 @@ fun withApiKey(make: () -> androidx.activity.ComponentActivity): androidx.activi
     return make()
 }
 
-/** [make] with ASPECT = [stretch] and the STATUS BAR on, plus a savestate thumbnail for the
+/** [make] with ASPECT = [aspect] and the STATUS BAR on, plus a savestate thumbnail for the
  * ASPECT preview when a game frame is around: native-capture/menu-shots/thor/top.png (untracked -
  * the Thor's top screen, `adb exec-out screencap`, cropped to the game and scaled to 240x160). */
-fun withAspect(stretch: Boolean, make: () -> androidx.activity.ComponentActivity): androidx.activity.ComponentActivity {
+fun withAspect(aspect: com.pokedaisy.app.companion.GameAspect, make: () -> androidx.activity.ComponentActivity): androidx.activity.ComponentActivity {
     val ctx = android.content.Context()
-    Prefs(ctx).stretchGame = stretch
+    Prefs(ctx).gameAspect = aspect
     Prefs(ctx).statusBar = true
     val shot = File("../../../../native-capture/menu-shots/thor/top.png")
     if (shot.isFile) shot.copyTo(File(ctx.filesDir, "states/0badcafe/ss1.png").apply { parentFile.mkdirs() }, overwrite = true)
@@ -565,7 +569,7 @@ fun favoriteLibrary() {
         .map { File(roms, it).absolutePath }.toSet()
 }
 
-fun activity(make: () -> androidx.activity.ComponentActivity): () -> (@Composable () -> Unit) = {
+fun activity(expandIntro: Boolean = false, make: () -> androidx.activity.ComponentActivity): () -> (@Composable () -> Unit) = {
     val ctx = android.content.Context()
     val roms = File(ctx.filesDir, "roms").apply { mkdirs() }
     // Dump-style file names, as players have them; firered-qol stays unrecognised (a QoL build).
@@ -584,13 +588,15 @@ fun activity(make: () -> androidx.activity.ComponentActivity): () -> (@Composabl
     File(ctx.filesDir, "saves").mkdirs()
     File(ctx.filesDir, "saves/firered-qol.sav").writeText("x")
     val prefs = Prefs(ctx)
+    // EXPAND's one-time introduction covers the Library: only its own shot shows it.
+    prefs.expandIntroSeen = !expandIntro
     prefs.steamGridDbApiKey = null
     prefs.libraryViewMode = 0
     prefs.romsFolder = null
     prefs.hiddenRoms = emptySet()
     prefs.hotkeysEnabled = true
     prefs.savesDirOverride = null
-    prefs.stretchGame = false
+    prefs.gameAspect = com.pokedaisy.app.companion.GameAspect.ORIGINAL
     prefs.statusBar = false
     // The default theme (PokéDaisy); a shot that wants another sets it in its make().
     prefs.appTheme = com.pokedaisy.app.companion.ui.theme.DAISY_THEME_ID
@@ -673,6 +679,7 @@ fun main(args: Array<String>) {
     val tw = 1920; val th = 1080; val td = 2.5f
     val shots = listOf(
         Shot("$g-party", bw, bh, bd, companion("PARTY")),
+        Shot("$g-expand-offer", bw, bh, bd, companion("PARTY", expandOffer = true)),
         Shot("$g-party-detail", bw, bh, bd, companion("PARTY", mon = 0)),
         Shot("$g-party-detail-next", bw, bh, bd, companion("PARTY", mon = 0)) {
             onNodeWithContentDescription("Next Pokémon").performClick()
@@ -823,6 +830,10 @@ fun main(args: Array<String>) {
         // GAME BUTTONS' subtitle, further down the list.
         Shot("$g-settings-subtitles", bw, bh, bd, companion("SETTINGS")) { onNodeWithText("TWEAKS").performScrollTo() },
         Shot("$g-settings-ffmusic", bw, bh, bd, companion("SETTINGS")) { onAllNodesWithText("FF MUSIC").onFirst().performClick() },
+        // ASPECT's pick-list: WIDE tagged NOT YET (the preview's settings know no game).
+        Shot("$g-settings-aspect", bw, bh, bd, companion("SETTINGS")) {
+            onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        },
         Shot("$g-settings-hotkeys", bw, bh, bd, companion("SETTINGS")) {
             onNodeWithText("HOTKEYS").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         },
@@ -943,6 +954,7 @@ fun main(args: Array<String>) {
             }
         }),
         Shot("library-list", tw, th, td, activity { LibraryActivity() }),
+        Shot("library-expand-intro", tw, th, td, activity(expandIntro = true) { LibraryActivity() }),
         // A ROM imported with "add anyway?": the library tags what the second screen can't read.
         Shot("library-tag-unsupported", tw, th * 2, td, activity {
             val ctx = android.content.Context()
@@ -1135,7 +1147,10 @@ fun main(args: Array<String>) {
         Shot("library-hidden", tw, th, td, activity { withHidden { LibraryActivity() } }),
         // ASPECT's picker: the drawn stand-in (no savestates), then a real frame with the status bar.
         Shot("settings-aspect", tw, th, td, activity { SettingsActivity() }) { onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) },
-        Shot("settings-aspect-stretch", tw, th, td, activity { withAspect(true) { SettingsActivity() } }) {
+        Shot("settings-aspect-stretch", tw, th, td, activity { withAspect(com.pokedaisy.app.companion.GameAspect.STRETCH) { SettingsActivity() } }) {
+            onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        },
+        Shot("settings-aspect-wide", tw, th, td, activity { withAspect(com.pokedaisy.app.companion.GameAspect.WIDE) { SettingsActivity() } }) {
             onNodeWithText("ASPECT").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         },
         Shot("settings-shaders", tw, th, td, activity { SettingsActivity() }) {

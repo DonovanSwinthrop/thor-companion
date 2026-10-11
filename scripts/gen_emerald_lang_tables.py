@@ -3,7 +3,7 @@
 French, Italian, Japanese - from the ROM the user owns (nothing is downloaded),
 so the companion shows a game's names in its own language.
 
-    scripts/gen_emerald_lang_tables.py <es|de|fr|it|ja> <rom.gba>
+    scripts/gen_emerald_lang_tables.py <es|de|fr|it|ja|kaizo> <rom.gba>
     scripts/gen_emerald_lang_tables.py en <english rom.gba>   (checks only)
 
 Writes app/src/main/kotlin/.../companion/data/EmeraldText<Lang>Gen.kt: species,
@@ -13,7 +13,11 @@ font's glyph widths (the party slot's names; a few localized glyphs differ).
 Item descriptions aren't written: the app reads them from the player's ROM
 (NativeConfig.itemDescs = the `items` address below, RomItemText.kt).
 
-Every table sits elsewhere than in English (localized text has other lengths);
+`kaizo` is Pokémon Emerald Kaizo v2.0, an in-place edit of English Emerald: English's tables at English's
+addresses, 29 moves replaced (Drill Run, Earth Power, ...) and 217 moves' battle data changed - so it also writes
+the moves' types and powers (gBattleMoves), which the other languages take from the shared English table.
+
+Every other table sits elsewhere than in English (localized text has other lengths);
 the European ones keep English's layout, Japanese has shorter names (species 5,
 moves 7, items 9 characters + the terminator) and 40-byte item records. Each address is the word English's code loads the
 table from, read at the same place in the language's code (the literal-pool
@@ -58,6 +62,10 @@ LANGS = {
                species=0x082EA31C, moves=0x082EACC4, items=0x0855CEE8, natures=0x085ECE24,
                mapsecs=0x0857CD6C, small_widths=None,
                species_len=6, move_len=8, item_stride=40, item_name_len=10),
+    "kaizo": dict(sha1="a7c4e34fafb53f2d5283eb6d43dad285c0dd40a8", suffix="Kaizo", label="Emerald Kaizo v2.0",
+                  chars="en", battle_moves=0x0831C898,
+                  species=0x083185C8, moves=0x0831977C, items=0x085839A0, natures=0x0861CB50,
+                  mapsecs=0x085A147C, small_widths=0x0863BCE4),
 }
 # English's record layout, where a language doesn't say otherwise.
 LAYOUT = dict(species_len=11, move_len=13, item_stride=44, item_name_len=14)
@@ -105,7 +113,7 @@ LANG_CHARS["ja"] = {}
 class Rom:
     def __init__(self, data, lang):
         self.d = data
-        self.chars = {**(JAPANESE if lang == "ja" else CHARS), **LANG_CHARS[lang]}
+        self.chars = {**(JAPANESE if lang == "ja" else CHARS), **LANG_CHARS[LANGS[lang].get("chars", lang)]}
         # A line break inside Japanese text reads as the full-width space it spaces phrases with.
         self.line_break = "　" if lang == "ja" else " "
 
@@ -201,6 +209,12 @@ def main():
           kmap(f"mapSecNamesEmerald{sfx}", mapsecs) + "\n" +
           f"/** gFontSmallLatinGlyphWidths: the party slot's FONT_SMALL advances by char code. */\n"
           f"internal val smallFontWidthsEmerald{sfx}: IntArray by lazy {{ intArrayOf({', '.join(map(str, widths))}) }}\n")
+    if v.get("battle_moves"):   # a hack's own moves: their types and powers too (gBattleMoves: power +1, type +2)
+        b = v["battle_moves"] - 0x08000000
+        kt += ("\n/** gBattleMoves' types and powers, under the game's own names. */\n"
+               f"internal val moveDataEmerald{sfx}: Map<Int, MoveInfo> by lazy {{\n    mapOf(\n" +
+               "".join(f"        {i} to MoveInfo({kstr(n)}, {data[b + 12 * i + 2]}, {data[b + 12 * i + 1]}),\n"
+                       for i, n in sorted(moves.items())) + "    )\n}\n")
     path = os.path.join(OUT_DIR, f"EmeraldText{sfx}Gen.kt")
     with open(path, "w", encoding="utf-8") as f:
         f.write(kt)

@@ -1450,6 +1450,10 @@ val NATIVE_TMT2 = NATIVE_EMERALD.copy(
 // come from scripts/gen_glazed_tables.py; the icon tables are retail's addresses
 // holding its own icons, and RomArt rebuilds its region map (GZ_REGION_*). Its
 // POKéDEX is retail's tables rewritten in place (its own 1..386 numbering).
+// Pokémon Emerald Kaizo v2.0 - BPEE, 16 MB, an in-place edit of retail Emerald (95% of the ROM byte for byte): retail's
+// code, RAM and save, so everything retail reads; its own moves (KAIZO_TEXT) and wild table (GUIDE_TABLES_EMERALD_KAIZO).
+val NATIVE_EMERALD_KAIZO = NATIVE_EMERALD_RETAIL.copy(gameCode = KAIZO_TEXT, guideTables = GUIDE_TABLES_EMERALD_KAIZO)
+
 val NATIVE_GLAZED = NATIVE_EMERALD.copy(
     itemDescs = vanillaItems(0x085839A0L), // retail's, rewritten in place
     guideTables = GUIDE_TABLES_GLAZED,

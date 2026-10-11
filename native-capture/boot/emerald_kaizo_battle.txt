@@ -1,0 +1,57 @@
+# Emerald Kaizo v2.0 has no save of the user's own: retail Emerald's (the same SaveBlocks - Kaizo is retail edited in
+# place) boots in it. default.txt, B x3, then a scripted wild PIKACHU Lv5 (setwildbattle; dowildbattle; end) run through
+# retail's ScriptContext_SetupScript 0x08098EF9, which Kaizo keeps; A at the intro text, then the action menu.
+wait 120
+press START
+wait 30
+press A
+wait 60
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 30
+press A
+wait 60
+wait 120
+press B
+wait 20
+press B
+wait 20
+press B
+wait 20
+poke32 0x0203FF00 0x050019B6
+poke32 0x0203FF04 0x02B70000
+call 0x08098EF9 0x0203FF00
+wait 560
+press A
+wait 300

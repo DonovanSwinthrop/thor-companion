@@ -74,6 +74,16 @@ private val UNBOUND_FR by lazy {
         englishMapSecs = { mapSecDataUnbound }, englishMoves = { moveDataUnbound })
 }
 
+// Pokémon Emerald Kaizo v2.0 (gen_emerald_lang_tables.py kaizo): English Emerald edited in place - its own moves (29
+// replaced, 217 rebalanced: names, types and powers from its gBattleMoves) under English's names for the rest. Not a
+// game code: the hack keeps retail's header (BPEE), so NATIVE_EMERALD_KAIZO names it.
+const val KAIZO_TEXT = "EMERALD_KAIZO"
+private val EMERALD_KAIZO by lazy {
+    GameText({ speciesNamesEmeraldKaizo }, { moveNamesEmeraldKaizo }, { itemNamesEmeraldKaizo },
+        natureNamesEmeraldKaizo, { mapSecNamesEmeraldKaizo }, { smallFontWidthsEmeraldKaizo },
+        englishMoves = { moveDataEmeraldKaizo })
+}
+
 private val portTexts = java.util.concurrent.ConcurrentHashMap<String, GameText>()
 
 /** The names of the game with [code] ("BPED", "AXVF", [UNBOUND_FR_TEXT]); null for English and every game without its own. */
@@ -84,6 +94,7 @@ fun gameText(code: String): GameText? = when (code) {
     "BPEI" -> EMERALD_IT
     "BPEJ" -> EMERALD_JA
     UNBOUND_FR_TEXT -> UNBOUND_FR
+    KAIZO_TEXT -> EMERALD_KAIZO
     else -> RETAIL_PORT_TEXTS[code]?.let { make -> portTexts.getOrPut(code, make) }
 }
 

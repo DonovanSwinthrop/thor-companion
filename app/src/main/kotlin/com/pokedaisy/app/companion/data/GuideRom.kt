@@ -621,6 +621,10 @@ val GUIDE_TABLES_AMETHYST_V1_4_1 = GUIDE_TABLES_AMETHYST.copy(
  * and diffing the save). Its learnsets aren't located; the leaders carry their
  * own moves anyway.
  */
+// Pokémon Emerald Kaizo v2.0: retail's tables at retail's addresses, rewritten in place (its trainers' teams, base
+// stats, TM compatibility) - only gWildMonHeaders moved, to 0x08E3D4A4 (all 13 literal-pool refs).
+val GUIDE_TABLES_EMERALD_KAIZO = GUIDE_TABLES_EMERALD.copy(wildHeaders = 0x08E3D4A4L)
+
 // Pokémon Glazed: retail Emerald's gTrainers / gLevelUpLearnsets at retail's addresses (its literal
 // pools still name them), its gWildMonHeaders repointed to 0x094CA3F4 (all 13 refs); retail's
 // SaveBlock1 flags / vars. Its first gym leader, SPARKY, holds ROXANNE's slot.

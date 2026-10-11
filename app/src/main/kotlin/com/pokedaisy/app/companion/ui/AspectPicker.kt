@@ -28,33 +28,35 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.i18n.tk
 import com.pokedaisy.app.companion.i18n.tr
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** SETTINGS > ASPECT's two values ([com.pokedaisy.app.Prefs.stretchGame]). */
-fun aspectLabel(stretch: Boolean) = if (stretch) tk("STRETCH") else tk("ORIGINAL")
+/** SETTINGS > ASPECT's value ([com.pokedaisy.app.Prefs.gameAspect]), untranslated (the rows translate it). */
+fun aspectLabel(aspect: GameAspect) = aspect.label
 
 /**
- * The top-screen Settings' ASPECT picker: ORIGINAL and STRETCH side by side,
- * each a small picture of the top screen ([screenAspect] = width / height)
+ * The top-screen Settings' ASPECT picker: ORIGINAL, STRETCH and WIDE side by
+ * side, each a small picture of the top screen ([screenAspect] = width / height)
  * with the game as it would sit there - [shot] (the newest savestate
  * thumbnail) or, with none, a drawn stand-in whose round sun shows the
- * stretch. [statusBar] adds the STATUS BAR strip. Tapping one picks it.
+ * stretch. WIDE is always the stand-in, drawn wider (a thumbnail has only the
+ * GBA's 240 px). [statusBar] adds the STATUS BAR strip. Tapping one picks it.
  */
 @Composable
 fun AspectPicker(
-    stretch: Boolean,
+    aspect: GameAspect,
     screenAspect: Float,
     statusBar: Boolean,
     shot: ImageBitmap?,
     m: GbaTextMetrics,
-    onPick: (Boolean) -> Unit,
+    onPick: (GameAspect) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val small = rememberGbaTextMetrics(textScale = 1f)
-    OptionOverlay(onDismiss, Modifier.widthIn(max = 600.dp)) {
+    OptionOverlay(onDismiss, Modifier.widthIn(max = 840.dp)) {
         Column {
             OptionTitleWindow(tk("ASPECT"), m, onBack = onDismiss)
             Spacer(Modifier.height(m.u * 4))
@@ -63,9 +65,9 @@ fun AspectPicker(
                     horizontalArrangement = Arrangement.spacedBy(m.u * 4),
                     modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max).padding(m.u * 2),
                 ) {
-                    listOf(false, true).forEach { opt ->
+                    GameAspect.entries.forEach { opt ->
                         AspectChoice(
-                            opt, selected = opt == stretch, screenAspect, statusBar, shot, m, small,
+                            opt, selected = opt == aspect, screenAspect, statusBar, shot, m, small,
                             Modifier.weight(1f).fillMaxHeight(),
                         ) { onPick(opt) }
                     }
@@ -77,7 +79,7 @@ fun AspectPicker(
 
 @Composable
 private fun AspectChoice(
-    stretch: Boolean,
+    aspect: GameAspect,
     selected: Boolean,
     screenAspect: Float,
     statusBar: Boolean,
@@ -94,20 +96,25 @@ private fun AspectChoice(
             .soundClickable(onClick = onClick)
             .padding(u * 6),
     ) {
-        ScreenPreview(stretch, statusBar, shot, Modifier.fillMaxWidth().aspectRatio(screenAspect))
+        ScreenPreview(aspect, statusBar, shot, Modifier.fillMaxWidth().aspectRatio(screenAspect))
         Spacer(Modifier.height(u * 4))
-        if (selected) GbaText(tr(aspectLabel(stretch)), OptionColors.value, OptionColors.valueShadow, m)
-        else GbaText(tr(aspectLabel(stretch)), OptionColors.label, OptionColors.labelShadow, m)
+        if (selected) GbaText(tr(aspectLabel(aspect)), OptionColors.value, OptionColors.valueShadow, m)
+        else GbaText(tr(aspectLabel(aspect)), OptionColors.label, OptionColors.labelShadow, m)
         GbaText(
-            if (stretch) tr("Fills the screen, drawn wider") else tr("The GBA's 3:2, bars at the sides"),
-            OptionColors.muted, OptionColors.mutedShadow, small, maxLines = 2,
+            when (aspect) {
+                GameAspect.ORIGINAL -> tr("The GBA's 3:2, bars at the sides")
+                GameAspect.STRETCH -> tr("Fills the screen, drawn wider")
+                GameAspect.WIDE -> tr("More of the map around the game (not every game yet)")
+            },
+            OptionColors.muted, OptionColors.mutedShadow, small, maxLines = 3,
         )
     }
 }
 
 /** The top screen in miniature: black, the game placed as [com.pokedaisy.app.GameStageLayout] places it. */
 @Composable
-private fun ScreenPreview(stretch: Boolean, statusBar: Boolean, shot: ImageBitmap?, modifier: Modifier) {
+internal fun ScreenPreview(aspect: GameAspect, statusBar: Boolean, shot: ImageBitmap?, modifier: Modifier) {
+    val stretch = aspect != GameAspect.ORIGINAL   // WIDE takes the whole screen too, with more game in it
     Canvas(modifier) {
         val px = gbaPixelPx()
         drawPixelRoundRect(Color.Black, radius = 3 * px)
@@ -126,7 +133,9 @@ private fun ScreenPreview(stretch: Boolean, statusBar: Boolean, shot: ImageBitma
             }
         }
         val game = Rect(left, top + barH, left + gameW, top + barH + gameH)
-        if (shot != null) {
+        if (aspect == GameAspect.WIDE) {
+            clipRect(game.left, game.top, game.right, game.bottom) { drawStandIn(game, wide = true) }
+        } else if (shot != null) {
             drawImage(
                 shot,
                 dstOffset = IntOffset(game.left.roundToInt(), game.top.roundToInt()),
@@ -140,20 +149,36 @@ private fun ScreenPreview(stretch: Boolean, statusBar: Boolean, shot: ImageBitma
     }
 }
 
-/** A plain GBA-like scene in 240x160 game pixels, scaled into [r]: sky, sun, a house, grass, a text box. */
-private fun DrawScope.drawStandIn(r: Rect) {
+/**
+ * A plain GBA-like scene in 240x160 game pixels, scaled into [r]: sky, sun, a house, grass, a text box.
+ * [wide] draws it at [r]'s own shape with square game pixels, as WIDE does: the scene runs on past
+ * the GBA's 240 px (a tree, a second house), the text box stays in the middle 240.
+ */
+private fun DrawScope.drawStandIn(r: Rect, wide: Boolean = false) {
+    val s = r.height / 160f
+    val w = if (wide) r.width / s else 240f   // the scene's width in game pixels
+    val ox = (w - 240f) / 2                    // where the GBA's own 240 px start
     translate(r.left, r.top) {
-        scale(r.width / 240f, r.height / 160f, pivot = Offset.Zero) {
-            fun box(x: Int, y: Int, w: Int, h: Int, c: Long) =
-                drawRect(Color(c), Offset(x.toFloat(), y.toFloat()), Size(w.toFloat(), h.toFloat()))
-            box(0, 0, 240, 96, 0xFF78C8F0)
-            drawCircle(Color(0xFFF8E070), radius = 16f, center = Offset(196f, 30f))
-            box(0, 80, 240, 16, 0xFF387838)
-            box(0, 96, 240, 64, 0xFF88D070)
+        scale(if (wide) s else r.width / 240f, s, pivot = Offset.Zero) {
+            fun box(x: Float, y: Int, bw: Float, h: Int, c: Long) =
+                drawRect(Color(c), Offset(x, y.toFloat()), Size(bw, h.toFloat()))
+            fun box(x: Int, y: Int, bw: Int, h: Int, c: Long) = box(ox + x, y, bw.toFloat(), h, c)
+            box(0f, 0, w, 96, 0xFF78C8F0)
+            drawCircle(Color(0xFFF8E070), radius = 16f, center = Offset(ox + 196f, 30f))
+            box(0f, 80, w, 16, 0xFF387838)
+            box(0f, 96, w, 64, 0xFF88D070)
             box(104, 96, 32, 64, 0xFFE8D8A0)
             box(26, 44, 68, 18, 0xFFC84848)
             box(32, 62, 56, 34, 0xFFF8F0E0)
             box(54, 76, 12, 20, 0xFF8C5A30)
+            if (wide) {
+                // Past the GBA's edges: a tree on the left, a second house on the right.
+                drawCircle(Color(0xFF2F7F3A), radius = 14f, center = Offset(ox - 20f, 70f))
+                box(-24, 80, 8, 18, 0xFF8C5A30)
+                box(252, 52, 56, 14, 0xFF4878C8)
+                box(256, 66, 48, 30, 0xFFF8F0E0)
+                box(274, 78, 12, 18, 0xFF8C5A30)
+            }
             box(4, 116, 232, 40, 0xFF5070A0)
             box(7, 119, 226, 34, 0xFFFFFFFF)
             box(16, 126, 150, 7, 0xFF8C8C94)

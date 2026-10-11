@@ -14,7 +14,9 @@ import kotlin.math.min
  * [stretch] the game takes all the space under the bar (and stretches itself
  * to fill it, see [EmulatorView.stretch]). With [topAligned] (a phone held
  * upright, see [PortraitPanel]) the game (and bar) sit at the top of their area
- * at the game's own shape, whatever [stretch] says, leaving the rest below.
+ * at the game's own shape, whatever [stretch] says, leaving the rest below -
+ * unless [expand] (WIDE), which fills that area too: the game draws the map above
+ * and below itself there, as it does beside itself on a wide screen.
  */
 class GameStageLayout(
     context: Context,
@@ -38,8 +40,16 @@ class GameStageLayout(
             requestLayout()
         }
 
-    /** Fill the area instead of fitting [aspect] in it - see [Prefs.stretchGame]. */
+    /** Fill the area instead of fitting [aspect] in it: ASPECT > STRETCH or WIDE ([Prefs.gameAspect]). */
     var stretch = false
+        set(v) {
+            if (field == v) return
+            field = v
+            requestLayout()
+        }
+
+    /** ASPECT > WIDE: the game takes its whole area even when [topAligned] (it fills it with the rebuilt map). */
+    var expand = false
         set(v) {
             if (field == v) return
             field = v
@@ -78,7 +88,7 @@ class GameStageLayout(
             )
             bar.measuredHeight
         } else 0
-        if (stretch && !topAligned) {
+        if ((stretch && !topAligned) || (expand && topAligned)) {
             gameW = areaW.coerceAtLeast(0)
             gameH = (areaH - barH).coerceAtLeast(0)
         } else {

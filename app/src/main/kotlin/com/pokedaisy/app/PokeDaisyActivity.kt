@@ -37,6 +37,7 @@ import com.pokedaisy.app.companion.ui.AchievementBadges
 import com.pokedaisy.app.companion.BatteryStatus
 import com.pokedaisy.app.companion.DeviceBattery
 import com.pokedaisy.app.companion.FfMode
+import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.GridStrength
 import com.pokedaisy.app.companion.ScreenFilter
 import com.pokedaisy.app.companion.Smoothing
@@ -132,6 +133,10 @@ class PokeDaisyActivity : Activity() {
     // The battle state the companion's snapshot was last refreshed for (emu thread; see onBattleInputSample).
     private var lastUiBattler = -1
     private var lastUiBattleState = -1
+    /** WIDE's native tables for this ROM ([WideScreen.gameFor]); OFF for a game it doesn't know. */
+    private var wideGame = WideScreen.OFF
+    /** EXPAND's one-time offer is up on the companion ([CompanionSettings.expandOffer]). */
+    private val expandOfferUp = androidx.compose.runtime.mutableStateOf(false)
     private var states: SaveStates? = null
 
     private val telemetry = TelemetryStore()
@@ -416,10 +421,20 @@ class PokeDaisyActivity : Activity() {
             Prefs(this@PokeDaisyActivity).statusBarOnCompanion = on
             runOnUiThread { syncGameScreen() }
         }
-        override val stretchGame get() = Prefs(this@PokeDaisyActivity).stretchGame
-        override fun setStretchGame(on: Boolean) {
-            Prefs(this@PokeDaisyActivity).stretchGame = on
+        override val gameAspect get() = Prefs(this@PokeDaisyActivity).gameAspect
+        override fun setGameAspect(aspect: com.pokedaisy.app.companion.GameAspect) {
+            Prefs(this@PokeDaisyActivity).gameAspect = aspect
             runOnUiThread { syncGameScreen() }
+        }
+        override val wideSupported get() = wideGame != WideScreen.OFF
+        override val expandOffer get() = expandOfferUp.value
+        override fun answerExpandOffer(turnOn: Boolean) {
+            val prefs = Prefs(this@PokeDaisyActivity)
+            // Either answer settles both offers: the Library's too (never asked twice).
+            prefs.expandGameOfferSeen = true
+            prefs.expandIntroSeen = true
+            expandOfferUp.value = false
+            if (turnOn) setGameAspect(com.pokedaisy.app.companion.GameAspect.WIDE)
         }
         override val overlayChoices get() = com.pokedaisy.app.overlay.overlayChoices(overlayStore).map { (c, label) -> c.key to label }
         override val overlay get() = Prefs(this@PokeDaisyActivity).overlay
@@ -691,6 +706,11 @@ class PokeDaisyActivity : Activity() {
         // GBA art fingerprints, FireRed's region_map.c); its click is borrowed.
         val gameBoy = RomIdentity.isGameBoy(r)
         romIsGameBoy = gameBoy
+        wideGame = if (gameBoy) WideScreen.OFF else WideScreen.gameFor(crc)
+        Prefs(this).let { p ->
+            expandOfferUp.value = wideGame != WideScreen.OFF && !p.expandGameOfferSeen &&
+                p.gameAspect != com.pokedaisy.app.companion.GameAspect.WIDE
+        }
         // FireRed / Emerald party-menu art and region maps come from the ROM
         // itself, once per ROM (see RomArt) - nothing of the game is bundled.
         if (!gameBoy) RomArt.prefetch(filesDir, crc, r) else com.pokedaisy.app.companion.data.Gen1Art.prefetch(filesDir, r)
@@ -726,13 +746,15 @@ class PokeDaisyActivity : Activity() {
 
         engine = EmulatorEngine(input, states!!, ffMusicCache).apply {
             gba = !gameBoy
+            wideCamera = view.camera
+            onWideOff = { runOnUiThread { showHud(com.pokedaisy.app.companion.i18n.tr("EXPAND hit a problem and is off for this game")) } }
             gen1Music = this@PokeDaisyActivity.gen1Music
             onCoreReady = { w, h ->
                 MgbaCore.pkVideoBuffer()?.let { buf ->
                     runOnUiThread {
                         stage.aspect = w.toFloat() / h   // 3:2, or a Game Boy's 10:9
                         touchControls.shoulders = !gameBoy
-                        view.bindCore(buf, w, h)
+                        view.bindCore(buf, MgbaCore.pkWideBuffer(), w, h)
                     }
                 }
             }
@@ -1090,8 +1112,8 @@ class PokeDaisyActivity : Activity() {
         setContentView(view)
     }
 
-    /** Show the status bar above the game per SETTINGS > STATUS BAR, fit or
-     * stretch the game per SETTINGS > ASPECT, and draw it through SETTINGS > SHADERS. */
+    /** Show the status bar above the game per SETTINGS > STATUS BAR, fit, stretch or widen
+     * the game per SETTINGS > ASPECT, and draw it through SETTINGS > SHADERS. */
     private fun syncGameScreen() {
         if (!::statusBar.isInitialized) return
         val prefs = Prefs(this)
@@ -1100,15 +1122,24 @@ class PokeDaisyActivity : Activity() {
         performance.visibility = if (prefs.showPerformance) View.VISIBLE else View.GONE
         com.pokedaisy.app.companion.ui.CompanionStatusBar.shown = prefs.statusBar && prefs.statusBarOnCompanion
         val stageLayout = statusBar.parent as? GameStageLayout
-        // SCREEN > OVERLAY: not on a phone held upright, where the game is its own shape across the top.
-        view.overlay = if (stageLayout?.topAligned == true) null else when (val c = OverlayChoice.of(prefs.overlay)) {
+        // WIDE on a game it doesn't know is ORIGINAL; otherwise the game takes the whole area and
+        // the core draws the overworld into the room beside it.
+        val aspect = prefs.gameAspect.let { if (it == GameAspect.WIDE && wideGame == WideScreen.OFF) GameAspect.ORIGINAL else it }
+        // SCREEN > OVERLAY: not on a phone held upright, where the game is its own shape across the top, nor with
+        // EXPAND, whose map fills the screen.
+        view.overlay = if (stageLayout?.topAligned == true || aspect == GameAspect.WIDE) null else when (val c = OverlayChoice.of(prefs.overlay)) {
             OverlayChoice.None -> null
             is OverlayChoice.BuiltIn -> EmulatorView.OverlaySource.BuiltIn(c.style)
             is OverlayChoice.Imported -> overlayStore.get(c.id)?.let { EmulatorView.OverlaySource.Imported(it) }
         }
         // With an overlay the view takes all the room and places the game in it itself.
-        stageLayout?.stretch = prefs.stretchGame || view.overlay != null
-        view.stretch = prefs.stretchGame
+        stageLayout?.stretch = aspect != GameAspect.ORIGINAL || view.overlay != null
+        // A phone upright: WIDE fills everything above the companion, the map going on above and below the game.
+        stageLayout?.expand = aspect == GameAspect.WIDE
+        if (::portraitPanel.isInitialized) portraitPanel.expand = aspect == GameAspect.WIDE
+        view.stretch = aspect == GameAspect.STRETCH
+        view.wide = aspect == GameAspect.WIDE
+        if (::engine.isInitialized) engine.wideGame = if (aspect == GameAspect.WIDE) wideGame else WideScreen.OFF
         view.gbaColors = prefs.gbaColors
         CompanionColors.set(
             prefs.gbaColors && prefs.companionShaders,
@@ -1328,6 +1359,12 @@ class PokeDaisyActivity : Activity() {
             if ((rt > 0.5f) != rtDown) { rtDown = rt > 0.5f; triggerKey(KeyEvent.KEYCODE_BUTTON_R2, rtDown) }
             if ((lt > 0.5f) != ltDown) { ltDown = lt > 0.5f; triggerKey(KeyEvent.KEYCODE_BUTTON_L2, ltDown) }
         }
+        if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
+            // The right stick: WIDE's look-around (WideCamera). Most pads report it as Z / RZ, some as RX / RY.
+            fun axis(a: Int, b: Int) = event.getAxisValue(a).let { v -> if (kotlin.math.abs(v) > 0.05f) v else event.getAxisValue(b) }
+            view.camera.stickX = axis(MotionEvent.AXIS_Z, MotionEvent.AXIS_RX)
+            view.camera.stickY = axis(MotionEvent.AXIS_RZ, MotionEvent.AXIS_RY)
+        }
         if (input.onMotion(event)) return true
         return super.onGenericMotionEvent(event)
     }
@@ -1363,6 +1400,13 @@ class PokeDaisyActivity : Activity() {
                 if (e.pressed && !Prefs(this).rewind) showHud(com.pokedaisy.app.companion.i18n.tr("Rewind is off - turn it on in SETTINGS"))
                 else if (e.pressed) showHud(com.pokedaisy.app.companion.i18n.tr("Rewinding"))
                 engine.setRewindHeld(e.pressed)
+            }
+            Hotkeys.Action.ZOOM -> if (e.pressed) runCatching {
+                if (!view.wide) showHud(com.pokedaisy.app.companion.i18n.tr("Zoom needs ASPECT > EXPAND"))
+                else {
+                    val step = view.camera.cycle()
+                    showHud(com.pokedaisy.app.companion.i18n.tr("Zoom {0}", "%.1fx".format(java.util.Locale.ROOT, view.camera.factor(step)).replace(".0x", "x")))
+                }
             }
             Hotkeys.Action.EXIT_GAME -> if (e.pressed) exitGame()
         }

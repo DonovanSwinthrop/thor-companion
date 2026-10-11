@@ -24,6 +24,7 @@
 
 #include "pk_cheats.h"
 #include "pk_rewind.h"
+#include "pk_wide.h"
 
 #define LOG_TAG "pokedaisy/jni"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -71,6 +72,14 @@ static struct {
     int rewindEntries;
     int rewindTick;
     bool rewinding;
+    // WIDE (pk_wide.c): the window around the frame with the rebuilt scene, wideW x wideH (0 = not
+    // drawn: the screen shows `video`). The window comes from WideCamera (ZOOM, the look-around) per frame.
+    uint32_t* wide;
+    int wideW, wideH;
+    uint32_t wideCrc;                   // the game WIDE draws (its ROM's CRC32; 0 = off)
+    volatile int viewX, viewY, viewW, viewH;
+    volatile bool wideSkipNext;         // the next frame won't be shown: only note it (pk_wide_skip); false = draw
+    bool wideSkipped;                   // the last frame was only noted, not drawn: wide / wideW still hold the one before
 } g;
 
 #define PK_REWIND_INTERVAL 2
@@ -138,6 +147,11 @@ static void pkTeardown(void) {
     g.video = NULL;
     g.vw = g.vh = 0;
     g.audioAvail = 0;
+    pk_wide_configure(0);
+    g.wideCrc = 0;
+    g.wideW = 0;
+    free(g.wide);
+    g.wide = NULL;
     pthread_rwlock_unlock(&pk_coreLock);
 }
 
@@ -252,6 +266,9 @@ Java_com_pokedaisy_app_MgbaCore_pkInit(JNIEnv* env, jobject thiz,
     g.vh = h;
     g.saveVf = saveVf;
     g.audioAvail = 0;
+    if (pk_is_gba(core)) {
+        g.wide = calloc((size_t) PK_WIDE_MAX_VIEW_W * PK_WIDE_MAX_VIEW_H, sizeof(uint32_t));
+    }
     pthread_rwlock_unlock(&pk_coreLock);
 
     LOGI("core up: %ux%u, freq %d Hz, sample rate %d", w, h, core->frequency(core), PK_SAMPLE_RATE);
@@ -323,6 +340,94 @@ Java_com_pokedaisy_app_MgbaCore_pkRunFrame(JNIEnv* env, jobject thiz) {
     }
     g.core->runFrame(g.core);
     pkDrainAudio();
+    // WIDE: only with a game it knows and a window set. 32-bit colour, like the screen's upload.
+    struct PkWideView v = { g.viewX, g.viewY, g.viewW, g.viewH };
+    g.wideSkipped = false;
+    if (g.wide && g.wideCrc && v.w > 0 && v.h > 0 && v.w <= PK_WIDE_MAX_VIEW_W && v.h <= PK_WIDE_MAX_VIEW_H &&
+        sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H && g.wideSkipNext) {
+        pk_wide_skip(g.core, (const uint32_t*) g.video);
+        g.wideSkipped = true;
+    } else if (g.wide && g.wideCrc && v.w > 0 && v.h > 0 && v.w <= PK_WIDE_MAX_VIEW_W && v.h <= PK_WIDE_MAX_VIEW_H &&
+        sizeof(color_t) == 4 && g.vw == PK_WIDE_W && g.vh == PK_WIDE_H) {
+        pk_wide_view(g.core, (const uint32_t*) g.video, g.wide, v, NULL);
+        g.wideW = v.w;
+        g.wideH = v.h;
+        if (pk_wide_fault()) {
+            // It faulted drawing (and switched itself off): this game shows the plain frame from now on.
+            LOGI("WIDE switched off: signal %d while drawing", pk_wide_fault());
+            g.wideCrc = 0;
+            g.wideW = g.wideH = 0;
+        }
+    } else {
+        g.wideW = g.wideH = 0;
+    }
+}
+
+// WIDE: draw the game whose ROM has this CRC32 (pk_wide_games.h; 0 = off). Emu thread.
+JNIEXPORT void JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideConfigure(JNIEnv* env, jobject thiz, jint crc) {
+    uint32_t want = pk_is_gba(g.core) ? (uint32_t) crc : 0;
+    if (want == g.wideCrc) return;
+    g.wideCrc = pk_wide_configure(want) ? want : 0;
+}
+
+// WIDE: whether it has tables for the ROM with this CRC32. Any thread, no core needed.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideKnows(JNIEnv* env, jobject thiz, jint crc) {
+    return pk_wide_knows((uint32_t) crc) ? JNI_TRUE : JNI_FALSE;
+}
+
+// WIDE: the window to draw from the next frame on, in the frame's pixels (its top-left (0, 0)); w 0 = none.
+JNIEXPORT void JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideSetView(JNIEnv* env, jobject thiz, jint x, jint y, jint w, jint h) {
+    g.viewX = x;
+    g.viewY = y;
+    g.viewH = h < 0 ? 0 : h > PK_WIDE_MAX_VIEW_H ? PK_WIDE_MAX_VIEW_H : h;
+    g.viewW = w < 0 ? 0 : w > PK_WIDE_MAX_VIEW_W ? PK_WIDE_MAX_VIEW_W : w;
+}
+
+// The wide frame buffer (room for the largest window; the last frame is pkWideWidth() x pkWideHeight()).
+JNIEXPORT jobject JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideBuffer(JNIEnv* env, jobject thiz) {
+    if (!g.wide) {
+        return NULL;
+    }
+    return (*env)->NewDirectByteBuffer(env, g.wide, (jlong) PK_WIDE_MAX_VIEW_W * PK_WIDE_MAX_VIEW_H * sizeof(uint32_t));
+}
+
+// The last frame's window size, or 0 when it wasn't drawn wide (the screen shows pkVideoBuffer). Emu thread.
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideWidth(JNIEnv* env, jobject thiz) {
+    return g.wideW;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideHeight(JNIEnv* env, jobject thiz) {
+    return g.wideH;
+}
+
+// WIDE: draw the next frame's window (true), or only keep its RAM (false: the screen won't show it). Emu thread.
+JNIEXPORT void JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideSetDraw(JNIEnv* env, jobject thiz, jboolean draw) {
+    g.wideSkipNext = !draw;
+}
+
+// WIDE: the last frame wasn't drawn (pkWideSetDraw(false)): nothing new to publish. Emu thread.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideSkipped(JNIEnv* env, jobject thiz) {
+    return g.wideSkipped ? JNI_TRUE : JNI_FALSE;
+}
+
+// WIDE: the signal that switched it off for this game (pk_wide_view's fault guard), or 0. Any thread.
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideFault(JNIEnv* env, jobject thiz) {
+    return pk_wide_fault();
+}
+
+// ZOOM: whether the last frame wants the game close up (a battle, a menu, a text box). Emu thread.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkWideWantsClose(JNIEnv* env, jobject thiz) {
+    return g.wideW && !pk_wide_wants_close() ? JNI_FALSE : JNI_TRUE;
 }
 
 // REWIND: keep [entries] states (0 = off, the buffer freed). Emu thread, like pkRunFrame.
@@ -702,6 +807,7 @@ Java_com_pokedaisy_app_MgbaCore_pkLoadState(JNIEnv* env, jobject thiz, jstring j
     }
     bool ok = mCoreLoadStateNamed(g.core, vf, SAVESTATE_SAVEDATA | SAVESTATE_RTC);
     vf->close(vf);
+    pk_wide_reset();   // the RAM it kept from the last frame is another moment's
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 

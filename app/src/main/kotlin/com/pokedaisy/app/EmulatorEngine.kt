@@ -67,6 +67,16 @@ class EmulatorEngine(
     /** REWIND (Settings): states kept for the rewind hotkey, 0 = off. Picked up on the emu thread. */
     @Volatile var rewindEntries = 0
 
+    /** WIDE's native tables for this game ([WideScreen.gameFor]), or [WideScreen.OFF]; applied between frames. */
+    @Volatile var wideGame = WideScreen.OFF
+
+    /** ZOOM and the look-around over WIDE: asked for the window to draw before each frame ([EmulatorView.camera]). */
+    @Volatile var wideCamera: WideCamera? = null
+
+    /** Called (emu thread) once WIDE has switched itself off for this game: a fault while drawing, caught
+     * ([MgbaCore.pkWideFault]), or the camera failing - the game goes on with its plain frame. */
+    var onWideOff: ((String) -> Unit)? = null
+
     /** What fast-forward sounds like (Settings: STEADY / SPED-UP / OFF). */
     @Volatile var ffMusicMode = FfMusicMode.STEADY
     /** SMART: 1x while a menu screen or the region map is up ([FfMenuWatch], [RegionMapWatch]) - not a shop's ([ShopWatch]). */
@@ -503,6 +513,9 @@ class EmulatorEngine(
         var vsyncMode = false
         val silence = ShortArray(bufferFrames * 2)
         var rewindApplied = -1   // pkInit dropped any buffer: set it again for this core
+        var wideApplied = WideScreen.OFF   // pkInit starts with WIDE off
+        var wideFaultReported = false
+        var lastWideDraw = 0L
         var frame = 0L
         try {
             while (running) {
@@ -512,6 +525,33 @@ class EmulatorEngine(
                 if (rewindWanted != rewindApplied) {
                     MgbaCore.pkSetRewind(rewindWanted)
                     rewindApplied = rewindWanted
+                }
+                val wideWanted = wideGame
+                if (wideWanted != wideApplied) {
+                    MgbaCore.pkWideConfigure(wideWanted)
+                    wideApplied = wideWanted
+                    wideCamera?.reset()
+                }
+                val camera = wideCamera
+                if (wideApplied != WideScreen.OFF && camera != null) {
+                    // Never worth the game: a camera that throws leaves the plain frame on screen for this run.
+                    try {
+                        // Fast-forward runs several frames per screen refresh: only one of them is ever seen, so only
+                        // that one has its window drawn (the rest just keep the RAM after them) - it was most of the CPU.
+                        val now = System.nanoTime()
+                        val draw = effectiveSpeed() <= 1f || now - lastWideDraw >= WIDE_DRAW_NANOS
+                        if (draw) lastWideDraw = now
+                        MgbaCore.pkWideSetDraw(draw)
+                        camera.walking = input.mask and DIRECTIONS != 0
+                        val win = camera.frame(MgbaCore.pkWideWantsClose())
+                        if (win != null) MgbaCore.pkWideSetView(win.x, win.y, win.w, win.h)
+                        else MgbaCore.pkWideSetView(0, 0, 0, 0)
+                    } catch (t: Throwable) {
+                        Log.e("pokedaisy", "WIDE camera failed; zoom off for this run", t)
+                        wideCamera = null
+                        MgbaCore.pkWideSetView(-WideCamera.MARGIN_FALLBACK, 0, WideCamera.PK_W + 2 * WideCamera.MARGIN_FALLBACK, WideCamera.PK_H)
+                        runCatching { onWideOff?.invoke("camera") }
+                    }
                 }
                 val rewinding = rewindHeld && rewindWanted > 0
                 MgbaCore.pkSetRewinding(rewinding)
@@ -531,6 +571,11 @@ class EmulatorEngine(
                 }
 
                 servicePending()
+                if (wideApplied != WideScreen.OFF && !wideFaultReported && MgbaCore.pkWideFault() != 0) {
+                    wideFaultReported = true
+                    Log.e("pokedaisy", "WIDE switched itself off: signal ${MgbaCore.pkWideFault()} while drawing")
+                    runCatching { onWideOff?.invoke("fault") }
+                }
 
                 val nowMs = System.currentTimeMillis()
                 // The companion's full sample: once a second, four times in a battle (HP and PP follow the
@@ -892,5 +937,9 @@ class EmulatorEngine(
          * appended, so the indexes saved before keep their meaning. */
         val SPEED_STEPS = floatArrayOf(1f, 1.5f, 2f, 3f, 4f, 0.5f, 0.25f)
         const val CYCLE_STEPS = 5
+        /** At fast-forward, a WIDE window is drawn at most this often (~80 a second: every refresh of a 60 Hz screen). */
+        const val WIDE_DRAW_NANOS = 12_000_000L
+        /** The D-pad's bits: one held = the player walking (the look-around glides back). */
+        const val DIRECTIONS = MgbaCore.Key.UP or MgbaCore.Key.DOWN or MgbaCore.Key.LEFT or MgbaCore.Key.RIGHT
     }
 }
