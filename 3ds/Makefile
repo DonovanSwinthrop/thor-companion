@@ -15,7 +15,7 @@ CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror
 CORE_SRC := $(wildcard core/*.c)
 DEVKITARM_IMAGE := devkitpro/devkitarm:latest
 
-.PHONY: preview 3ds decomps fixture-roms azahar-test tables clean
+.PHONY: preview 3ds decomps fixture-roms azahar-test azahar-battle-test tables clean
 
 $(BUILD)/pd_preview: $(CORE_SRC) $(wildcard core/*.h) desktop/pd_preview.c desktop/pd_png.c desktop/pd_png.h
 	@mkdir -p $(BUILD)
@@ -33,8 +33,12 @@ preview: $(BUILD)/pd_preview
 	@mkdir -p $(BUILD)/shots
 	$(BUILD)/pd_preview $(FIXTURES)/firered_vanilla BPRE $(BUILD)/shots firered $(call rom_if,$(FR_ROM))
 	$(BUILD)/pd_preview $(FIXTURES)/emerald_vanilla BPEE $(BUILD)/shots emerald $(call rom_if,$(EM_ROM))
-	# German Emerald keeps English's RAM layout: the only Emerald battle fixture.
-	$(BUILD)/pd_preview $(FIXTURES)/emerald_de_battle BPEE $(BUILD)/shots emerald-battle
+	# German Emerald keeps English's RAM layout: the only Emerald battle fixture
+	# (wild; the preview also turns it into a trainer battle, kept as a fixture
+	# of its own in build/fixtures/emerald_trainer for make fixture-roms).
+	@mkdir -p $(BUILD)/fixtures/emerald_trainer
+	PD_PREVIEW_TRAINER_DIR=$(BUILD)/fixtures/emerald_trainer \
+		$(BUILD)/pd_preview $(FIXTURES)/emerald_de_battle BPEE $(BUILD)/shots emerald-battle $(call rom_if,$(EM_ROM))
 
 decomps:
 	test/build_decomps.sh
@@ -65,7 +69,8 @@ fixture-roms:
 # like a player would: the game list, PARTY (SHARP 1.5x, the default), BAG,
 # SETTINGS, the SCREEN pick-list, STRETCH, PIXEL, fast-forward on, a saved
 # state and loading it, MAP (a tapped place, PLACES), POKéDEX (an entry, the
-# next), GUIDE (its notice, HERE, BOSS, a hint) - screenshots in
+# next), GUIDE (its notice, HERE, BOSS, a hint), the TRAINER CARD (from
+# SETTINGS' title window, x 265 y 40) and its back - screenshots in
 # build/azahar/*.png (needs ImageMagick's convert). Taps are window
 # coordinates: the bottom screen's (x, y) is (480 + x, 478 + y); the tab
 # chips' centres are at y 13, x 27 / 78 / 129 / 180 / 231, FF 273, gear 303
@@ -74,7 +79,7 @@ AZAHAR_IMAGE := linuxserver/azahar:latest
 AZAHAR_ROM = $(if $(wildcard $(BUILD)/fixture-firered_vanilla-rom.gba),fixture-firered_vanilla-rom.gba,fixture-firered_vanilla.gba)
 AZAHAR_SHOTS := 01-menu 02-party 03-bag 04-settings 05-pick 06-stretch 07-pixel 08-ff 09-saved 10-loaded \
 	11-map 12-map-tapped 13-places 14-dex 15-dex-entry 16-dex-next 17-guide-notice 18-guide-here \
-	19-guide-boss 20-guide-hint
+	19-guide-boss 20-guide-hint 21-card 22-card-back
 azahar-test: 3ds fixture-roms
 	rm -rf $(BUILD)/azahar && mkdir -p $(BUILD)/azahar
 	docker run --rm -v "$(REPO):/repo" -v "$(abspath $(BUILD))/azahar:/out" --entrypoint /bin/sh $(AZAHAR_IMAGE) \
@@ -93,8 +98,27 @@ azahar-test: 3ds fixture-roms
 		click:701,696 wait:1 shot:16-dex-next \
 		click:660,491 wait:1 shot:17-guide-notice click:726,704 wait:1 shot:18-guide-here \
 		click:576,517 wait:1 shot:19-guide-boss \
-		click:765,517 wait:1 click:640,567 wait:1 shot:20-guide-hint
+		click:765,517 wait:1 click:640,567 wait:1 shot:20-guide-hint \
+		click:783,491 wait:1 click:745,518 wait:2 shot:21-card \
+		click:640,599 wait:2 shot:22-card-back
 	for s in $(AZAHAR_SHOTS); do convert xwd:$(BUILD)/azahar/$$s.xwd -crop 640x500+320+230 $(BUILD)/azahar/$$s.png; done
+
+# BATTLE in Azahar, on the trainer battle `make preview` builds from the wild
+# one (build/fixtures/emerald_trainer, over the Emerald decomp's ROM): INFO
+# with the FOE TEAM, SUGGESTIONS, an unseen foe tapped, the last one and its
+# SUGGESTIONS - screenshots in build/azahar-battle/. The bar's buttons sit at
+# y 219: SUGGESTIONS / INFO x 51, the foe slots x 188 / 225 / 262 / 299.
+AZAHAR_BATTLE_SHOTS := 01-info 02-suggest 03-foe-unseen 04-foe-last 05-foe-last-suggest
+azahar-battle-test: 3ds fixture-roms
+	rm -rf $(BUILD)/azahar-battle && mkdir -p $(BUILD)/azahar-battle
+	docker run --rm -v "$(REPO):/repo" -v "$(abspath $(BUILD))/azahar-battle:/out" --entrypoint /bin/sh $(AZAHAR_IMAGE) \
+		/repo/3ds/test/azahar_run.sh fixture-emerald_trainer-rom.gba \
+		a wait:8 shot:01-info \
+		click:531,697 wait:1 shot:02-suggest click:531,697 wait:1 \
+		click:705,697 wait:1 shot:03-foe-unseen \
+		click:779,697 wait:1 shot:04-foe-last \
+		click:531,697 wait:1 shot:05-foe-last-suggest
+	for s in $(AZAHAR_BATTLE_SHOTS); do convert xwd:$(BUILD)/azahar-battle/$$s.xwd -crop 640x500+320+230 $(BUILD)/azahar-battle/$$s.png; done
 
 clean:
 	rm -rf $(BUILD) ctr/build ctr/pokedaisy.3dsx

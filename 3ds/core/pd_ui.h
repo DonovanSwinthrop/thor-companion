@@ -28,6 +28,7 @@ enum pd_tab {
     PD_TAB_DEX,
     PD_TAB_BATTLE,
     PD_TAB_SETTINGS,
+    PD_TAB_CARD, // the TRAINER CARD: no chip, it opens from SETTINGS
     PD_TAB_COUNT,
 };
 
@@ -92,6 +93,13 @@ struct pd_ui {
     enum pd_tab tabBeforeBattle; // the tab a battle took over from
     int battleSlot;              // the bar slot BATTLE shows in, -1 = none
     bool battleWasOn;
+    // BATTLE: INFO (0) or SUGGESTIONS (1); the FOE TEAM's slots seen so far
+    // this battle (a bit each), the one tapped (-1 = follow the battle) and
+    // the one shown (set by the draw); what the last read said was out / next.
+    int battlePane;
+    unsigned foeSeen;
+    int foeSelected, foeShown;
+    int lastFoeActive, lastFoeNext;
     int summarySlot; // party slot whose summary is open, -1 = none
     int bagPocket;   // index into the game's own pocket order
     int bagSelected; // item index in that pocket, -1 = none
@@ -109,6 +117,11 @@ struct pd_ui {
     // GUIDE: the page, its scroll, the open entry and how far it's revealed.
     int guidePage, guideScroll, guideOpen, guideLevel;
     bool guideNoticeShown;
+    // TRAINER CARD: the side shown, a flip running (ms into it, 0 = none) and
+    // the play time's blinking colon.
+    bool cardBack, cardColon;
+    int cardFlipMs;
+    unsigned cardColonMs;
 
     enum pd_overlay overlay;
     struct pd_settings* settings;
@@ -134,7 +147,8 @@ bool pd_ui_back(struct pd_ui* ui);
 // The last thing the player asked the host for (once), or PD_ACTION_NONE.
 enum pd_action pd_ui_take_action(struct pd_ui* ui);
 // Time passing (milliseconds since the last call): true when something on
-// screen animates and needs a redraw (the MAP cursor's blink).
+// screen animates and needs a redraw (the MAP cursor's blink, the TRAINER
+// CARD's colon and flip).
 bool pd_ui_tick(struct pd_ui* ui, unsigned ms);
 
 const char* pd_screen_mode_name(int mode);
