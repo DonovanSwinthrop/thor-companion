@@ -188,40 +188,51 @@ shows a "not supported" notice).
 
 ✅ works · ◐ partly · — not yet
 
-| Game                   | Version                 | Party | Bag | Battle | Map | Pokédex | Guide |
-| ---------------------- | ----------------------- | :---: | :-: | :----: | :-: | :-----: | :---: |
-| Pokémon FireRed        | USA/Europe, rev 0 and 1 |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
-| Pokémon FireRed        | ES / DE / FR / IT / JP  |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
-| Pokémon LeafGreen      | USA/Europe, rev 0 and 1 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon LeafGreen      | ES / FR / IT / JP       |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Emerald        | USA/Europe              |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
-| Pokémon Emerald        | ES / DE / FR / IT / JP  |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
-| Pokémon Ruby           | USA, rev 0, 1 and 2     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Ruby           | ES/DE/FR/IT/JP, rev 0-1 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Sapphire       | USA, rev 0, 1 and 2     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Sapphire       | ES/DE/FR/IT/JP, rev 0-1 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Unbound        | 2.1.1.1                 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Radical Red    | 4.1                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Gaia           | 3.2                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Odyssey        | 4.1.1                   |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Heart and Soul | 2.0.6                   |  ✅   | ✅  |   ✅   |  ◐  |   ✅    |  ✅   |
-| Pokémon Amethyst       | 1.3.0, 1.4.1            |  ✅   | ✅  |   —    | ✅  |   ✅    |  ✅   |
-| Celia's Stupid Romhack | 1.1.4                   |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Lazarus        | 2.0                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
-| Emerald Seaglass       | 3.0                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
-| Too Many Types 2       | 1.5.2                   |  ✅   | ✅  |   —    | ✅  |   ✅    |   —   |
-| Emerald Rogue          | 2.2.1-EX                |  ✅   | ✅  |   ✅   | ✅  |    —    |   —   |
-| Pokémon SoulGold       | 1.1.4, 1.2 (two builds) |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
-| Pokémon R.O.W.E.       | 2.1.9.1 Experimental    |   —   |  —  |   —    |  —  |    —    |   —   |
-| Pokémon Yellow (GB)    | USA/Europe              |  ✅   | ✅  |   ◐    | ✅  |    —    |   —   |
+| Game                           | Version                    | Party | Bag | Battle | Map | Pokédex | Guide |
+| ------------------------------ | -------------------------- | :---: | :-: | :----: | :-: | :-----: | :---: |
+| Pokémon FireRed                | USA/Europe, rev 0 and 1    |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
+| Pokémon FireRed                | ES / DE / FR / IT / JP     |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
+| Pokémon LeafGreen              | USA/Europe, rev 0 and 1    |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon LeafGreen              | ES / FR / IT / JP          |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Emerald                | USA/Europe                 |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
+| Pokémon Emerald                | ES / DE / FR / IT / JP     |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
+| Pokémon Ruby                   | USA, rev 0, 1 and 2        |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Ruby                   | ES/DE/FR/IT/JP, rev 0-1    |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Sapphire               | USA, rev 0, 1 and 2        |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Sapphire               | ES/DE/FR/IT/JP, rev 0-1    |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Unbound                | 2.1.1.1                    |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Unbound                | 2.1.1.1 French             |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Radical Red            | 4.1                        |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Gaia                   | 3.2                        |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Odyssey                | 4.1.1                      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Heart and Soul         | 2.0.6                      |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
+| Pokémon Amethyst               | 1.3.0, 1.4.1               |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Celia's Stupid Romhack         | 1.1.4                      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Orange Islands         | Beta 5.7, an older beta    |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Ultra Violet           | 1.22                       |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Sword and Shield Ultimate Plus | 1.2.1.2 + its 3 patches    |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Recharged Yellow       | 1.8.0, 1.9.0, 1.9.4, 1.9.7 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Lazarus                | 2.0                        |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Emerald Seaglass               | 3.0                        |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Too Many Types 2               | 1.5.2                      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Pokémon Glazed                 | 9.2.0                      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Emerald Imperium               | 1.3.1                      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Pokémon Quetzal                | English Alpha 9 v0         |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Pokémon Quetzal                | Spanish Alpha 9 v0         |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Super Mariomon                 | 1.2.1-1.3, 1.5.1, 1.5.2    |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Emerald Rogue                  | 2.2.1-EX                   |  ✅   | ✅  |   ✅   | ✅  |   ✅    |   —   |
+| Pokémon SoulGold               | 1.1.4, 1.2 (3 builds)      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
+| Pokémon R.O.W.E.               | 2.1.9.1 Experimental       |  ✅   | ✅  |   ◐    | ✅  |    ◐    |   —   |
+| Pokémon Yellow (GB)            | USA/Europe                 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
 
 <details>
 <summary><strong>Notes on the table</strong></summary>
 
 Game Boy / Color games play too; Pokémon Yellow is the first one the companion reads,
 in the game's own look (its font, icons and town map, rebuilt from your ROM).
-R.O.W.E. plays, but its companion is still in progress. Map ◐ means place names
-only, without the map picture. Battle ◐ means the battle panes work but haven't
+Map ◐ means place names
+only, without the map picture. Guide ◐ means the live pages only (the wild Pokémon here and the next
+boss), without the area lists. Battle ◐ means the battle panes work but haven't
 been checked in every kind of battle. The guides were
 written from each game's own data and may contain mistakes; the app says so the
 first time you open one.
