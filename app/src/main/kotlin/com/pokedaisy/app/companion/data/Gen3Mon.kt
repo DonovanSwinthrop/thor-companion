@@ -258,7 +258,18 @@ data class BattleMonLayout(
     val status1: Int,
     /** Species bits: R.O.W.E. keeps a 5-bit formId above its 11. */
     val speciesMask: Int = 0xFFFF,
-)
+    /** The ability, a byte (vanilla, CFRU) or a u16 ([abilityU16], expansion). */
+    val ability: Int = 0x20,
+    val abilityU16: Boolean = false,
+    /** The held item (u16). */
+    val item: Int = 0x2E,
+) {
+    // Every layout so far keeps these where vanilla has them (checked on each *_battle fixture).
+    /** Attack, Defense, Speed, Sp. Atk, Sp. Def (u16 each). */
+    val stats: Int get() = 0x02
+    /** statStages[8] (HP, Atk, Def, Speed, Sp. Atk, Sp. Def, accuracy, evasion; 6 = unchanged). */
+    val statStages: Int get() = 0x18
+}
 
 val VANILLA_BATTLE_MON = BattleMonLayout(
     size = BATTLE_POKEMON_SIZE, moves = 0x0C, type1 = 0x21, type2 = 0x22, pp = 0x24,
@@ -272,6 +283,7 @@ val VANILLA_BATTLE_MON = BattleMonLayout(
 val EXPANSION_BATTLE_MON = BattleMonLayout(
     size = 0x60, moves = 0x0C, type1 = 0x22, type2 = 0x23, pp = 0x25,
     hp = 0x2A, level = 0x2C, maxHp = 0x2E, status1 = 0x50,
+    ability = 0x20, abilityU16 = true, item = 0x30,
 )
 
 /** Too Many Types 2's: expansion's, but PP a byte later (a third type byte at +0x24). */
@@ -303,5 +315,10 @@ fun decodeBattleMon(raw: ByteArray, off: Int, layout: BattleMonLayout = VANILLA_
         status1 = u32(raw, off + layout.status1),
         moves = IntArray(NUM_MOVES) { u16(raw, off + layout.moves + it * 2) },
         pp = IntArray(NUM_MOVES) { raw[off + layout.pp + it].toInt() and 0xFF },
+        ability = if (layout.abilityU16) u16(raw, off + layout.ability) else raw[off + layout.ability].toInt() and 0xFF,
+        item = u16(raw, off + layout.item),
+        stats = IntArray(5) { u16(raw, off + layout.stats + it * 2) },
+        // Attack .. evasion (the HP slot isn't a stage the game uses).
+        statStages = IntArray(7) { raw[off + layout.statStages + 1 + it].toInt() },
     )
 }

@@ -46,6 +46,18 @@ class RomArtTest {
         assertEquals("a9c4cfb6", pixels(images.getValue("regionmap/imperium.png")))
     }
 
+    /** Super Mariomon's world map (MM_REGION_*, the same bytes in every release) and MARIO's head for it. */
+    @Test fun mariomonSuppliesItsRegionMap() {
+        for (v in listOf("v1.2.1", "v1.2.2", "v1.3", "v1.5.1-Anniversary", "v1.5.2-Anniversary")) {
+            val path = System.getProperty("user.home") + "/Downloads/Game ROMs & Emulation/gba/Super Mariomon $v.gba"
+            if (!File(path).isFile) continue
+            val images = RomArt.compose(RomArt.find(File(path).readBytes()))
+            assertEquals(v, "4031a74a", pixels(images.getValue("regionmap/mariomon.png")))
+            assertEquals(v, "c29e9f3a", pixels(images.getValue("regionmap/player_mario.png")))
+            assertTrue("regionmap/hoenn.png" !in images)
+        }
+    }
+
     /** Quetzal's Kanto / Sevii maps: FireRed's art redrawn for Emerald's region_map.c (QTZ_*). */
     @Test fun quetzalSuppliesItsRegionMaps() {
         val images = composed(System.getProperty("user.home") + "/Downloads/Game ROMs & Emulation/gba/PokemonQuetzalEnglishAlpha9v0.gba")
@@ -98,6 +110,18 @@ class RomArtTest {
         }
     }
 
+    /**
+     * Sword and Shield Ultimate Plus: CFRU's tiles and slot tilemaps in its own palette - its own
+     * frames (the striped empty slot too) and grid cell, never CFRU's shared ones; its status icons
+     * are Odyssey's. Pinned to scripts/gen_cfru_party_assets.py's decode of the same ROM.
+     */
+    @Test fun swordShieldSuppliesItsPartyArt() {
+        val images = composed(GBA + "Sword and Shield Ultimate Plus (1.2.1.2).gba")
+        assertGolden(images.filterKeys { it.startsWith("partyswsh/") || it == RomArt.SWSH_BACKDROP }, SWSH)
+        assertEquals(CFRU_STATUS.getValue("od"), pixels(images.getValue("partycfru/od/status_icons.png")))
+        assertEquals(emptySet<String>(), images.keys.filter { it.startsWith("partycfru/slot_") || it == RomArt.CFRU_BACKDROP }.toSet())
+    }
+
     @Test fun romWithoutTheArtGivesNothing() {
         val rom = ByteArray(1 shl 20) { (it * 31 + (it ushr 7)).toByte() }
         assertTrue(RomArt.compose(RomArt.find(rom)).isEmpty())
@@ -140,6 +164,16 @@ class RomArtTest {
             "partycfru/slot_normal.png" to "e9603ce2",
             "partycfru/slot_selected.png" to "ec246dad",
             "partycfru/slot_selected_fainted.png" to "f83c49af",
+        )
+        val SWSH = mapOf(
+            "partybg/swsh_tile.png" to "10269a9f",
+            "partyswsh/slot_empty.png" to "559e285b",
+            "partyswsh/slot_fainted.png" to "9e1b3924",
+            "partyswsh/slot_nohp_normal.png" to "5800fc35",
+            "partyswsh/slot_nohp_selected.png" to "fdc1d5db",
+            "partyswsh/slot_normal.png" to "12fcecf5",
+            "partyswsh/slot_selected.png" to "5452336b",
+            "partyswsh/slot_selected_fainted.png" to "c3dee479",
         )
         val CFRU_STATUS = mapOf("ub" to "2e442add", "rr" to "dddaa119", "od" to "a20e9bf7", "am" to "bc0660eb")
         // CRC32 of each image's ARGB pixels; the images matched the PNGs the app

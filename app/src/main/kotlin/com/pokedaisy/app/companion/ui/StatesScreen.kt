@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pokedaisy.app.companion.StateSlots
 import java.text.DateFormat
@@ -88,26 +89,39 @@ fun StatesScreen(slots: StateSlots?, tick: Long) {
             OptionButton(tr("UNDO LOAD"), m, onClick = { slots.requestUndoLoad() }, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(m.u * 4))
-        LazyVerticalGrid(
-            // Wide enough for SAVE and LOAD side by side (at 150 dp the wide screen fit six and cut them to "S…").
-            columns = GridCells.Adaptive(minSize = 210.dp),
-            horizontalArrangement = Arrangement.spacedBy(m.u * 4),
-            verticalArrangement = Arrangement.spacedBy(m.u * 4),
-            contentPadding = PaddingValues(bottom = m.u * 4),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            items(list, key = { it.index }) { slot ->
-                SlotCard(
-                    slot = slot,
-                    isCurrent = slot.index == slots.currentIndex,
-                    m = m, small = small,
-                    onLoad = { slots.requestLoad(slot.index); requests++ },
-                    onSave = { slots.requestSave(slot.index); requests++ },
-                )
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            // A whole row of cards in view, SAVE / LOAD included: the thumbnails are 3:2 where that
+            // fits and flatter where it doesn't (a 4:3 screen - the Retroid Pocket Duo Lite's 1280x960 -
+            // cut the buttons off). The grid's columns, as GridCells.Adaptive works them out.
+            val gap = m.u * 4
+            val cols = ((maxWidth + gap) / (SLOT_MIN_WIDTH + gap)).toInt().coerceAtLeast(1)
+            val frame = m.u * (OptionColors.listLayers.sumOf { it.second } + 2) * 2
+            val inner = (maxWidth - gap * (cols - 1)) / cols - frame
+            val chrome = frame + m.lineHeight + m.u * 7 + small.lineHeight + maxOf(m.rowHeight, m.lineHeight + m.u * 8) + gap + m.u * 2
+            val thumb = minOf(inner * 2f / 3f, maxHeight - chrome).coerceAtLeast(inner * 0.4f)
+            LazyVerticalGrid(
+                // Wide enough for SAVE and LOAD side by side (at 150 dp the wide screen fit six and cut them to "S…").
+                columns = GridCells.Adaptive(minSize = SLOT_MIN_WIDTH),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+                verticalArrangement = Arrangement.spacedBy(gap),
+                contentPadding = PaddingValues(bottom = gap),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(list, key = { it.index }) { slot ->
+                    SlotCard(
+                        slot = slot,
+                        isCurrent = slot.index == slots.currentIndex,
+                        m = m, small = small, thumbHeight = thumb,
+                        onLoad = { slots.requestLoad(slot.index); requests++ },
+                        onSave = { slots.requestSave(slot.index); requests++ },
+                    )
+                }
             }
         }
     }
 }
+
+private val SLOT_MIN_WIDTH = 210.dp
 
 @Composable
 private fun SlotCard(
@@ -115,6 +129,7 @@ private fun SlotCard(
     isCurrent: Boolean,
     m: GbaTextMetrics,
     small: GbaTextMetrics,
+    thumbHeight: Dp,
     onLoad: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -134,7 +149,7 @@ private fun SlotCard(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(3f / 2f)
+                    .height(thumbHeight)
                     .clip(PixelRoundedShape(u * 3))
                     .background(OptionColors.imageWell)
                     .soundClickable(enabled = slot.present, onClick = onLoad)

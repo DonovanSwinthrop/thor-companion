@@ -695,6 +695,7 @@ val NATIVE_HEART_AND_SOUL = NATIVE_EMERALD.copy(
     battleMonLayout = BattleMonLayout(
         size = 0x88, moves = 0x0C, type1 = 0x22, type2 = 0x23, pp = 0x25,
         hp = 0x2A, level = 0x2C, maxHp = 0x2E, status1 = 0x50,
+        ability = 0x20, abilityU16 = true, item = 0x30,
     ),
     monIconTable = 0x087E65B0L,           // gSpeciesInfo[0].iconSprite
     monIconStride = 0x10C,
@@ -987,6 +988,24 @@ val NATIVE_SOULGOLD_V1_2B = NATIVE_SOULGOLD_V1_2.copy(
     monIconPalettes = 0x087D5CCCL,
     itemIconTable = 0x087537ACL,
     pokedex = POKEDEX_SOULGOLD_V1_2B,
+)
+
+// A third build released as SoulGold v1.2 (sha1 2be7c99a..., "v1.2" on its title screen as well):
+// every RAM global and battle handler is still NATIVE_SOULGOLD_V1_2's (checked on the same save
+// headlessly: the soulgold_v12c fixtures, and the action / move / bag / party handlers in a scripted
+// wild battle - ScriptContext_SetupScript is 0x08236DBC). ROM data moved 0x18C bytes (gSpeciesInfo,
+// gItemsInfo, gTrainers), 0x190 (ability names, the Johto list) or 0x198 (icon palettes); ~180 KB
+// of new data sits before the wild / map tables (0x2DF30 later). Its tables are byte for byte the
+// other v1.2 builds', TM75 included.
+val NATIVE_SOULGOLD_V1_2C = NATIVE_SOULGOLD_V1_2.copy(
+    itemDescs = ItemDescTable(0x08753928L, 0x2C, -8),
+    guideTables = GUIDE_TABLES_SOULGOLD_V1_2C,
+    monIconTable = 0x087D5E30L,
+    monIconPaletteIndices = 0x087D5E56L,
+    monIconPaletteTable = 0x08F20BB0L,
+    monIconPalettes = 0x087D5E58L,
+    itemIconTable = 0x08753938L,
+    pokedex = POKEDEX_SOULGOLD_V1_2C,
 )
 
 // R.O.W.E. v2.1.9.1 Experimental (BPEE, 32 MB, BelialClover's own pokeemerald fork - no expansion;
@@ -1718,6 +1737,342 @@ val NATIVE_ORANGE_ISLANDS = NATIVE_FIRERED_REV0.copy(
     monToSwitchIntoOff = NATIVE_FIRERED_REV1.monToSwitchIntoOff,
 )
 
+// Pokémon Ultra Violet v1.22 (16 MB, sha1 3b6c51d8…): FireRed 1.0 edited in place, under a
+// game code of its own (PUVV, revision byte 0). Every literal pool the config points through
+// still names rev 0's address - the party / save / battle RAM, gItems, the icon and dex
+// tables, gTrainers, gLevelUpLearnsets - and the headless capture of the user's save
+// (`ultra_violet`: CHARMANDER Lv6 10/21, SCRATCH / GROWL, POTION, ₽3080 in PALLET TOWN)
+// decodes with rev 0's addresses. It moved gWildMonHeaders (0x087339C0) and gMapGroups
+// (0x0872AF04) for its new maps, and renamed a few things (GameKind.FIRERED with
+// ActiveTables' ultraViolet: UltraVioletGen.kt). Its region map is FireRed's byte for byte.
+val NATIVE_ULTRA_VIOLET = NATIVE_FIRERED_REV0.copy(
+    pokedex = POKEDEX_ULTRA_VIOLET,
+    guideTables = GUIDE_TABLES_ULTRA_VIOLET,
+    enemyParty = NATIVE_FIRERED_REV1.enemyParty,
+    battlerPartyIndexes = NATIVE_FIRERED_REV1.battlerPartyIndexes,
+    battleStructPtr = NATIVE_FIRERED_REV1.battleStructPtr,
+    monToSwitchIntoOff = NATIVE_FIRERED_REV1.monToSwitchIntoOff,
+)
+
+// Pokémon Sword and Shield Ultimate Plus v1.2.1.2 (32 MB, sha1 afe4c8e0…): Galar on CFRU, so
+// FireRed 1.0's code and RAM with its data repointed. The words FireRed loads its tables from
+// hold the hack's: gItems 0x093C0000 (Radical Red's address too), gMonIconTable 0x099F1EB8,
+// gMonIconPaletteIndices 0x099F1980 (the palettes stay vanilla's), sItemIconTable 0x093C8100.
+// The headless capture of the user's save (`sword_shield_up`: SCORBUNNY Lv5 21/21, GROWL /
+// TACKLE, ₽5000, POTION x2 / SOOTHE BELL / OLD ROD) decodes with rev 0's RAM. Its Casual / Performance /
+// Casual and Performance patches keep every table and the RAM: the same save and battle decode in each.
+val NATIVE_SWORD_SHIELD = NATIVE_FIRERED_REV0.copy(
+    itemDescs = vanillaItems(0x093C0000L),
+    monIconTable = 0x099F1EB8L,
+    monIconPaletteIndices = 0x099F1980L,
+    itemIconTable = 0x093C8100L,
+    pokedex = POKEDEX_SWORD_SHIELD,
+    guideTables = GUIDE_TABLES_SWORD_SHIELD,
+    // Battle (headless, a scripted wild WOOLOO: `sword_shield_up_battle`): rev 0's battle RAM and
+    // BattlePokemon hold, gEnemyParty holds the WOOLOO, and rev 0's action handler is what
+    // gBattlerControllerFuncs points at while the action menu waits (CFRU patched it in place).
+    enemyParty = NATIVE_FIRERED_REV1.enemyParty,
+    battlerPartyIndexes = NATIVE_FIRERED_REV1.battlerPartyIndexes,
+    battleStructPtr = NATIVE_FIRERED_REV1.battleStructPtr,
+    monToSwitchIntoOff = NATIVE_FIRERED_REV1.monToSwitchIntoOff,
+)
+
+// Pokémon Recharged Yellow (Jaizu; BPRE rev 0, 16 MB, sha1 be503359… v1.8.0 / ac30d1ed… v1.9.0 /
+// 7d9fae6c… v1.9.4 / ed60654d… v1.9.7): a full pokefirered rebuild with modern gcc, no source, so
+// nothing sits at a retail address. Found headlessly from the user's v1.8.0 save, which every later
+// release loads too (`recharged_yellow_*` fixtures: JANE in Viridian City, WARTORTLE Lv16 first of
+// six), each address a literal-pool word (reference counts in brackets, v1.8.0):
+//   - gPlayerParty 0x02038554 (537) - the copy that doesn't move (SaveBlock1+0x44 holds the save's,
+//     and the save blocks move on every load) - with gPlayerPartyCount right before it 0x02038551
+//     (32), vanilla's 100-byte encrypted struct Pokemon. gEnemyParty follows the party (0x020387AC).
+//   - gSaveBlock1Ptr / 2Ptr 0x03005AB4 / B8 (780 / 355). The hack dropped the encryption key: a new
+//     game's money is a plain 3000 and the save's bag quantities are plain, so encryptionKeyOff -1.
+//     SaveBlock1 is its own (its GF ROM header says so: party count +0x3B, party +0x44, flags
+//     +0xEFB): pos at +0, money +0x29C (₽4804, as the trainer card shows), bag pockets from +0x374.
+//   - gMain 0x03003B64 (570; +0x24 counted 16 between dumps 16 frames apart, inBattle +0x439).
+//   - gMapHeader 0x0200B6CC (139; FireRed's map sections: 0x59 VIRIDIAN CITY), gObjectEvents
+//     0x02005CCC (358; the player's object at the save's pos + 7).
+//   - gBagPockets 0x0200B768 (31): six {ptr, capacity} pockets - Items (60), a Medicine pocket (100,
+//     at SaveBlock1+0x2380), Poké Balls (32), TMs (64), Berries (46), Key Items (50) - the order of
+//     each item's own pocket field in its 48-byte gItems record.
+//   - Battle (scripted wild RATTATA and trainer battles: BROCK, the double ELI & ANNE): gBattleTypeFlags
+//     0x020003C0 (559; 4 wild, 0xC trainer, 0xD double), gBattlersCount 0x02001444 (2 / 4),
+//     gBattlerPartyIndexes 0x02001448 (0 -> 1 through a switch), gBattlerPositions 0x02001450
+//     (00 01 02 03 in the double), gBattleMons 0x02001460 (219; vanilla's 0x58-byte BattlePokemon),
+//     the gBattleStruct pointer 0x02001880 with monToSwitchIntoId at vanilla's +0x5C (06 -> 01 -> 06).
+//     gBattlerControllerFuncs 0x030048F8 (490): action / move / bag / party read live in each menu;
+//     target select in the double (the move handler's literal pool names it too).
+//     gPartyMenu 0x020384CC (128): slotId at +9 went 0 / 1 / 2 with DOWN in the battle's party menu.
+//   - ROM: the GF ROM header (0x08000100) gives the icon tables, gSpeciesNames, gBaseStats and gItems
+//     (48-byte records, description +0x18); sItemIconTable is the {tiles, palette} pair table whose
+//     entry 1 is MASTER BALL's (FireRed's own graphics). Tables: scripts/gen_recharged_yellow_tables.py.
+// v1.9.0 / v1.9.4 / v1.9.7 moved EWRAM past 0x02005000 up 8 bytes (party, bag, map header, ...); the
+// battle block, gMain and the controller funcs stayed, and v1.9.7 moved the save-block pointers up
+// 0x1C. Each address ported through the literal pools of v1.8.0's code (the same words around it),
+// then read in that release's own field / battle captures; the battle handlers by the same live reads.
+// Recharged Yellow's gBagPockets order (each item's own pocket field - 1 Items, 2 Medicine, 3 Poké
+// Balls, 4 TMs, 5 Berries, 6 Key Items): Medicine folds into Items, like expansion's.
+val RECHARGED_YELLOW_BAG_POCKET_ORDER =
+    listOf(POCKET_ITEMS, POCKET_ITEMS, POCKET_POKE_BALLS, POCKET_TM_HM, POCKET_BERRIES, POCKET_KEY_ITEMS)
+
+/** Recharged Yellow's gItems slots 0..408 (409 on is other data). */
+const val RECHARGED_YELLOW_ITEMS = 409
+
+/** A Recharged Yellow ROM (any release), from its first bytes: its GF ROM header's SaveBlock1 size is
+ * 0x3D94 (FireRed's 0x3D68) - for code that runs before detection on the ROM file alone (the music
+ * renderer, [RegionMapWatch]). */
+fun isRechargedYellowRom(head: ByteArray): Boolean = head.size >= GF_HEADER_SB1_SIZE + 4 &&
+    String(head, 0xAC, 3, Charsets.US_ASCII) == "BPR" && u32le(head, GF_HEADER_SB1_SIZE) == RECHARGED_YELLOW_SB1_SIZE
+
+private const val GF_HEADER_SB1_SIZE = 0x18C // struct GFRomHeader.saveBlock1Size
+private const val RECHARGED_YELLOW_SB1_SIZE = 0x3D94L
+
+val NATIVE_RECHARGED_YELLOW_V1_8_0 = NativeConfig(
+    itemDescs = ItemDescTable(0x08807A38L, 48, 0x18, count = RECHARGED_YELLOW_ITEMS),
+    playerParty = 0x02038554L,
+    playerPartyCount = 0x02038551L,
+    battleMons = 0x02001460L,
+    battlerPositions = 0x02001450L,
+    battlersCount = 0x02001444L,
+    battleTypeFlags = 0x020003C0L,
+    gMain = 0x03003B64L,
+    saveBlock1Ptr = 0x03005AB4L,
+    saveBlock2Ptr = 0x03005AB8L,
+    objectEvents = 0x02005CCCL,
+    mapHeader = 0x0200B6CCL,
+    bagPockets = 0x0200B768L,
+    bagPocketCount = 6,
+    bagPocketOrder = RECHARGED_YELLOW_BAG_POCKET_ORDER,
+    encryptionKeyOff = -1,
+    moneyOff = 0x29CL,
+    monIconTable = 0x0886B7F0L,
+    monIconPaletteIndices = 0x0886BED0L,
+    monIconPaletteTable = 0x0886C088L,
+    itemIconTable = 0x0880C6ECL,
+    battlerControllerFuncs = 0x030048F8L,
+    handleInputChooseAction = 0x08045F89L,
+    handleInputChooseMove = 0x080464EDL,
+    completeWhenChoseItem = 0x080482A1L,
+    waitForMonSelection = 0x080481C9L,
+    handleInputChooseTarget = 0x08046201L,
+    enemyParty = 0x020387ACL,
+    battlerPartyIndexes = 0x02001448L,
+    battleStructPtr = 0x02001880L,
+    monToSwitchIntoOff = 0x5C,
+    partyMenu = 0x020384CCL,
+    pokedex = POKEDEX_RECHARGED_YELLOW_V1_8_0,
+    guideTables = GUIDE_TABLES_RECHARGED_YELLOW_V1_8_0,
+)
+
+val NATIVE_RECHARGED_YELLOW_V1_9_0 = NATIVE_RECHARGED_YELLOW_V1_8_0.copy(
+    itemDescs = ItemDescTable(0x088074ACL, 48, 0x18, count = RECHARGED_YELLOW_ITEMS),
+    playerParty = 0x0203855CL,
+    playerPartyCount = 0x02038559L,
+    objectEvents = 0x02005CD4L,
+    mapHeader = 0x0200B6D4L,
+    bagPockets = 0x0200B770L,
+    monIconTable = 0x0886B2B0L,
+    monIconPaletteIndices = 0x0886B990L,
+    monIconPaletteTable = 0x0886BB48L,
+    itemIconTable = 0x0880C160L,
+    handleInputChooseAction = 0x08045F5DL,
+    handleInputChooseMove = 0x080464C1L,
+    completeWhenChoseItem = 0x08048275L,
+    waitForMonSelection = 0x0804819DL,
+    handleInputChooseTarget = 0x080461D5L,
+    enemyParty = 0x020387B4L,
+    partyMenu = 0x020384D4L,
+    pokedex = POKEDEX_RECHARGED_YELLOW_V1_9_0,
+    guideTables = GUIDE_TABLES_RECHARGED_YELLOW_V1_9_0,
+)
+
+val NATIVE_RECHARGED_YELLOW_V1_9_4 = NATIVE_RECHARGED_YELLOW_V1_9_0.copy(
+    itemDescs = ItemDescTable(0x088E74B0L, 48, 0x18, count = RECHARGED_YELLOW_ITEMS),
+    monIconTable = 0x0894B2B4L,
+    monIconPaletteIndices = 0x0894B994L,
+    monIconPaletteTable = 0x0894BB4CL,
+    itemIconTable = 0x088EC164L,
+    handleInputChooseAction = 0x08045F55L,
+    handleInputChooseMove = 0x080464B9L,
+    completeWhenChoseItem = 0x0804826DL,
+    waitForMonSelection = 0x08048195L,
+    handleInputChooseTarget = 0x080461CDL,
+    pokedex = POKEDEX_RECHARGED_YELLOW_V1_9_4,
+    guideTables = GUIDE_TABLES_RECHARGED_YELLOW_V1_9_4,
+)
+
+val NATIVE_RECHARGED_YELLOW_V1_9_7 = NATIVE_RECHARGED_YELLOW_V1_9_4.copy(
+    itemDescs = ItemDescTable(0x0890F960L, 48, 0x18, count = RECHARGED_YELLOW_ITEMS),
+    saveBlock1Ptr = 0x03005AD0L,
+    saveBlock2Ptr = 0x03005AD4L,
+    monIconTable = 0x089740C4L,
+    monIconPaletteIndices = 0x089747A4L,
+    monIconPaletteTable = 0x0897495CL,
+    itemIconTable = 0x08914614L,
+    pokedex = POKEDEX_RECHARGED_YELLOW_V1_9_7,
+    guideTables = GUIDE_TABLES_RECHARGED_YELLOW_V1_9_7,
+)
+
+// Super Mariomon (Too Many Productions; BPEE, 32 MB, no source): every release is an old
+// pokeemerald-expansion (struct BaseStats 0x24 bytes, no RHHEXP header) built with agbcc - its
+// code is retail Emerald's word for word wherever the expansion left it, so every RAM global
+// below is the word the same code loads (retail's literal pools matched in each ROM, then in the
+// next release), each one checked in headless captures of the user's save (`mariomon*`: BOB-OMB
+// Lv6 30/30 in WORLD 1-1, ₽3100, 2 MUSHROOMS / 10 PLUMBER CAPS / HAMMER, ESCAPE ROPE, EXP. SHARE;
+// a scripted wild GOOMBA Lv5 through ScriptContext_SetupScript, a SHIFT to a second BOB-OMB):
+//   - gPlayerParty 0x02025158 (vanilla 100-byte struct, species unpacked: BOB-OMB is 912) with
+//     gPlayerPartyCount 3 bytes before; the other copy is SaveBlock1+0x238 (it moves every load).
+//   - gSaveBlock1Ptr / 2Ptr 0x03004BCC / 0x03004BD0: SaveBlock1 pos +0, money +0x490, SaveBlock2
+//     encryptionKey +0xAC - all vanilla's (money decrypts to 3100, the TRAINER card's figure).
+//   - gMain 0x03002C40 (vblankCounter1 / 2 count the frames; inBattle at the usual +0x439).
+//   - gMapHeader 0x02038D9C (mapsec 0x65 WORLD 1-1, Emerald's ids renamed), gObjectEvents
+//     0x02038DD4 (the player first, coords = pos + 7).
+//   - gBagPockets 0x0203B8BC: v1.5 has 6 pockets - Items (120), a new Medicine pocket (55, at the
+//     end of SaveBlock1: the 2 MUSHROOMS), Poké Balls, TMs & HMs, Berries, Key Items - each
+//     item's own pocket byte (gItems +0x19) says the same; v1.3 and before keep Emerald's 5.
+//   - Battle (battle_main.c's EWRAM_DATA in Emerald's order, shifted): gBattleTypeFlags
+//     0x02024B5C (4: wild), gBattlersCount 0x02024BD8, gBattlerPartyIndexes 0x02024BDA (1 after
+//     the SHIFT), gBattlerPositions 0x02024BE2, gBattleMons 0x02024BF0 (expansion's 0x60-byte
+//     BattlePokemon exactly: Tackle's 35 PP at +0x25, Blaze at +0x20, a third type byte +0x24),
+//     the gBattleStruct pointer 0x020250BC (monToSwitchIntoId at +0x5C in v1.5, +0x3C before:
+//     06 -> 01 -> 06 through the SHIFT, battlerPartyOrders after it), gEnemyParty 0x02025860.
+//   - gBattlerControllerFuncs 0x03004B90: battler 0 read in each menu - action / move / bag /
+//     party handlers below; HandleInputChooseTarget by code (the move handler's pool points at
+//     the action handler's next function first). gPartyMenu 0x0203E9B0 (slotId +9: 1 after
+//     picking the second slot), Emerald's list.
+//   - Icons: vanilla-shaped tables from the GF header (gMonIconTable, palette indices, the six
+//     palettes; the egg is species 1402 / 1401), gItemIconTable {LZ77 tiles, LZ77 palette} x 825.
+//   - v1.3 / v1.2.2 / v1.2.1 share one RAM layout of their own (most EWRAM 0x100-0xA00 lower:
+//     same literal-pool route, the same checks) and v1.2.1 / v1.2.2 the same code addresses. Their
+//     save is v1.5's minus the Medicine pocket (SaveBlock1 0x3E28 bytes, not 0x3F08): the
+//     fixtures boot the v1.5.1 save cut to that size, which they load as their own.
+// Tables: scripts/gen_mariomon_tables.py (two sets: v1.5.x and v1.2.1-v1.3).
+val MARIOMON_BAG_POCKET_ORDER = listOf(
+    POCKET_ITEMS, POCKET_ITEMS, POCKET_POKE_BALLS, POCKET_TM_HM, POCKET_BERRIES, POCKET_KEY_ITEMS,
+)
+
+/** The egg's icon: the last gMonIconTable entry, 1402 in v1.5 (1401 before: no TIPTRON). */
+private const val MARIOMON_EGG = 1402
+
+val NATIVE_MARIOMON_V1_5_1 = NATIVE_EMERALD.copy(
+    // gItems: 0x28-byte struct Item (name[14], price +0xE, description +0x14), ITEMS_COUNT 824.
+    itemDescs = ItemDescTable(0x0880C8DCL, 0x28, 0x14, count = 824),
+    playerParty = 0x02025158L,
+    playerPartyCount = 0x02025155L,
+    gMain = 0x03002C40L,
+    saveBlock1Ptr = 0x03004BCCL,
+    saveBlock2Ptr = 0x03004BD0L,
+    objectEvents = 0x02038DD4L,
+    mapHeader = 0x02038D9CL,
+    bagPockets = 0x0203B8BCL,
+    bagPocketCount = 6,
+    bagPocketOrder = MARIOMON_BAG_POCKET_ORDER,
+    battleTypeFlags = 0x02024B5CL,
+    battlersCount = 0x02024BD8L,
+    battlerPartyIndexes = 0x02024BDAL,
+    battlerPositions = 0x02024BE2L,
+    battleMons = 0x02024BF0L,
+    battleMonLayout = EXPANSION_BATTLE_MON,
+    battleStructPtr = 0x020250BCL,
+    monToSwitchIntoOff = 0x5C,
+    enemyParty = 0x02025860L,
+    battlerControllerFuncs = 0x03004B90L,
+    handleInputChooseAction = 0x0807C259L,
+    handleInputChooseMove = 0x0807CD81L,
+    completeWhenChoseItem = 0x0807E9A5L,
+    waitForMonSelection = 0x0807E8EDL,
+    handleInputChooseTarget = 0x0807C60DL,
+    partyMenu = 0x0203E9B0L,
+    eggSpecies = MARIOMON_EGG,
+    monIconTable = 0x087FC70CL,
+    monIconPaletteIndices = 0x087FF2E4L,
+    monIconPaletteTable = 0x087FFC4CL,
+    itemIconTable = 0x088C9420L,
+    pokedex = POKEDEX_MARIOMON_V1_5_1,
+    guideTables = GUIDE_TABLES_MARIOMON_V1_5_1,
+)
+
+// v1.5.2-Anniversary: v1.5.1's RAM; its code and data sit a little later (+0xC4 for the battle
+// handlers, +0x490..+0x4B4 for the tables).
+val NATIVE_MARIOMON_V1_5_2 = NATIVE_MARIOMON_V1_5_1.copy(
+    itemDescs = ItemDescTable(0x0880CD90L, 0x28, 0x14, count = 824),
+    handleInputChooseAction = 0x0807C31DL,
+    handleInputChooseMove = 0x0807CE45L,
+    completeWhenChoseItem = 0x0807EA69L,
+    waitForMonSelection = 0x0807E9B1L,
+    handleInputChooseTarget = 0x0807C6D1L,
+    monIconTable = 0x087FCBC0L,
+    monIconPaletteIndices = 0x087FF798L,
+    monIconPaletteTable = 0x08800100L,
+    itemIconTable = 0x088C98C8L,
+    pokedex = POKEDEX_MARIOMON_V1_5_2,
+    guideTables = GUIDE_TABLES_MARIOMON_V1_5_2,
+)
+
+// v1.3: the older RAM layout (no Medicine pocket: Emerald's 5 pockets, ITEMS_COUNT 821).
+val NATIVE_MARIOMON_V1_3 = NATIVE_MARIOMON_V1_5_1.copy(
+    eggSpecies = MARIOMON_EGG - 1,
+    itemDescs = ItemDescTable(0x087EE1C8L, 0x28, 0x14, count = 821),
+    playerParty = 0x02025038L,
+    playerPartyCount = 0x02025035L,
+    objectEvents = 0x020383F0L,
+    mapHeader = 0x020383B8L,
+    bagPockets = 0x0203AEC0L,
+    bagPocketCount = 5,
+    bagPocketOrder = EMERALD_BAG_POCKET_ORDER,
+    battleTypeFlags = 0x02024A5CL,
+    battlersCount = 0x02024AD8L,
+    battlerPartyIndexes = 0x02024ADAL,
+    battlerPositions = 0x02024AE2L,
+    battleMons = 0x02024AF0L,
+    battleStructPtr = 0x02024F9CL,
+    monToSwitchIntoOff = 0x3C,
+    enemyParty = 0x020254E8L,
+    handleInputChooseAction = 0x0807AA19L,
+    handleInputChooseMove = 0x0807B541L,
+    completeWhenChoseItem = 0x0807D165L,
+    waitForMonSelection = 0x0807D0ADL,
+    handleInputChooseTarget = 0x0807ADCDL,
+    partyMenu = 0x0203DFB0L,
+    monIconTable = 0x087DE064L,
+    monIconPaletteIndices = 0x087E0C34L,
+    monIconPaletteTable = 0x087E159CL,
+    itemIconTable = 0x088A85A0L,
+    pokedex = POKEDEX_MARIOMON_V1_3,
+    guideTables = GUIDE_TABLES_MARIOMON_V1_3,
+)
+
+// v1.2.2 and v1.2.1: v1.3's RAM; the battle handlers 0x9C later than v1.3's, the same in both.
+val NATIVE_MARIOMON_V1_2_2 = NATIVE_MARIOMON_V1_3.copy(
+    itemDescs = ItemDescTable(0x087EE1E4L, 0x28, 0x14, count = 821),
+    handleInputChooseAction = 0x0807AAB5L,
+    handleInputChooseMove = 0x0807B5DDL,
+    completeWhenChoseItem = 0x0807D201L,
+    waitForMonSelection = 0x0807D149L,
+    handleInputChooseTarget = 0x0807AE69L,
+    monIconTable = 0x087DE080L,
+    monIconPaletteIndices = 0x087E0C50L,
+    monIconPaletteTable = 0x087E15B8L,
+    itemIconTable = 0x088A8598L,
+    pokedex = POKEDEX_MARIOMON_V1_2_2,
+    guideTables = GUIDE_TABLES_MARIOMON_V1_2_2,
+)
+
+val NATIVE_MARIOMON_V1_2_1 = NATIVE_MARIOMON_V1_2_2.copy(
+    itemDescs = ItemDescTable(0x087EE200L, 0x28, 0x14, count = 821),
+    monIconTable = 0x087DE09CL,
+    monIconPaletteIndices = 0x087E0C6CL,
+    monIconPaletteTable = 0x087E15D4L,
+    itemIconTable = 0x088A85B8L,
+    pokedex = POKEDEX_MARIOMON_V1_2_1,
+    guideTables = GUIDE_TABLES_MARIOMON_V1_2_1,
+)
+
+/** Every Super Mariomon release's config, newest first. */
+val NATIVE_MARIOMON_ALL = listOf(
+    NATIVE_MARIOMON_V1_5_2, NATIVE_MARIOMON_V1_5_1, NATIVE_MARIOMON_V1_3, NATIVE_MARIOMON_V1_2_2, NATIVE_MARIOMON_V1_2_1,
+)
+
 private const val MAP_HEADER_REGION_MAPSEC_OFF = 0x14L
 private const val OBJECT_EVENT_FACING_OFF = 0x18L
 private const val BATTLE_TYPE_DOUBLE = 0x0001
@@ -2017,8 +2372,9 @@ private val NIDORAN_M_NAME = byteArrayOf(0xC8.toByte(), 0xC3.toByte(), 0xBE.toBy
  */
 private fun Mon.withNativeGender(raw: ByteArray, off: Int, layout: PartyMonLayout, eggSpecies: Int = 0): Mon {
     val ratios = when (activeGame) {
-        // Emerald shares FireRed's internal Gen3 species ids and base-stat gender ratios.
-        GameKind.FIRERED, GameKind.EMERALD -> genderRatiosFireRed
+        // Emerald shares FireRed's internal Gen3 species ids and base-stat gender ratios; so does
+        // Recharged Yellow (gen_recharged_yellow_tables.py checks its gBaseStats against FireRed's).
+        GameKind.FIRERED, GameKind.EMERALD, GameKind.RECHARGED_YELLOW -> genderRatiosFireRed
         GameKind.UNBOUND -> genderRatiosUnbound
         GameKind.RADICAL_RED -> genderRatiosRadicalRed
         GameKind.ODYSSEY -> genderRatiosOdyssey
@@ -2032,6 +2388,8 @@ private fun Mon.withNativeGender(raw: ByteArray, off: Int, layout: PartyMonLayou
         GameKind.QUETZAL -> genderRatiosQuetzal
         GameKind.ROWE -> genderRatiosRowe
         GameKind.ORANGE_ISLANDS -> genderRatiosOrangeIslands
+        GameKind.SWORD_SHIELD -> genderRatiosSwordShield
+        GameKind.MARIOMON -> if (mariomonV13) genderRatiosMariomonV13 else genderRatiosMariomon
         else -> return this
     }
     // BoxPokemon +0x13 flags byte (isBadEgg:1, hasSpecies:1, isEgg:1): an egg
@@ -2045,7 +2403,7 @@ private fun Mon.withNativeGender(raw: ByteArray, off: Int, layout: PartyMonLayou
         // Heart and Soul / Lazarus / SoulGold / Seaglass have no SPECIES_EGG 412, so an
         // egg is flagged instead: "Egg", no HP bar, the egg's icon where [eggSpecies] is known.
         if (activeGame in setOf(GameKind.HEART_AND_SOUL, GameKind.LAZARUS, GameKind.SOULGOLD, GameKind.EMERALD_SEAGLASS, GameKind.IMPERIUM,
-                GameKind.QUETZAL, GameKind.ROWE)) {
+                GameKind.QUETZAL, GameKind.ROWE, GameKind.MARIOMON)) {
             return copy(species = if (eggSpecies != 0) eggSpecies else species, genderSymbol = GENDER_SYMBOL_NONE, isEgg = true)
         }
         return copy(species = SPECIES_EGG_VANILLA, genderSymbol = GENDER_SYMBOL_NONE)

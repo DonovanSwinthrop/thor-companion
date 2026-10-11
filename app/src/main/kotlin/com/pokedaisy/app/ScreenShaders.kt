@@ -2,12 +2,15 @@ package com.pokedaisy.app
 
 import com.pokedaisy.app.companion.GridStrength
 import com.pokedaisy.app.companion.ScreenFilter
+import com.pokedaisy.app.companion.Smoothing
 
 /**
  * Fragment shaders for [EmulatorView]'s passes. Each reads `uTex` at `vUv`; `uTexSize` is
  * the GBA frame's size in pixels, so `vUv * uTexSize` is the position in GBA pixels (y
  * running down the game's rows, like the frame's own). `uGrid` is SHADERS > GRID's strength for
- * the grid filters ([gridFor]: how much a line darkens its pixel, and how wide it is).
+ * the grid filters ([gridFor]: how much a line darkens its pixel, and how wide it is). `uSmoothed` is 1
+ * when `uTex` is SMOOTHING's upscaled picture rather than the GBA's pixels: the filters that read a
+ * GBA pixel's centre (LCD PAPER, CRT) then read the smoothed picture where they are instead.
  */
 internal object ScreenShaders {
 
@@ -51,6 +54,7 @@ internal object ScreenShaders {
         uniform sampler2D uTex;
         uniform vec2 uTexSize;
         uniform vec2 uGrid;
+        uniform float uSmoothed;
     """
 
     /** The texture as is. */
@@ -58,6 +62,14 @@ internal object ScreenShaders {
         $HEADER
         void main() {
             gl_FragColor = vec4(texture2D(uTex, vUv).rgb, 1.0);
+        }
+    """.trimIndent()
+
+    /** SCREEN > OVERLAY's image, alpha and all (blended over the game: its window is see-through). */
+    val OVERLAY = """
+        $HEADER
+        void main() {
+            gl_FragColor = texture2D(uTex, vUv);
         }
     """.trimIndent()
 
@@ -164,7 +176,7 @@ internal object ScreenShaders {
             float x2 = max(d.x, d.y);
             x2 *= x2;
             float w = 48.0 * (x2 * x2 - 8.0 / 3.0 * x2 * x2 * x2);
-            vec3 c = texture2D(uTex, (floor(pos) + 0.5) / uTexSize).rgb;
+            vec3 c = texture2D(uTex, uSmoothed > 0.5 ? vUv : (floor(pos) + 0.5) / uTexSize).rgb;
             c = mix(c, vec3(dot(c, luma709)), desaturate);
             c *= 1.0 - uGrid.x * clamp(mix(w * w, w, uGrid.y) * gridIntensity, 0.0, 1.0);
             c = mix(c, paper(gl_FragCoord.xy) * c, dot(c, luma709));
@@ -200,9 +212,16 @@ internal object ScreenShaders {
             vec2 base = floor(pos);
             vec2 f = pos - base;
             float fx = smoothstep(0.2, 0.8, f.x);
-            vec3 row0 = mix(fetch(base), fetch(base + vec2(1.0, 0.0)), fx);
-            vec3 row1 = mix(fetch(base + vec2(0.0, 1.0)), fetch(base + vec2(1.0, 1.0)), fx);
-            vec3 c = row0 * beam(f.y, row0) + row1 * beam(1.0 - f.y, row1);
+            vec3 c;
+            if (uSmoothed > 0.5) {
+                // Over SMOOTHING's picture: its own detail, one beam per GBA row.
+                vec3 s = pow(texture2D(uTex, vUv).rgb, vec3(gamma));
+                c = s * beam(fract(vUv.y * uTexSize.y) - 0.5, s);
+            } else {
+                vec3 row0 = mix(fetch(base), fetch(base + vec2(1.0, 0.0)), fx);
+                vec3 row1 = mix(fetch(base + vec2(0.0, 1.0)), fetch(base + vec2(1.0, 1.0)), fx);
+                c = row0 * beam(f.y, row0) + row1 * beam(1.0 - f.y, row1);
+            }
             float stripe = mod(floor(gl_FragCoord.x), 3.0);
             vec3 mask = vec3(maskDim);
             if (stripe < 0.5) mask.r = 1.0;
@@ -214,4 +233,54 @@ internal object ScreenShaders {
         """.trimIndent(),
         prescale = false,
     )
+
+    /**
+     * One pass of a SMOOTHING upscaler: a RetroArch-format GLSL file from `assets/shaders/` (libretro's
+     * glsl-shaders, unmodified - third_party/licenses/libretro-shaders.txt), the size it draws at, and
+     * whether its output needs a half-float framebuffer (ScaleFX keeps metrics between passes).
+     */
+    class SmoothPass(val asset: String, val size: SmoothSize, val float: Boolean = false)
+
+    /** How big a smoothing pass's output is. */
+    sealed class SmoothSize {
+        /** [scale] times its input (ScaleFX's fixed 3x). */
+        data class Source(val scale: Int) : SmoothSize()
+        /** The largest whole multiple of the game's size that fits its place on screen, then smoothly
+         * scaled onto it - what xBR looked best at (straight at 6.75x its text came out lumpy). */
+        object Whole : SmoothSize()
+        /** The game's size on screen: drawn 1:1 (xBRZ freescale renders any size). With a hard-edged
+         * FILTER (LCD, SCANLINES) it's [Whole] instead, so their grid lines stay even. */
+        object View : SmoothSize()
+    }
+
+    /**
+     * SMOOTHING's passes, as their libretro presets have them (xbrz-freescale.glslp, xbr-lv2.glslp,
+     * scalefx.glslp); null = off. Compared in the browser harness on FireRed's naming screen and
+     * Emerald's intro at the Thor's 1620x1080 (SABR, the fourth one asked for, left notches on edges).
+     */
+    fun smoothingPasses(mode: Smoothing): List<SmoothPass>? = when (mode) {
+        Smoothing.OFF -> null
+        Smoothing.XBRZ -> listOf(SmoothPass("xbrz-freescale.glsl", SmoothSize.View))
+        Smoothing.XBR -> listOf(SmoothPass("xbr-lv2.glsl", SmoothSize.Whole))
+        Smoothing.SCALEFX -> listOf(
+            SmoothPass("scalefx-pass0.glsl", SmoothSize.Source(1), float = true),
+            SmoothPass("scalefx-pass1.glsl", SmoothSize.Source(1), float = true),
+            SmoothPass("scalefx-pass2.glsl", SmoothSize.Source(1)),
+            SmoothPass("scalefx-pass3.glsl", SmoothSize.Source(1)),
+            SmoothPass("scalefx-pass4.glsl", SmoothSize.Source(3)),
+        )
+    }
+
+    /**
+     * [source] (a whole RetroArch .glsl file) as the [stage]'s ("VERTEX" / "FRAGMENT") GLSL ES 3.00
+     * source: its own `#version` (ScaleFX's desktop 130) swapped for ES's, the stage defined, a default
+     * float precision (the files lean on desktop GL's), and xBR's three `delta` globals made const - GLSL
+     * ES wants constant initializers at global scope, desktop GL doesn't. `#pragma parameter`s keep their
+     * defaults (PARAMETER_UNIFORM stays undefined).
+     */
+    fun smoothingSource(source: String, stage: String): String =
+        "#version 300 es\n#define $stage\nprecision highp float;\nprecision highp int;\n" +
+            source.replace(Regex("^\\s*#version[^\\n]*\\n"), "")
+                .replace(Regex("^vec4 (delta\\w*)\\s*=", RegexOption.MULTILINE), "const vec4 $1 =")
+
 }

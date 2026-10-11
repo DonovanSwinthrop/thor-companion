@@ -16,7 +16,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.pokedaisy.app.companion.i18n.tk
 import com.pokedaisy.app.companion.i18n.tr
+import com.pokedaisy.app.companion.ui.OptionSelector
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.pokedaisy.app.companion.ui.GbaText
 import com.pokedaisy.app.companion.ui.GbaTextMetrics
 import com.pokedaisy.app.companion.ui.OptionButton
@@ -39,8 +45,13 @@ class GameInfo(
     val supportUrl: String? = null,
     /** The ROM's SHA-1 when a best-effort match is kept for it: FORGET MATCH. */
     val bestEffortSha1: String? = null,
+    /** A ROM of a Gen 3 base game the app doesn't know: PICK A GAME (WHICH GAME IS THIS?). */
+    val gamePick: GamePick? = null,
 ) {
     class Section(val title: String, val rows: List<Pair<String, String>>)
+
+    /** The ROM ([sha1], header [gameCode]) and the game it's read as now ([current], a candidate id). */
+    class GamePick(val sha1: String, val gameCode: String, val current: String?)
 
     companion object {
         /** Blocking (reads headers; with [hashes], the whole ROM - CRC32, SHA1, the
@@ -134,6 +145,8 @@ class GameInfo(
                 ),
                 supportUrl = if (supported == false && bestEffort?.full != true) RomSupportRequest.url(rom, sha1) else null,
                 bestEffortSha1 = sha1.takeIf { bestEffort != null },
+                gamePick = sha1?.takeIf { supported == false && code != null && com.pokedaisy.app.companion.data.BestEffort.canTry(code) }
+                    ?.let { GamePick(it, code!!, bestEffort?.id) },
             )
         }
 
@@ -173,7 +186,7 @@ class GameInfo(
         }
 
         private fun baseGame(code: String?): String? = when (code) {
-            "BPRE" -> "Pokémon FireRed"
+            "BPRE", "PUVV" -> "Pokémon FireRed" // PUVV: Ultra Violet
             "BPGE" -> "Pokémon LeafGreen"
             "BPEE" -> "Pokémon Emerald"
             "BPES" -> "Pokémon Edición Esmeralda"
@@ -200,12 +213,19 @@ class GameInfo(
     }
 }
 
+/** PICK A GAME: let best effort decide / NONE OF THESE (else a candidate id). */
+const val GAME_AUTO = "AUTO"
+const val GAME_NONE = "-"
+
 /** [info] over the library: a title window, its sections in one scrolling list window, CLOSE. */
 @Composable
 fun GameInfoDialog(
     info: GameInfo, m: GbaTextMetrics, small: GbaTextMetrics, onDismiss: () -> Unit, onOpenUrl: (String) -> Unit = {},
     onForgetBestEffort: (String) -> Unit = {},
+    /** PICK A GAME's answer: a candidate id, [GAME_AUTO] (best effort decides) or [GAME_NONE] (NONE OF THESE). */
+    onPickGame: (GameInfo.GamePick, String) -> Unit = { _, _ -> },
 ) {
+    var picking by remember { mutableStateOf(false) }
     OptionOverlay(onDismiss, Modifier.widthIn(max = 1100.dp).fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             OptionTitleWindow(tr("INFO"), m, trailing = info.title, onBack = onDismiss)
@@ -230,6 +250,11 @@ fun GameInfoDialog(
                     // Not read by the companion: a GitHub issue with the file's name and SHA-1 (never the ROM).
                     OptionButton(tr("ASK FOR SUPPORT"), m, onClick = { onOpenUrl(url) })
                 }
+                info.gamePick?.let {
+                    // The game it's a version of, picked here rather than on the companion.
+                    Spacer(Modifier.width(m.u * 4))
+                    OptionButton(tk("PICK A GAME"), m, onClick = { picking = true })
+                }
                 info.bestEffortSha1?.let { sha1 ->
                     // Back to NOT SUPPORTED: the companion asks again next time.
                     Spacer(Modifier.width(m.u * 4))
@@ -239,6 +264,19 @@ fun GameInfoDialog(
                 OptionButton(tr("CLOSE"), m, emphasis = true, modifier = Modifier.widthIn(min = 160.dp), onClick = onDismiss)
             }
         }
+    }
+    info.gamePick?.takeIf { picking }?.let { gp ->
+        // AUTO, then every config of its base game, one row per title (two builds can share one), then NONE OF THESE.
+        val games = com.pokedaisy.app.companion.data.BestEffort.candidatesFor(gp.gameCode).distinctBy { it.title }
+        val current = gp.current?.let { id -> games.firstOrNull { it.id == id }?.id ?: games.firstOrNull { c -> c.title == com.pokedaisy.app.companion.data.BestEffort.candidate(id)?.title }?.id } ?: GAME_AUTO
+        // The one in use right under AUTO, in view without scrolling.
+        val options = listOf(GAME_AUTO) + listOfNotNull(current.takeIf { it != GAME_AUTO }) + games.map { it.id }.filter { it != current } + GAME_NONE
+        OptionSelector(
+            tk("WHICH GAME IS THIS?"), options, current,
+            { id -> when (id) { GAME_AUTO -> tr("AUTO"); GAME_NONE -> tr("NONE OF THESE"); else -> games.first { it.id == id }.title } }, m,
+            onPick = { picking = false; onPickGame(gp, it) },
+            onDismiss = { picking = false },
+        )
     }
 }
 

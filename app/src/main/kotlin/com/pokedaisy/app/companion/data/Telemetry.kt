@@ -98,6 +98,13 @@ data class BattleMon(
     val status1: Long,
     val moves: IntArray,
     val pp: IntArray,
+    /** gBattleMons' own fields (native reads; 0 / null where the source has none, e.g. the QoL struct). */
+    val ability: Int = 0,
+    val item: Int = 0,
+    /** Attack, Defense, Speed, Sp. Atk, Sp. Def - in battle, before stages. */
+    val stats: IntArray? = null,
+    /** Attack, Defense, Speed, Sp. Atk, Sp. Def, accuracy, evasion; 6 = unchanged (0..12). */
+    val statStages: IntArray? = null,
 )
 
 data class Item(val itemId: Int, val quantity: Int, val pocket: Int = POCKET_ITEMS)

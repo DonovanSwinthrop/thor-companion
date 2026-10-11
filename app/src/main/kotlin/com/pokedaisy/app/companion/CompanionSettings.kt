@@ -96,6 +96,10 @@ interface CompanionSettings {
     val showFoeIvs: Boolean get() = false
     fun setShowFoeIvs(on: Boolean) {}
 
+    /** Whether battle INFO shows FOE DETAILS - see [Prefs.foeDetails]. */
+    val foeDetails: Boolean get() = false
+    fun setFoeDetails(on: Boolean) {}
+
     /** Whether a launch picks up where the game was left - see [Prefs.autoResume]; off, CLOSE GAME warns. */
     val autoResume: Boolean get() = true
 
@@ -131,6 +135,12 @@ interface CompanionSettings {
     val expandOffer: Boolean get() = false
     fun answerExpandOffer(turnOn: Boolean) {}
 
+    /** SCREEN > OVERLAY's choices, as (key, label) - see [com.pokedaisy.app.Prefs.overlay]; empty = no row (no game).
+     * Imported in the top screen's Settings (a file picker); picked here, live. */
+    val overlayChoices: List<Pair<String, String>> get() = emptyList()
+    val overlay: String get() = ""
+    fun setOverlay(key: String) {}
+
     /** The GBA LCD's colours on the game - see [Prefs.gbaColors]. */
     val gbaColors: Boolean
     fun setGbaColors(on: Boolean)
@@ -146,6 +156,13 @@ interface CompanionSettings {
     /** How strong the grid filters' grid is - see [Prefs.gridStrength]. */
     val gridStrength: GridStrength
     fun setGridStrength(strength: GridStrength)
+
+    /** The edge-smoothing upscaler on the game - see [Prefs.smoothing]. */
+    val smoothing: Smoothing
+    fun setSmoothing(mode: Smoothing)
+
+    /** Whether this device can run SMOOTHING (OpenGL ES 3); without it the row is greyed out. */
+    val smoothingAvailable: Boolean get() = true
 
     /** Whether there's a second screen - SWAP SCREENS only shows then. */
     val hasSecondScreen: Boolean get() = false
@@ -256,6 +273,22 @@ enum class GridStrength(val label: String) {
     ;
 
     fun next(): GridStrength = entries[(ordinal + 1) % entries.size]
+}
+
+/** SHADERS > SMOOTHING: an edge-smoothing upscaler run on the game before FILTER (ScreenShaders.smoothingPasses),
+ * in the order a tap steps through them - it cycles like FILTER. Never on the companion (it's UI, not pixel art).
+ * [label]s are the shaders' own names. */
+enum class Smoothing(val label: String) {
+    OFF(tk("OFF")),
+    /** xBRZ freescale: sharp, the cleanest edges. */
+    XBRZ(tk("xBRZ")),
+    /** xBR level 2: rounder and softer. */
+    XBR(tk("xBR")),
+    /** ScaleFX: the most even outlines, 3x then scaled (needs float framebuffers). */
+    SCALEFX(tk("SCALEFX")),
+    ;
+
+    fun next(): Smoothing = entries[(ordinal + 1) % entries.size]
 }
 
 /**

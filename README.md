@@ -96,10 +96,7 @@ it. You can also check from **Settings > VERSION**.
 - **MAP** - the game's region map with you on it. Tap any place to name it,
   or search the list of every town and route.
 - **DEX** - your Pokédex with seen / caught marks and full entries: sprite,
-  types, stats, abilities, dex text, plus how it evolves (and from what, the
-  whole family, method by method), where it's caught in the wild (by route and
-  method, with levels and odds) and the moves it learns (level-up, and TMs /
-  HMs where the game's tables are read), all from the game's own data.
+  types, stats, abilities, dex text.
 - **GUIDE** - hints first, answers on a second tap:
   - **HERE**: wild Pokémon, items, gifts and trades in the area you're in, with what you already have ticked off.
   - **NEXT BOSS**: the next gym leader's team.
@@ -114,8 +111,7 @@ Pick which tabs sit in the tab bar in the companion's Settings.
 
 The app's own text comes in English, Japanese, French, German, Italian and Spanish. By default it
 follows the ROM's language (the device's in the Library); pick another under LANGUAGE in either
-Settings screen. Pokémon, move and item names and the GUIDE pages stay as the game has them
-(a translated hack's in its language; Quetzal's in the ones its own IDIOMA options pick).
+Settings screen. Pokémon, move and item names and the GUIDE pages stay as the game has them.
 
 </details>
 
@@ -126,8 +122,6 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
   drops to normal speed in menus and on the map, and keeps battles fast.
 - **Fast-forward music** (alpha) that keeps playing the song at its normal speed, instead of chipmunk sound.
 - **Save states** on hotkeys, with undo.
-- **Rewind** (optional, Settings > REWIND): hold the REWIND HOLD hotkey (R on a keyboard; pick a pad button in
-  HOTKEYS) to play the last ~20 seconds backwards. It never touches your save file.
 - **Status bar** (optional): game, location, money, clock and battery above the game.
 - **Aspect**: the GBA's own 3:2, stretched to fill a 16:9 top screen, or **EXPAND**: the overworld drawn past the
   GBA's edges - beside the game on a wide screen, above and below it on a phone held upright - so the screen shows
@@ -144,14 +138,11 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
   showed them - on the game and, if you like, the companion screen too.
 - **Controls**: remap every GBA button and hotkey, or turn hotkeys off. X and Y
   are a second START and SELECT, like the menu and registered-item buttons in the
-  DS games. **TURBO A** and **TURBO B** can go on any button (GAME BUTTONS): held, they
-  press A / B over and over, in game time, so they keep up with fast-forward.
+  DS games.
   On-screen touch controls appear when no controller is connected, and hide once
   a controller is used. Bluetooth and USB controllers (8BitDo, GameSir, Xbox, ...)
   connect while a game is running without restarting it, and HOME / guide works
   like a BACK tap for the companion.
-- **Settings search**: type what you're after ("key bindings", "rebind", "turbo", "box art") and the matching
-  settings show, whatever PokéDaisy calls them. First-time setup also walks through the game buttons.
 - **Themes**: PokéDaisy (the default, the website's light backdrop with floating logos) or one of eight game-coloured
   ones (FireRed, LeafGreen, Emerald, ...) for the library and settings, in Settings > THEME.
 
@@ -167,15 +158,6 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
   - **Rename** or **hide** it.
   - **Load a save** file into it (your current save is kept as a dated backup).
   - See its **info**: ROM, save file and save states.
-  - Give it its own **save folder** (another emulator's, so both keep playing the same save).
-- Games the companion can't read yet are tagged **NOT SUPPORTED**. Their INFO, and the companion's own notice,
-  have an **ASK FOR SUPPORT** button that opens a GitHub issue with the ROM's file name and SHA-1 (never the ROM).
-- **Best effort** for those: on the companion's NOT SUPPORTED page, **TRY BEST EFFORT** (in game, with a Pokémon)
-  reads the game as each one PokéDaisy knows and keeps the one that fits. A different build of a supported
-  version is then just supported; a hack that shares a supported game's memory gets party, bag, map and battles
-  (tagged **PARTIALLY SUPPORTED**, with whatever didn't match - Pokédex, guide, item text - switched off). It's
-  remembered for that ROM; INFO > FORGET MATCH undoes it. Unsupported ROMs of a Gen 3 Pokémon game in your ROMs
-  folder are listed (tagged) so you can try it.
 - Works with frontends like **ES-DE**, **Cocoon** and **iiSU**. They can launch
   a game straight into PokeDaisy. Setup guides for [iiSU](docs/iisu/README.md) and
   [ES-DE](docs/es-de/README.md); the
@@ -190,13 +172,6 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
 Saves are standard `.sav` / `.srm` files, the same format as mGBA and RetroArch,
 so you can move them between emulators freely. A game finds its save by the ROM's
 file name (for a zipped game, the name of the ROM inside the archive, as in RetroArch).
-
-To share saves with RetroArch, add its save folders under Settings > FOLDERS > **ALSO LOOK IN**
-(e.g. `RetroArch/saves/mGBA` and `RetroArch/saves/gpSP`): a save found there is played and written
-right there, so RetroArch keeps seeing it. New saves go to PokeDaisy's saves folder. A single game
-can also have its own folder (its library menu > SAVE FOLDER). Only the folders themselves are
-searched, never their subfolders, so a synced folder's version history (Syncthing's `.stversions`)
-is left alone.
 
 </details>
 
@@ -221,34 +196,27 @@ shows a "not supported" notice).
 | Pokémon Sapphire       | USA, rev 0, 1 and 2     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
 | Pokémon Sapphire       | ES/DE/FR/IT/JP, rev 0-1 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
 | Pokémon Unbound        | 2.1.1.1                 |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Unbound        | 2.1.1.1 French          |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
 | Pokémon Radical Red    | 4.1                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
 | Pokémon Gaia           | 3.2                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
 | Pokémon Odyssey        | 4.1.1                   |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Heart and Soul | 2.0.6                   |  ✅   | ✅  |   ✅   | ✅  |   ✅    |  ✅   |
-| Pokémon Amethyst       | 1.3.0, 1.4.1            |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
+| Pokémon Heart and Soul | 2.0.6                   |  ✅   | ✅  |   ✅   |  ◐  |   ✅    |  ✅   |
+| Pokémon Amethyst       | 1.3.0, 1.4.1            |  ✅   | ✅  |   —    | ✅  |   ✅    |  ✅   |
 | Celia's Stupid Romhack | 1.1.4                   |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Orange Islands | Beta 5.7, an older beta |  ✅   | ✅  |   ◐    | ✅  |   ✅    |  ✅   |
-| Pokémon Lazarus        | 2.0                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Emerald Seaglass       | 3.0                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Too Many Types 2       | 1.5.2                   |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Pokémon Glazed         | 9.2.0                   |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Emerald Imperium       | 1.3.1                   |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Pokémon Quetzal        | English Alpha 9 v0      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Pokémon Quetzal        | Spanish Alpha 9 v0      |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Emerald Rogue          | 2.2.1-EX                |  ✅   | ✅  |   ✅   | ✅  |   ✅    |   —   |
-| Pokémon SoulGold       | 1.1.4, 1.2 (two builds) |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   ◐   |
-| Pokémon R.O.W.E.       | 2.1.9.1 Experimental    |  ✅   | ✅  |   ◐    | ✅  |   ◐    |   —   |
-| Pokémon Yellow (GB)    | USA/Europe              |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
+| Pokémon Lazarus        | 2.0                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
+| Emerald Seaglass       | 3.0                     |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
+| Too Many Types 2       | 1.5.2                   |  ✅   | ✅  |   —    | ✅  |   ✅    |   —   |
+| Emerald Rogue          | 2.2.1-EX                |  ✅   | ✅  |   ✅   | ✅  |    —    |   —   |
+| Pokémon SoulGold       | 1.1.4, 1.2 (two builds) |  ✅   | ✅  |   ◐    | ✅  |   ✅    |   —   |
+| Pokémon R.O.W.E.       | 2.1.9.1 Experimental    |   —   |  —  |   —    |  —  |    —    |   —   |
+| Pokémon Yellow (GB)    | USA/Europe              |  ✅   | ✅  |   ◐    | ✅  |    —    |   —   |
 
 <details>
 <summary><strong>Notes on the table</strong></summary>
 
 Game Boy / Color games play too; Pokémon Yellow is the first one the companion reads,
 in the game's own look (its font, icons and town map, rebuilt from your ROM).
-Map ◐ means place names
-only, without the map picture. Guide ◐ means the live pages only (the wild Pokémon here and the next
-boss), without the area lists. Battle ◐ means the battle panes work but haven't
+R.O.W.E. plays, but its companion is still in progress. Map ◐ means place names
+only, without the map picture. Battle ◐ means the battle panes work but haven't
 been checked in every kind of battle. The guides were
 written from each game's own data and may contain mistakes; the app says so the
 first time you open one.
@@ -263,11 +231,7 @@ PokeDaisy has no accounts, ads or analytics. It only goes online to:
 
 - check this page for a new version, and download it if you say so;
 - fetch cover art from SteamGridDB or RetroAchievements, only if you add your own API key;
-- RetroAchievements, only if you sign in;
-- share a BEST EFFORT match, only if you tap SHARE when asked. The window lists every value sent,
-  and that's all of it: the ROM's SHA-1, size, game code and revision, the game it was read as and how
-  well, and the app version - no file name, account or device details. It goes to PokéDaisy's own
-  Firebase database, where nobody can read it back through the API.
+- RetroAchievements, only if you sign in.
 
 Your games and saves never leave your device.
 

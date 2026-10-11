@@ -41,26 +41,63 @@ class TelemetrySampler {
     private var beSha1: String? = null
     private var beSize = 0L
     private var beRev = 0
+    private var beLabel: String? = null
     private var beMatch: BestEffort.Match? = null
-    private var beFresh = false
-    private var beMiss: BestEffort.Miss? = null
     private var baseCfg: NativeConfig? = null
-    @Volatile private var bestEffortRequested = false
+    // Where the match came from and whether a party has confirmed it (BestEffortStore.Entry).
+    private var beSource = BestEffortStore.Source.AUTO
+    private var beVerified = false
+    // Best effort chose it just now (a notice), it's only a guess from the ROM's names, or a party
+    // read since doesn't hold with it (PICK AGAIN / KEEP; beSuggest: the game that is sure instead).
+    private var beFresh = false
+    private var beGuess = false
+    private var beDoubt = false
+    private var beSuggest: BestEffort.Candidate? = null
+    private var beDeclined = false
+    // The ROM's text (once per ROM) and the last look at every config, for the picker's order.
+    private var beText: BestEffort.RomText? = null
+    private var beVerdict: BestEffort.Verdict? = null
+    private var beSamples = 0
+    private var beGuessSamples = 0
 
-    /** NOT SUPPORTED's TRY BEST EFFORT: tried on the next sample (the emulator thread). */
-    fun requestBestEffort() {
-        bestEffortRequested = true
+    // The player's answers from the companion (any thread), taken on the next sample.
+    private sealed interface PickAnswer {
+        class Pick(val id: String) : PickAnswer
+        object None : PickAnswer
+        object Keep : PickAnswer
+        object Seen : PickAnswer
     }
+    private val answers = java.util.concurrent.ConcurrentLinkedQueue<PickAnswer>()
 
-    /** [label]: the ROM isn't one detect() knows. One best effort kept for it ([BestEffortStore]) reads it anyway. */
+    /** WHICH GAME IS THIS?: read the ROM as candidate [id] ([BestEffort.candidate]). */
+    fun pickGame(id: String) { answers += PickAnswer.Pick(id) }
+    /** NONE OF THESE: no game - NOT SUPPORTED, until the player opens the picker again. */
+    fun pickNone() { answers += PickAnswer.None }
+    /** KEEP: the doubted match stays, as the player's own pick. */
+    fun keepGame() { answers += PickAnswer.Keep }
+    /** The match notice was seen. */
+    fun bestEffortSeen() { answers += PickAnswer.Seen }
+
+    /** [label]: the ROM isn't one detect() knows. A match kept for it ([BestEffortStore]) reads it anyway. */
     private fun unsupportedRom(reader: MemoryReader, code: String, size: Long, hash: String?, label: String) {
         unsupportedHackLabel = label
         if (!BestEffort.canTry(code)) return
         beCode = code
         beSize = size
+        beLabel = label
         beRev = runCatching { reader.readCoreMemory(0x080000BCL, 1)[0].toInt() and 0xFF }.getOrDefault(0)
         beSha1 = hash ?: runCatching { sha1HexChunked(reader, 0x08000000L, size) }.getOrNull()
-        BestEffortStore.load(beSha1)?.let(BestEffortStore::matchOf)?.let(::useBestEffort)
+        beDeclined = BestEffortStore.declined(beSha1)
+        BestEffortStore.load(beSha1)?.let { e ->
+            BestEffortStore.matchOf(e)?.let(::useBestEffort)
+            beSource = e.source
+            beVerified = e.verified
+            // Best effort's own choice no party has confirmed yet (a guess, or a row from before the
+            // stricter checks): a guess again, which a party confirms or the timeout drops.
+            beGuess = e.source == BestEffortStore.Source.AUTO && !e.verified
+        }
+        // Look at it on the first sample: a guess or a sure match shows up at once.
+        beSamples = EVALUATE_EVERY
     }
 
     private fun useBestEffort(m: BestEffort.Match) {
@@ -72,15 +109,131 @@ class TelemetrySampler {
         itemTextChosen = false
     }
 
+    /** Back to NOT SUPPORTED (WHICH GAME IS THIS? on the companion). */
+    private fun dropBestEffort() {
+        beMatch = null
+        baseCfg = null
+        nativeCfg = null
+        kind = if (BestEffort.isFireRedFamily(beCode)) GameKind.FIRERED else GameKind.EMERALD
+        unsupportedHackLabel = beLabel
+        beFresh = false
+        beGuess = false
+        beDoubt = false
+        beSuggest = null
+        itemTextChosen = false
+        resetNativeBagCache()
+    }
+
+    private fun save(m: BestEffort.Match, source: BestEffortStore.Source, verified: Boolean) {
+        beSource = source
+        beVerified = verified
+        beSha1?.let { BestEffortStore.save(it, m, source, verified) }
+    }
+
+    private fun takeAnswers(reader: MemoryReader) {
+        while (true) {
+            when (val a = answers.poll() ?: return) {
+                is PickAnswer.Pick -> {
+                    val c = BestEffort.candidate(a.id) ?: continue
+                    val code = beCode ?: continue
+                    // Its ROM-side parts checked as usual; picked, it's verified once a party holds with it.
+                    val fit = verdict(reader, code)?.fits?.firstOrNull { it.candidate === c }
+                    val m = fit?.match() ?: BestEffort.Match(c, false, BestEffort.Part.entries.toSet(), 0)
+                    dropBestEffort()
+                    useBestEffort(m)
+                    beDeclined = false
+                    save(m, BestEffortStore.Source.PICKED, verified = fit?.sure == true)
+                    android.util.Log.i("pokedaisy", "best effort: picked ${c.id} off=${m.off} for sha1=$beSha1")
+                }
+                PickAnswer.None -> {
+                    dropBestEffort()
+                    beDeclined = true
+                    beSha1?.let(BestEffortStore::decline)
+                }
+                PickAnswer.Keep -> beMatch?.let { m ->
+                    beDoubt = false
+                    beSuggest = null
+                    save(m, BestEffortStore.Source.PICKED, verified = true)
+                }
+                PickAnswer.Seen -> beFresh = false
+            }
+        }
+    }
+
+    private fun verdict(reader: MemoryReader, code: String): BestEffort.Verdict? {
+        val text = beText ?: runCatching {
+            val t0 = System.nanoTime()
+            BestEffort.romText(reader, code, beSize).also {
+                android.util.Log.i("pokedaisy", "best effort: ROM text read in ${(System.nanoTime() - t0) / 1_000_000} ms")
+            }
+        }.getOrNull()?.also { beText = it } ?: return null
+        return BestEffort.evaluate(reader, code, beSize, text).also { beVerdict = it }
+    }
+
+    /**
+     * Every [EVALUATE_EVERY] samples, while there's nothing to read the ROM with yet or the match
+     * hasn't been confirmed by a party: what best effort makes of the running game. A SURE match is
+     * used (and kept) without asking; with no party yet, a guess from the ROM's names stands in until
+     * one reads. A match a party contradicts goes - or, the player's own pick, asks.
+     */
     private fun runBestEffort(reader: MemoryReader) {
         val code = beCode ?: return
-        val (m, miss) = BestEffort.match(reader, code)
-        beMiss = miss
-        if (m == null) return
-        beSha1?.let { BestEffortStore.save(it, m) }
-        useBestEffort(m)
-        beFresh = true
-        android.util.Log.i("pokedaisy", "best effort: ${m.candidate.id} full=${m.full} off=${m.off} for sha1=$beSha1")
+        val unresolved = beMatch == null && !beDeclined
+        val unverified = beMatch != null && !beVerified && !beDoubt
+        if (beVerdict != null && !unresolved && !unverified) return
+        if (beGuess && ++beGuessSamples > GUESS_SAMPLES) {
+            // A guess no party ever confirmed (the RAM isn't the guessed game's): the player picks.
+            android.util.Log.i("pokedaisy", "best effort: guess ${beMatch?.candidate?.id} never read a party, asking")
+            dropBestEffort()
+            return
+        }
+        if (++beSamples < EVALUATE_EVERY) return
+        beSamples = 0
+        val v = verdict(reader, code) ?: return
+        val sure = v.sure
+        // The player's pick (here or in the library's INFO) reads with its ROM-side parts as this ROM has them.
+        beMatch?.takeIf { beSource == BestEffortStore.Source.PICKED }?.let { m ->
+            val checked = v.fits.firstOrNull { it.candidate === m.candidate }?.match() ?: return@let
+            if (checked.off != m.off || checked.full != m.full) { useBestEffort(checked); save(checked, beSource, beVerified) }
+        }
+        val current = beMatch
+        // A confirmed match isn't judged again (that look was only for the picker's order).
+        if (current != null && beVerified) return
+        when {
+            current == null -> if (!beDeclined) {
+                val pick = sure ?: v.guess ?: return
+                val m = pick.match()
+                useBestEffort(m)
+                beFresh = true
+                beGuess = sure == null
+                beGuessSamples = 0
+                save(m, BestEffortStore.Source.AUTO, verified = sure != null)
+                android.util.Log.i("pokedaisy", "best effort: ${if (sure != null) "sure" else "guess"} ${m.candidate.id} off=${m.off} for sha1=$beSha1")
+            }
+            !v.sawParty -> {}
+            sure != null && sure.candidate.kind == current.candidate.kind -> {
+                // Confirmed - by the very build, or a better one of the same game.
+                val m = if (beSource == BestEffortStore.Source.AUTO) sure.match() else current
+                if (m.candidate !== current.candidate) useBestEffort(m)
+                beGuess = false
+                save(m, beSource, verified = true)
+            }
+            beSource == BestEffortStore.Source.AUTO -> {
+                // Best effort's own choice didn't hold: the sure one instead, else the player picks.
+                dropBestEffort()
+                sure?.let { useBestEffort(it.match()); beFresh = true; save(it.match(), BestEffortStore.Source.AUTO, verified = true) }
+                    ?: beSha1?.let(BestEffortStore::forget)
+            }
+            else -> {
+                val fit = v.fits.firstOrNull { it.candidate === current.candidate }
+                if (sure == null && fit?.party != null && fit.shownHolds) {
+                    save(current, beSource, verified = true)
+                } else {
+                    beDoubt = true
+                    beSuggest = sure?.candidate
+                }
+            }
+        }
     }
 
     /**
@@ -153,20 +306,35 @@ class TelemetrySampler {
             bestEffort = beMatch?.let { m ->
                 BestEffortView(
                     m.candidate.title, m.full, m.off, beFresh,
-                    report = beSha1?.takeIf { beFresh }?.let { BestEffortReport(it.lowercase(), beSize, beCode.orEmpty(), beRev, m.candidate.id, m.full, m.off) },
+                    report = beSha1?.takeIf { beFresh && !beGuess }?.let { BestEffortReport(it.lowercase(), beSize, beCode.orEmpty(), beRev, m.candidate.id, m.full, m.off) },
+                    id = m.candidate.id,
+                    picked = beSource == BestEffortStore.Source.PICKED,
+                    guess = beGuess,
+                    doubt = beDoubt,
+                    suggest = beSuggest?.title,
                 )
             },
-            canTryBestEffort = s.unsupported && beCode != null,
-            bestEffortMiss = beMiss,
+            gamePicker = beCode?.let { code -> gamePicker(code) },
         )
+    }
+
+    /** The picker's list: the last look's order, every config of the base game (before one, in the list's
+     * own order) - one row per title (two builds of SoulGold v1.2 share one), the one in use where it's one. */
+    private fun gamePicker(code: String): GamePickerView {
+        val v = beVerdict
+        val current = beMatch?.candidate?.id
+        val all = v?.fits?.map { f -> GameOption(f.candidate.id, f.candidate.title, v.likely(f), f.party != null) }
+            ?: BestEffort.candidatesFor(code).map { GameOption(it.id, it.title, likely = false, readsParty = false) }
+        val options = all.groupBy { it.title }.values.map { same -> same.firstOrNull { it.id == current } ?: same.first() }
+        return GamePickerView(options, current = current, miss = if (beMatch == null) v?.miss else null, declined = beDeclined)
     }
 
     private fun sampleUntagged(reader: MemoryReader): SnapshotView {
         try {
             if (kind == null) detect(reader)
-            if (bestEffortRequested) {
-                bestEffortRequested = false
-                if (unsupportedHackLabel != null) runBestEffort(reader)
+            if (beCode != null) {
+                takeAnswers(reader)
+                runBestEffort(reader)
             }
             if (kind != null && !itemTextChosen) {
                 itemTextChosen = true
@@ -176,8 +344,10 @@ class TelemetrySampler {
             }
             activeGame = kind ?: GameKind.FIRERED
             val base = baseCfg ?: nativeCfg
-            soulGoldV12 = base === NATIVE_SOULGOLD_V1_2 || base === NATIVE_SOULGOLD_V1_2B
+            soulGoldV12 = base === NATIVE_SOULGOLD_V1_2 || base === NATIVE_SOULGOLD_V1_2B || base === NATIVE_SOULGOLD_V1_2C
             amethystV141 = base === NATIVE_AMETHYST_V1_4_1
+            ultraViolet = base === NATIVE_ULTRA_VIOLET
+            mariomonV13 = base === NATIVE_MARIOMON_V1_3 || base === NATIVE_MARIOMON_V1_2_2 || base === NATIVE_MARIOMON_V1_2_1
             romLanguage = nativeCfg?.language ?: 'E'
             romGameCode = nativeCfg?.gameCode.orEmpty()
             // Quetzal picks each kind of name's language from its own options (a few bytes a sample).
@@ -255,6 +425,15 @@ class TelemetrySampler {
             return
         }
 
+        // Pokémon Ultra Violet: FireRed 1.0 under a game code of its own (PUVV) - by its hash.
+        if (code == ULTRA_VIOLET_CODE) {
+            val hash = runCatching { sha1HexChunked(reader, 0x08000000L, size) }.getOrNull()
+            kind = GameKind.FIRERED
+            if (hash == ULTRA_VIOLET_V1_22_SHA1) nativeCfg = NATIVE_ULTRA_VIOLET
+            else unsupportedRom(reader, code, size, hash, "unrecognized Ultra Violet build (sha1 ${hash?.take(12) ?: "unknown"}…)")
+            return
+        }
+
         // Not FireRed/Emerald-based at all (another GBA game): nothing here
         // knows its RAM - say so rather than read it as FireRed.
         // [CompanionSupport] makes the same call from the file at import.
@@ -274,6 +453,12 @@ class TelemetrySampler {
             if (hash == ORANGE_ISLANDS_UNVERSIONED_SHA1 || hash == ORANGE_ISLANDS_V5_7_BETA_SHA1) {
                 kind = GameKind.ORANGE_ISLANDS
                 nativeCfg = NATIVE_ORANGE_ISLANDS
+                return
+            }
+            // Recharged Yellow: a 16 MB rebuild of pokefirered, one config per release.
+            rechargedYellowConfig(hash)?.let {
+                kind = GameKind.RECHARGED_YELLOW
+                nativeCfg = it
                 return
             }
             retailHash = hash in RETAIL_SHA1S
@@ -305,6 +490,9 @@ class TelemetrySampler {
                 AMETHYST_V1_3_0_SHA1 -> { kind = GameKind.AMETHYST; nativeCfg = NATIVE_AMETHYST }
                 AMETHYST_V1_4_1_SHA1 -> { kind = GameKind.AMETHYST; nativeCfg = NATIVE_AMETHYST_V1_4_1 }
                 CELIA_V1_1_4_SHA1 -> { kind = GameKind.CELIA; nativeCfg = NATIVE_CELIA }
+                SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_SHA1, SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_CASUAL_SHA1,
+                SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_PERFORMANCE_SHA1, SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_CASUAL_PERFORMANCE_SHA1,
+                -> { kind = GameKind.SWORD_SHIELD; nativeCfg = NATIVE_SWORD_SHIELD }
                 else -> {
                     kind = GameKind.FIRERED
                     unsupportedRom(reader, code, size, hash, "unrecognized FireRed-based ROM hack " +
@@ -339,10 +527,16 @@ class TelemetrySampler {
                 SOULGOLD_V1_1_4_SHA1 -> { kind = GameKind.SOULGOLD; nativeCfg = NATIVE_SOULGOLD }
                 SOULGOLD_V1_2_SHA1 -> { kind = GameKind.SOULGOLD; nativeCfg = NATIVE_SOULGOLD_V1_2 }
                 SOULGOLD_V1_2B_SHA1 -> { kind = GameKind.SOULGOLD; nativeCfg = NATIVE_SOULGOLD_V1_2B }
+                SOULGOLD_V1_2C_SHA1 -> { kind = GameKind.SOULGOLD; nativeCfg = NATIVE_SOULGOLD_V1_2C }
                 GLAZED_V9_2_0_SHA1 -> { kind = GameKind.GLAZED; nativeCfg = NATIVE_GLAZED }
                 IMPERIUM_V1_3_1_SHA1 -> { kind = GameKind.IMPERIUM; nativeCfg = NATIVE_IMPERIUM }
                 QUETZAL_V9_0_ALPHA_SHA1 -> { kind = GameKind.QUETZAL; nativeCfg = NATIVE_QUETZAL }
                 QUETZAL_V9_0_ALPHA_ES_SHA1 -> { kind = GameKind.QUETZAL; nativeCfg = NATIVE_QUETZAL_ES }
+                MARIOMON_V1_5_2_Anniversary_SHA1 -> { kind = GameKind.MARIOMON; nativeCfg = NATIVE_MARIOMON_V1_5_2 }
+                MARIOMON_V1_5_1_Anniversary_SHA1 -> { kind = GameKind.MARIOMON; nativeCfg = NATIVE_MARIOMON_V1_5_1 }
+                MARIOMON_V1_3_SHA1 -> { kind = GameKind.MARIOMON; nativeCfg = NATIVE_MARIOMON_V1_3 }
+                MARIOMON_V1_2_2_SHA1 -> { kind = GameKind.MARIOMON; nativeCfg = NATIVE_MARIOMON_V1_2_2 }
+                MARIOMON_V1_2_1_SHA1 -> { kind = GameKind.MARIOMON; nativeCfg = NATIVE_MARIOMON_V1_2_1 }
                 else -> {
                     kind = GameKind.EMERALD
                     unsupportedRom(reader, code, size, hash, "unrecognized Emerald-based ROM hack " +
@@ -572,6 +766,9 @@ class TelemetrySampler {
         // A second build released as SoulGold v1.2 (its title screen says v1.2 too) - masked hash
         // (GPIO bytes zero).
         const val SOULGOLD_V1_2B_SHA1 = "5d6a036260fdbde96f85b5c1b92d0256d3aebafb"
+        // A third build released as SoulGold v1.2 ("v1.2" on its title screen too) - masked hash
+        // (GPIO bytes zero).
+        const val SOULGOLD_V1_2C_SHA1 = "2be7c99aa473308debe1d03ff2015bab7d9addb5"
         // Pokémon Glazed 9.2.0 (BPEE, 32 MB) - host-side masked hash (GPIO bytes zero).
         const val GLAZED_V9_2_0_SHA1 = "e10105d8544469c6a11ca2cf510289981df3c3b0"
         // Pokémon Emerald Imperium v1.3.1 (BPEE, 32 MB) - host-side masked hash (GPIO bytes zero).
@@ -586,6 +783,44 @@ class TelemetrySampler {
         // Both host-side masked hashes (GPIO bytes zero).
         const val ORANGE_ISLANDS_V5_7_BETA_SHA1 = "d2e3800e69e44c9649c3d9a15dc1cd12c1d90501"
         const val ORANGE_ISLANDS_UNVERSIONED_SHA1 = "8bac897de515f88e6ce92d0712ce2c018a394b37"
+        // Pokémon Ultra Violet v1.22 (16 MB, FireRed rev 0 code under the game code PUVV) - host-side
+        // masked hash (GPIO bytes zero, so a plain `shasum`).
+        const val ULTRA_VIOLET_V1_22_SHA1 = "3b6c51d8fb6b513bdd01b7bda3ed8965bc985d58"
+        const val ULTRA_VIOLET_CODE = "PUVV"
+        // Pokémon Sword and Shield Ultimate Plus v1.2.1.2 (BPRE, 32 MB, CFRU) - host-side masked hash
+        // (GPIO bytes zero).
+        const val SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_SHA1 = "afe4c8e0f9c7186860fcea5f25d8318f5d7929b9"
+        // Its three patched releases: the same tables and RAM (the Casual patch changes some item prices and
+        // trainers, the Performance patch some code), so the same config. Masked hashes (GPIO bytes zero).
+        const val SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_CASUAL_SHA1 = "daa2f89934d2c0447d5271dabeba86bfba04e1fd"
+        const val SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_PERFORMANCE_SHA1 = "4858cc3d7b335bb5eed553861d7a4a17bad9ce2c"
+        const val SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_CASUAL_PERFORMANCE_SHA1 = "932323d1fa3732d8673d1319fa86ed4df41087b9"
+
+        /** Hacks under a game code of their own that detect() reads as their base game (by hash). */
+        val HACK_GAME_CODES = setOf(ULTRA_VIOLET_CODE)
+        // Pokémon Recharged Yellow (BPRE rev 0, 16 MB, a pokefirered rebuild): four releases, each
+        // its own build (NATIVE_RECHARGED_YELLOW_*). Host-side masked hashes (GPIO bytes zero).
+        const val RECHARGED_YELLOW_V1_8_0_SHA1 = "be5033598e91d0e80fa93e551406f02a7876d7c2"
+        const val RECHARGED_YELLOW_V1_9_0_SHA1 = "ac30d1ed80e75104a3fb92f71e2b9a51c26e80c8"
+        const val RECHARGED_YELLOW_V1_9_4_SHA1 = "7d9fae6cf31c07bc7fa5cf7afe137ad5385cefb1"
+        const val RECHARGED_YELLOW_V1_9_7_SHA1 = "ed60654d7525ba005bfc8f799bf0ecba2ef08a2e"
+
+        /** Recharged Yellow's config for a release's hash; null for any other ROM. */
+        fun rechargedYellowConfig(hash: String?): NativeConfig? = when (hash) {
+            RECHARGED_YELLOW_V1_8_0_SHA1 -> NATIVE_RECHARGED_YELLOW_V1_8_0
+            RECHARGED_YELLOW_V1_9_0_SHA1 -> NATIVE_RECHARGED_YELLOW_V1_9_0
+            RECHARGED_YELLOW_V1_9_4_SHA1 -> NATIVE_RECHARGED_YELLOW_V1_9_4
+            RECHARGED_YELLOW_V1_9_7_SHA1 -> NATIVE_RECHARGED_YELLOW_V1_9_7
+            else -> null
+        }
+
+        // Super Mariomon (Too Many Productions; BPEE, 32 MB): every release the user has, host-side
+        // masked hashes (GPIO bytes zero, so a plain `shasum`).
+        const val MARIOMON_V1_2_1_SHA1 = "43dd208b23eade69aa3384301e934ecafbf6c2b3"
+        const val MARIOMON_V1_2_2_SHA1 = "08d1c275c0ba4d559b33427292702d61ad49fb5c"
+        const val MARIOMON_V1_3_SHA1 = "043512c2497871c018df606fb90ffbd4c81430f4"
+        const val MARIOMON_V1_5_1_Anniversary_SHA1 = "831fe0f97301f17b24a9cd4a64ef0520835c4dde"
+        const val MARIOMON_V1_5_2_Anniversary_SHA1 = "06e79d12afa578db97c23c1f7ba771fe2f8fe905"
 
         // Pokémon Yellow (USA, Europe) - the Game Boy cart (pret/pokeyellow builds it byte for byte).
         const val YELLOW_SHA1 = "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1"
@@ -602,14 +837,20 @@ class TelemetrySampler {
         const val GAME_BOY_SUPPORT = true
 
         /** Every hack detect() has RAM addresses for - the >16 MB ones it
-         * hashes, plus Seaglass and Orange Islands (16 MB). [CompanionSupport] checks imports against it. */
+         * hashes, plus Seaglass, Orange Islands, Recharged Yellow and Ultra Violet (16 MB). [CompanionSupport] checks imports against it. */
         val SUPPORTED_HACK_SHA1S = setOf(
             UNBOUND_V2_1_1_1_SHA1, GAIA_V3_2_SHA1, RADICAL_RED_V4_1_SHA1, ODYSSEY_V4_1_1_SHA1,
             AMETHYST_V1_3_0_SHA1, AMETHYST_V1_4_1_SHA1, CELIA_V1_1_4_SHA1, HEART_AND_SOUL_V2_0_6_SHA1, LAZARUS_V2_0_SHA1,
             ROWE_V2_1_9_1_SHA1, EMERALD_ROGUE_V2_2_1_EX_SHA1, TMT2_V1_5_2_SHA1, EMERALD_SEAGLASS_V3_0_SHA1,
-            SOULGOLD_V1_1_4_SHA1, SOULGOLD_V1_2_SHA1, SOULGOLD_V1_2B_SHA1, GLAZED_V9_2_0_SHA1, IMPERIUM_V1_3_1_SHA1,
+            SOULGOLD_V1_1_4_SHA1, SOULGOLD_V1_2_SHA1, SOULGOLD_V1_2B_SHA1, SOULGOLD_V1_2C_SHA1, GLAZED_V9_2_0_SHA1, IMPERIUM_V1_3_1_SHA1,
             QUETZAL_V9_0_ALPHA_SHA1, QUETZAL_V9_0_ALPHA_ES_SHA1, UNBOUND_V2_1_1_1_FR_SHA1,
             ORANGE_ISLANDS_V5_7_BETA_SHA1, ORANGE_ISLANDS_UNVERSIONED_SHA1,
+            ULTRA_VIOLET_V1_22_SHA1, SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_SHA1, SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_CASUAL_SHA1,
+            SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_PERFORMANCE_SHA1, SWORD_SHIELD_ULTIMATE_PLUS_V1_2_1_2_CASUAL_PERFORMANCE_SHA1,
+            RECHARGED_YELLOW_V1_8_0_SHA1, RECHARGED_YELLOW_V1_9_0_SHA1, RECHARGED_YELLOW_V1_9_4_SHA1,
+            RECHARGED_YELLOW_V1_9_7_SHA1,
+            MARIOMON_V1_2_1_SHA1, MARIOMON_V1_2_2_SHA1, MARIOMON_V1_3_SHA1, MARIOMON_V1_5_1_Anniversary_SHA1,
+            MARIOMON_V1_5_2_Anniversary_SHA1,
         )
     }
 }
@@ -626,6 +867,11 @@ class TelemetrySampler {
 // itself having ticked forward). Masking these 6 bytes out before hashing
 // makes detection stable regardless of how long the game's been running,
 // instead of only working on the very first boot.
+/** Samples (~1 a second) between best effort's looks while it has something to settle. */
+private const val EVALUATE_EVERY = 5
+/** How long a guess from the ROM's names stands without a party to confirm it (~10 minutes). */
+private const val GUESS_SAMPLES = 600
+
 private val GPIO_HOLE_START = 0x080000C4L
 private const val GPIO_HOLE_SIZE = 6
 

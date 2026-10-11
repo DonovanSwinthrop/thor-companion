@@ -6,8 +6,10 @@ owns (nothing is downloaded).
     scripts/gen_cfru_tables.py <game-key> <rom.gba>
 
 Writes app/src/main/kotlin/.../companion/data/{SpeciesNames,SpeciesTypes,
-MoveData,ItemNames}<Suffix>.kt. Item descriptions aren't written: the app reads
-them from the player's ROM (RomItemText, NativeConfig.itemDescs = gItems below).
+MoveData,ItemNames}<Suffix>.kt, plus GenderRatios<Suffix>.kt and
+MapSecData<Suffix>.kt for a game that asks for them (gender / map_names below).
+Item descriptions aren't written: the app reads them from the player's ROM
+(RomItemText, NativeConfig.itemDescs = gItems below).
 
 CFRU keeps FireRed's code and repoints its data, so each table is found the
 way NATIVE_GAIA_V3_2's icon tables were: the literal-pool words FireRed 1.0
@@ -20,11 +22,13 @@ loads gSpeciesNames, gMonIconTable, ... from now hold the hack's addresses
     at +1, type at +2.
   - gItems: 44-byte struct Item, name inline (14), .itemId at +14 (the key:
     it can differ from the slot), description pointer at +20.
+  - gBaseStats genderRatio at +0x10 (gender), and sMapNames (map_names: FireRed
+    1.0's pointer table from MAPSEC 0x58, renamed in place) for a hack with a
+    region of its own; its map itself is drawn from the ROM (RomRegionMap).
 The sha1 check stops a table being generated from the wrong release.
 """
 import hashlib
 import os
-import struct
 import sys
 
 from gen_expansion_tables import OUT_DIR, Rom, kstr
@@ -53,7 +57,41 @@ GAMES = {
                            825: ("Alluring Voice", 23, 80)},
                     items={1: "Master Ball", 13: "Potion", 58: "Muscle Wing", 675: "Wise Glasses", 747: "Punch Glove"}),
     ),
+    # Pokemon Sword and Shield Ultimate Plus v1.2.1.2: Galar on CFRU (32 MB,
+    # BPRE rev 0). FireRed 1.0's literal pools say: gSpeciesNames 0x096184B8
+    # (40 refs), gBaseStats 0x099AFBEC (56), gMoveNames 0x094B277C (31 of 32;
+    # 13-byte names only - no long-name table, so the game prints "Nature's Mad"
+    # too), gBattleMoves 0x094BFA7C (137), gItems 0x093C0000 (15, Radical Red's
+    # address). Species 1-1267 (SCORBUNNY 1105, ZACIAN 1180, CALYREX 1190); moves
+    # end at 895 (Rapid Flow, the G-Max ones before it). Its unused item slots are
+    # named "Free SpaceNN". sMapNames stays at FireRed's pointer table, renamed
+    # in place: Postwick, Wedgehurst, ... Crown Tundra. Checked against a save's
+    # party (SCORBUNNY knows Growl / Tackle) and bag (Potion, Soothe Bell, Old Rod). Its Casual /
+    # Performance / Casual and Performance patches (daa2f899... / 4858cc3d... / 932323d1...) leave every
+    # name, type, move and the map names as they are (Casual changes some item prices): one set of tables.
+    "sword_shield": dict(
+        suffix="SwordShield",
+        label="Pokemon Sword and Shield Ultimate Plus v1.2.1.2",
+        sha1="afe4c8e0f9c7186860fcea5f25d8318f5d7929b9",
+        species_names=0x096184B8, species_max=1268,
+        base_stats=0x099AFBEC,
+        move_names=0x094B277C, move_name_len=13, battle_moves=0x094BFA7C, moves_max=895,
+        items=0x093C0000, items_max=2000, item_skip="Free Space",
+        gender=True,
+        map_names=0x083F1CAC,
+        checks=dict(species={1: "Bulbasaur", 25: "Pikachu", 1102: "Grookey", 1105: "Scorbunny", 1108: "Sobble",
+                             1180: "Zacian", 1190: "Calyrex"},
+                    types={1: (12, 3), 4: (10, 10), 35: (23, 23), 1105: (10, 10)},
+                    moves={33: ("Tackle", 0, 40), 45: ("Growl", 0, 0), 7: ("Fire Punch", 10, 75),
+                           894: ("Rapid Flow", 11, 10)},
+                    items={1: "Master Ball", 13: "Potion", 184: "Soothe Bell", 262: "Old Rod", 550: "Scizorite"},
+                    mapsecs={0x58: "Postwick", 0x59: "Wedgehurst", 0x7B: "Wild Area", 0xC3: "Crown Tundra"}),
+    ),
 }
+
+
+# sMapNames: FireRed 1.0's 109 sections from MAPSEC_PALLET_TOWN.
+FIRST_MAPSEC, MAP_SECTIONS = 0x58, 109
 
 
 def header(g, what):
@@ -125,7 +163,7 @@ def main():
             misses += 1
             continue
         misses = 0
-        if n.startswith("?"):
+        if n.startswith("?") or (g.get("item_skip") and n.startswith(g["item_skip"])):
             continue
         items[iid] = n
     for i, n in checks["items"].items():
@@ -133,7 +171,27 @@ def main():
     write(f"ItemNames{sfx}.kt", header(g, "gItems names, keyed by .itemId.\n") +
           f"val itemNames{sfx}: Map<Int, String> = mapOf(\n" +
           "".join(f"    {i} to {kstr(n)},\n" for i, n in sorted(items.items())) + ")\n")
-    print(f"{len(names)} species, {len(moves)} moves, {len(items)} items; itemDescs = vanillaItems(0x{g['items']:08X}L)")
+    if g.get("gender"):
+        ratios = "".join("%02x" % (rom.u8(g["base_stats"] + 28 * i + 0x10) if i in names else 255)
+                         for i in range(max(names) + 1))
+        write(f"GenderRatios{sfx}.kt", header(g, "gBaseStats genderRatio by species id (0 always\n"
+              "// male, 254 always female, 255 genderless, else female when (personality & 0xFF) < ratio).\n") +
+              f"val genderRatios{sfx}: IntArray by lazy {{ unhexRatios(\"{ratios}\") }}\n")
+    secs = {}
+    if g.get("map_names"):
+        for i in range(MAP_SECTIONS):
+            p = rom.u32(g["map_names"] + 4 * i)
+            n = rom.text(p, 32) if rom.is_ptr(p) else None
+            if n:
+                secs[FIRST_MAPSEC + i] = n
+        for i, n in checks["mapsecs"].items():
+            assert secs.get(i) == n, (i, secs.get(i), n)
+        write(f"MapSecData{sfx}.kt", header(g, "sMapNames by map section id, region -1: the MAP\n"
+              "// draws its region map and boxes from the ROM (RomRegionMap); these name it elsewhere.\n") +
+              f"val mapSecData{sfx}: Map<Int, MapSecInfo> = mapOf(\n" +
+              "".join(f"    {i} to MapSecInfo({kstr(n)}, -1, 0, 0, 0, 0),\n" for i, n in sorted(secs.items())) + ")\n")
+    print(f"{len(names)} species, {len(moves)} moves, {len(items)} items, {len(secs)} map sections; "
+          f"itemDescs = vanillaItems(0x{g['items']:08X}L)")
 
 
 if __name__ == "__main__":

@@ -126,13 +126,15 @@ class RegionMapModel(
 
 /** The Map tab's maps for the running game - the same source [lookupLocation] names places from. */
 fun activeRegionMap(): RegionMapModel? {
-    val rom = if (activeGame == GameKind.FIRERED) null else RomRegionMap.current
+    // Recharged Yellow is a rebuild: FireRed 1.0's literal pools RomRegionMap follows aren't its code.
+    val rom = if (activeGame == GameKind.FIRERED || activeGame == GameKind.RECHARGED_YELLOW) null else RomRegionMap.current
     if (rom != null) return RegionMapModel(rom.images, rom.sections, rom.layouts)
     if (activeGame == GameKind.ODYSSEY) return null // see lookupLocation
     val images = activeRegionMapImages
     if (images.isEmpty()) return null
     val layouts = when (activeGame) {
-        GameKind.FIRERED -> regionLayoutsFireRed
+        // Recharged Yellow keeps FireRed's region map screens and cursor grids.
+        GameKind.FIRERED, GameKind.RECHARGED_YELLOW -> regionLayoutsFireRed
         GameKind.EMERALD, GameKind.EMERALD_SEAGLASS, GameKind.TMT2 -> regionLayoutsEmerald
         GameKind.EMERALD_ROGUE -> regionLayoutsRogue
         GameKind.LAZARUS -> regionLayoutsLazarus
@@ -142,6 +144,7 @@ fun activeRegionMap(): RegionMapModel? {
         GameKind.IMPERIUM -> regionLayoutsImperium
         GameKind.QUETZAL -> regionLayoutsQuetzal
         GameKind.ROWE -> regionLayoutsRowe
+        GameKind.MARIOMON -> if (mariomonV13) regionLayoutsMariomonV13 else regionLayoutsMariomon
         else -> emptyList()
     }
     return RegionMapModel(images, activeMapSecData, layouts)

@@ -31,7 +31,8 @@ private fun league(first: Int, rematch: Int): (SaveProgress) -> Int = { if (it.f
  * The champion is the rival, whose team answers the player's starter:
  * TRAINER_CHAMPION_FIRST_SQUIRTLE (438) when the player took CHARMANDER, etc.
  */
-private val BOSSES_FIRERED = listOf(
+/** Ultra Violet's too (GuideUltraViolet.kt): the same trainers, badge scripts and League. */
+internal val BOSSES_FIRERED = listOf(
     Boss("LEADER BROCK", "PEWTER CITY GYM", FLAG_BADGE01_GET) { 414 },
     Boss("LEADER MISTY", "CERULEAN CITY GYM", FLAG_BADGE01_GET + 1) { 415 },
     Boss("LEADER LT. SURGE", "VERMILION CITY GYM", FLAG_BADGE01_GET + 2) { 416 },

@@ -1,0 +1,29 @@
+# Super Mariomon: mariomon.txt, then a scripted wild GOOMBA Lv5 - setwildbattle (its expansion's
+# 11 bytes: species 915, level 5, no item, no second mon) / dowildbattle / end poked into free
+# EWRAM and run by ScriptContext_SetupScript - A through "Wild GOOMBA appeared!": the action menu.
+# SSC is that function per release (thumb): v1.5.2 0x080BEE71, v1.5.1 0x080BED91, v1.3
+# 0x080BCF15, v1.2.2 / v1.2.1 0x080BCF95 (the same code in each: its literal pool loads
+# gScriptCmdTable). Replace it before running (sed s/SSC/.../).
+wait 300
+press START
+wait 60
+press START
+wait 90
+press START
+wait 90
+press A
+wait 120
+press A
+wait 400
+press B
+wait 30
+press B
+wait 30
+poke32 0x0203FF00 0x050393B6
+poke32 0x0203FF04 0
+poke32 0x0203FF08 0xB7000000
+poke32 0x0203FF0C 2
+call SSC 0x0203FF00
+wait 560
+press A
+wait 260

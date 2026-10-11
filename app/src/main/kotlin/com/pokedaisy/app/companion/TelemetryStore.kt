@@ -23,11 +23,16 @@ class TelemetryStore {
     private val _snapshot = MutableStateFlow(SnapshotView(connected = false, error = tk("starting…")))
     val snapshot: StateFlow<SnapshotView> = _snapshot
 
+    /** WHICH GAME IS THIS? ([com.pokedaisy.app.companion.data.BestEffort]): the player's answers, taken on the next sample. */
+    val gamePick = GamePickActions(
+        pick = { sampler.pickGame(it) },
+        none = { sampler.pickNone() },
+        keep = { sampler.keepGame() },
+        seen = { sampler.bestEffortSeen() },
+    )
+
     /** A different ROM is about to run in this activity: forget the detected
      * game. Call while the emulator is stopped. */
-    /** NOT SUPPORTED's TRY BEST EFFORT ([com.pokedaisy.app.companion.data.BestEffort]), on the next sample. */
-    fun requestBestEffort() = sampler.requestBestEffort()
-
     fun reset() {
         sampler = TelemetrySampler()
         cached = null

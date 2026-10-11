@@ -100,6 +100,9 @@ fun CompanionSettingsScreen(
     ui: SettingsUiState = remember { SettingsUiState(initialPage) },
     /** The game's status bar is drawn over the companion's tabs (it shows the game and battery). */
     statusBarShown: Boolean = false,
+    /** A ROM the app doesn't know: the game it's read as (BEST EFFORT), a GAME row at the top; [onPlaysAs] opens the picker. */
+    playsAs: String? = null,
+    onPlaysAs: () -> Unit = {},
 ) {
     val m = rememberGbaTextMetrics()
     var page by ui::page
@@ -138,10 +141,12 @@ fun CompanionSettingsScreen(
                 }
                 Spacer(Modifier.height(m.u * 4))
             }
-            val rows = remember(settings, page, tick, hiddenTabs, availableTabs) {
+            val rows = remember(settings, page, tick, hiddenTabs, availableTabs, playsAs) {
                 if (settings == null) return@remember listOf(SettingRow(tk("NO GAME RUNNING"), null) {})
                 when (page) {
-                    Page.HOME -> homeRows(settings, barCount(settings, availableTabs), { tick++ }, { page = it }, { selector = it })
+                    Page.HOME -> playsAs?.let { game ->
+                        listOf(groupTitle(tk("GAME")), SettingRow(tk("PLAYS AS"), game, subtitle = "Which game this ROM is read as") { onPlaysAs() })
+                    }.orEmpty() + homeRows(settings, barCount(settings, availableTabs), { tick++ }, { page = it }, { selector = it })
                     Page.TABS -> COMPANION_TABS.map { id ->
                         val shown = id in settings.companionTabs
                         // A tab this game doesn't have (DEX, GUIDE) keeps its setting for the games that do.
@@ -412,6 +417,15 @@ private fun homeRows(
         },
         // FILTER (LCD / LCD PAPER / SCANLINES / CRT) and GBA COLORS, on their own page.
         SettingRow(tk("SHADERS"), s.screenFilter.label) { navigate(Page.SHADERS) },
+        // A frame around the game: NONE, the built-in ones, the player's imports (added on the top screen). Live.
+        s.overlayChoices.takeIf { it.isNotEmpty() }?.let { choices ->
+            val current = choices.firstOrNull { it.first == s.overlay }?.second ?: choices.first().second
+            SettingRow(tk("OVERLAY"), current) {
+                select(Selector(tk("OVERLAY"), choices.map { it.second }, current) { l ->
+                    choices.firstOrNull { it.second == l }?.let { s.setOverlay(it.first) }
+                })
+            }
+        },
         // The game's frames per second and the app's CPU share, in the game's corner.
         SettingRow(tk("FPS / CPU"), onOff(s.showPerformance)) { s.setShowPerformance(!s.showPerformance); changed() },
         // OFF / ON / AUTO (the device's): both screens switch at once.
@@ -473,6 +487,10 @@ private fun shaderRows(s: CompanionSettings, changed: () -> Unit): List<SettingR
         // SOFT / MEDIUM / STRONG, cycling too; greyed out for a filter with no grid.
         SettingRow(tk("GRID"), s.gridStrength.label, enabled = s.screenFilter.hasGrid) {
             if (s.screenFilter.hasGrid) { s.setGridStrength(s.gridStrength.next()); changed() }
+        },
+        // OFF / xBRZ / xBR / SCALEFX, cycling too: smooths the game's edges before FILTER (the game only).
+        SettingRow(tk("SMOOTHING"), if (s.smoothingAvailable) s.smoothing.label else tk("N/A"), enabled = s.smoothingAvailable) {
+            if (s.smoothingAvailable) { s.setSmoothing(s.smoothing.next()); changed() }
         },
         // The colours as the GBA's own LCD showed them; stacks with any filter.
         SettingRow(tk("GBA COLORS"), if (s.gbaColors) tk("ON") else tk("OFF")) { s.setGbaColors(!s.gbaColors); changed() },

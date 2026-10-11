@@ -44,6 +44,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
 import com.pokedaisy.app.companion.data.GENDER_SYMBOL_FEMALE
 import com.pokedaisy.app.companion.data.GENDER_SYMBOL_MALE
 import com.pokedaisy.app.companion.data.MonView
@@ -61,7 +63,9 @@ import com.pokedaisy.app.companion.ui.theme.QolColors
  * Takes the whole party plus an index (not one [MonView]) so it keeps
  * following live telemetry while open. STATS (when the read has IVs, i.e.
  * the native paths) swaps the moves for [MonStatsSection], and stays swapped
- * while cycling through the party.
+ * while cycling through the party. LEARN ([learn], the original games for now)
+ * puts the moves on the left and [CanLearnSection] on the right: a picked option
+ * tags the move it would replace FORGET.
  */
 @Composable
 fun MonDetailScreen(
@@ -72,11 +76,19 @@ fun MonDetailScreen(
     modifier: Modifier = Modifier,
     /** Open on the STATS page (screenshot tests). */
     initialShowStats: Boolean = false,
+    /** The move advice's game data; null = no LEARN page. */
+    learn: LearnContext? = null,
+    /** Open on the LEARN page with this option (a move id) picked (screenshot tests). */
+    initialLearnPick: Int? = null,
 ) {
     val m = rememberGbaTextMetrics()
     val small = rememberGbaTextMetrics(1f)
     val gap = m.u * 3
     var showStats by remember { mutableStateOf(initialShowStats) }
+    var showLearn by remember { mutableStateOf(initialLearnPick != null) }
+    // The picked CAN LEARN option, by move id (0 = none); kept while cycling through the party.
+    var learnPick by remember { mutableStateOf(initialLearnPick ?: 0) }
+    val canLearn = learn != null && com.pokedaisy.app.companion.data.MoveLearning.available(learn.tables, learn.guide)
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         AnimatedContent(
             targetState = index,
@@ -97,16 +109,22 @@ fun MonDetailScreen(
                 // on the left, the moves on the right.
                 OptionListWindow(m, Modifier.fillMaxSize(), fill = OptionColors.titleFill) {
                     Row(Modifier.fillMaxSize()) {
-                        Column(Modifier.weight(0.5f).fillMaxHeight().padding(end = gap)) {
-                            InfoSection(mon, m, small, Modifier.fillMaxWidth())
-                            Separator(m, Modifier.fillMaxWidth().padding(vertical = gap))
-                            MatchupSection(mon, small, Modifier.fillMaxWidth().weight(1f))
+                        if (showLearn && canLearn) {
+                            val options = rememberLearnOptions(learn!!, mon)
+                            val pick = options?.firstOrNull { it.move == learnPick }
+                            val forget = pick?.advice?.forget?.takeIf { learn.showHints } ?: 0
+                            MovesSection(mon, m, small, Modifier.weight(0.5f).fillMaxHeight().padding(end = gap), forget = forget)
+                            Separator(m, Modifier.fillMaxHeight(), vertical = true)
+                            CanLearnSection(options, learnPick, { learnPick = it }, learn.showHints, m, small,
+                                Modifier.weight(0.5f).fillMaxHeight().padding(start = gap))
+                        } else {
+                            SummaryLeftColumn(mon, m, small, gap, Modifier.weight(0.5f).fillMaxHeight().padding(end = gap))
+                            Separator(m, Modifier.fillMaxHeight(), vertical = true)
+                            val right = Modifier.weight(0.5f).fillMaxHeight().padding(start = gap)
+                            val stats = mon.stats
+                            if (showStats && stats != null) MonStatsSection(stats, m, small, right)
+                            else MovesSection(mon, m, small, right)
                         }
-                        Separator(m, Modifier.fillMaxHeight(), vertical = true)
-                        val right = Modifier.weight(0.5f).fillMaxHeight().padding(start = gap)
-                        val stats = mon.stats
-                        if (showStats && stats != null) MonStatsSection(stats, m, small, right)
-                        else MovesSection(mon, m, small, right)
                     }
                 }
             }
@@ -115,8 +133,11 @@ fun MonDetailScreen(
         CompanionBackHandler(onBack = onBack)
         // No up / down arrows (STATS needed the room): the party strip's buttons pick the Pokémon.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (party.getOrNull(index)?.stats != null) {
+            if (party.getOrNull(index)?.stats != null && !showLearn) {
                 TextNavButton(if (showStats) tr("MOVES") else tr("STATS"), StatsPurple, StatsPurpleDark) { showStats = !showStats }
+            }
+            if (canLearn && party.getOrNull(index)?.isEgg == false) {
+                TextNavButton(if (showLearn) tr("MOVES") else tr("LEARN"), SuggestGold, SuggestGoldDark) { showLearn = !showLearn; learnPick = 0 }
             }
             PartyStrip(party, index, onIndexChange, Modifier.weight(1f))
             NavButton(PixelIcons.back, tr("Back"), RunBlue, RunBlueDark, enabled = true, onClick = onBack)
@@ -198,9 +219,44 @@ private val SeparatorDark get() = if (OptionColors.dark) Color(0xFF0E1116) else 
 private val ExpBlue = Color(0xFF40B8F8)
 private val SeparatorLight get() = if (OptionColors.dark) Color(0xFF3A414D) else Color(0xFFE8E8EC)
 
-/** Name + gender, icon, level, types, status, HP - the summary's top-left block. */
+/**
+ * The summary's left column: [InfoSection] over the matchups. Where that doesn't fit (a 4:3 screen,
+ * the Retroid Pocket Duo Lite's 1280x960, has ~120 px less height than the Thor) the types move up
+ * beside the icon, a row less - measured, so a screen it fits keeps the full layout.
+ */
 @Composable
-internal fun InfoSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier) {
+private fun SummaryLeftColumn(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, gap: Dp, modifier: Modifier) {
+    val sections = listOf(mon.weaknesses, mon.resistances, mon.immunities)
+    androidx.compose.ui.layout.SubcomposeLayout(modifier) { c ->
+        val fits = !c.hasBoundedHeight || run {
+            val loose = c.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity)
+            val probe = subcompose("probe") {
+                Column(Modifier.fillMaxWidth()) {
+                    InfoSection(mon, m, small, Modifier.fillMaxWidth())
+                    Separator(m, Modifier.fillMaxWidth().padding(vertical = gap))
+                    MatchupColumn(
+                        listOf(tr("WEAK TO"), tr("RESISTS"), tr("IMMUNE TO")).zip(sections).filter { it.second.isNotEmpty() },
+                        small, inline = false, scroll = false,
+                    )
+                }
+            }
+            probe.sumOf { it.measure(loose).height } <= c.maxHeight
+        }
+        val shown = subcompose(if (fits) "full" else "compact") {
+            Column(Modifier.fillMaxSize()) {
+                InfoSection(mon, m, small, Modifier.fillMaxWidth(), typesBesideIcon = !fits)
+                Separator(m, Modifier.fillMaxWidth().padding(vertical = gap))
+                MatchupSection(mon, small, Modifier.fillMaxWidth().weight(1f))
+            }
+        }.map { it.measure(c) }
+        layout(c.maxWidth, c.maxHeight) { shown.forEach { it.place(0, 0) } }
+    }
+}
+
+/** Name + gender, icon, level, types, status, HP - the summary's top-left block. [typesBesideIcon]:
+ * the types under the level, next to the icon, instead of a row of their own (a short screen). */
+@Composable
+internal fun InfoSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, typesBesideIcon: Boolean = false) {
     val u = m.u
     Box(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(u * 3)) {
@@ -225,13 +281,12 @@ internal fun InfoSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics,
                             GbaText("${mon.level}", OptionColors.value, OptionColors.valueShadow, m, modifier = Modifier.padding(start = u * 2))
                         }
                         if (mon.status.isNotEmpty()) StatusBadge(mon.status)
+                        if (typesBesideIcon) Types(mon)
                     }
                 }
             }
             // Own row, side by side: the block keeps one height for single and dual types.
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                mon.types.filter { it.isNotEmpty() }.distinct().forEach { TypeBadge(it) }
-            }
+            if (!typesBesideIcon) Types(mon)
             if (!mon.isEgg) {
                 SummaryBar(tr("HP"), "${mon.hp}/${mon.maxHp}", mon.hp, mon.maxHp, QolColors.hpColor(mon.hp, mon.maxHp), small)
                 // Progress through the current level; the text is what's left to the next.
@@ -244,6 +299,13 @@ internal fun InfoSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics,
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun Types(mon: MonView) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        mon.types.filter { it.isNotEmpty() }.distinct().forEach { TypeBadge(it) }
     }
 }
 
@@ -284,27 +346,52 @@ internal fun SummaryBar(label: String, text: String, value: Int, max: Int, color
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * WEAK TO / RESISTS / IMMUNE TO, each a heading over its type chips - or, where that doesn't fit
+ * the column (a 4:3 screen, the Retroid Pocket Duo Lite's 1280x960, has ~120 px less than the
+ * Thor), each heading on the line of its chips, a line less a group. Scrolls if even that won't fit.
+ */
 @Composable
 internal fun MatchupSection(mon: MonView, small: GbaTextMetrics, modifier: Modifier = Modifier) {
     val sections = listOf(tr("WEAK TO") to mon.weaknesses, tr("RESISTS") to mon.resistances, tr("IMMUNE TO") to mon.immunities)
         .filter { it.second.isNotEmpty() }
-    Box(modifier) {
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(small.u * 3),
-        ) {
-            if (sections.isEmpty()) {
-                GbaText(tr("NO MATCHUP DATA"), OptionColors.muted, OptionColors.mutedShadow, small)
-            }
-            sections.forEach { (heading, list) -> MatchupGroup(heading, list, small) }
+    // Measured, not guessed: the full layout first, the inline one only when that runs over.
+    androidx.compose.ui.layout.SubcomposeLayout(modifier) { c ->
+        val loose = c.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity)
+        val full = subcompose("full") { MatchupColumn(sections, small, inline = false, scroll = false) }.map { it.measure(loose) }
+        val shown = if (c.hasBoundedHeight && full.sumOf { it.height } > c.maxHeight) {
+            subcompose("inline") { MatchupColumn(sections, small, inline = true, scroll = true) }.map { it.measure(c.copy(minHeight = 0)) }
+        } else full
+        layout(c.maxWidth, if (c.hasBoundedHeight) c.maxHeight else shown.sumOf { it.height }) { shown.forEach { it.place(0, 0) } }
+    }
+}
+
+@Composable
+private fun MatchupColumn(sections: List<Pair<String, List<TypeMatchup>>>, small: GbaTextMetrics, inline: Boolean, scroll: Boolean) {
+    Column(
+        Modifier.fillMaxWidth().then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+        verticalArrangement = Arrangement.spacedBy(small.u * 3),
+    ) {
+        if (sections.isEmpty()) {
+            GbaText(tr("NO MATCHUP DATA"), OptionColors.muted, OptionColors.mutedShadow, small)
         }
+        sections.forEach { (heading, list) -> MatchupGroup(heading, list, small, inline) }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun MatchupGroup(heading: String, list: List<TypeMatchup>, small: GbaTextMetrics) {
+internal fun MatchupGroup(heading: String, list: List<TypeMatchup>, small: GbaTextMetrics, inline: Boolean = false) {
+    if (inline) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // The chip's own height (a 12 sp line + its 3 dp padding), so the heading sits level with them.
+            Box(Modifier.height(with(LocalDensity.current) { 12.sp.toDp() } + 6.dp).padding(end = 2.dp), contentAlignment = Alignment.CenterStart) {
+                GbaText(heading, OptionColors.label, OptionColors.labelShadow, small)
+            }
+            list.forEach { TypeBadgeWithLabel(it) }
+        }
+        return
+    }
     Column(verticalArrangement = Arrangement.spacedBy(small.u * 2)) {
         GbaText(heading, OptionColors.label, OptionColors.labelShadow, small)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -315,18 +402,19 @@ internal fun MatchupGroup(heading: String, list: List<TypeMatchup>, small: GbaTe
 
 /** The four moves, sharing out the column's height, separated by rules. */
 @Composable
-private fun MovesSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier) {
+private fun MovesSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, forget: Int = 0) {
     Column(modifier) {
         for (i in 0 until 4) {
             if (i > 0) Separator(m, Modifier.fillMaxWidth())
-            MoveRow(mon.moves.getOrNull(i), m, small, Modifier.weight(1f).fillMaxWidth())
+            val mv = mon.moves.getOrNull(i)
+            MoveRow(mv, m, small, Modifier.weight(1f).fillMaxWidth(), forget = forget != 0 && mv?.id == forget)
         }
     }
 }
 
-/** One move: a type-colored stripe, then name, type badge, power and PP. */
+/** One move: a type-colored stripe, then name, type badge, power and PP; [forget] tags it FORGET (LEARN's pick). */
 @Composable
-private fun MoveRow(mv: MoveView?, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier) {
+private fun MoveRow(mv: MoveView?, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, forget: Boolean = false) {
     val u = m.u
     val edge = mv?.let { QolColors.typeColors[it.type] } ?: OptionColors.muted
     Box(
@@ -343,7 +431,10 @@ private fun MoveRow(mv: MoveView?, m: GbaTextMetrics, small: GbaTextMetrics, mod
         if (mv == null) {
             GbaText("—", OptionColors.muted, OptionColors.mutedShadow, m, modifier = Modifier.align(Alignment.CenterStart))
         } else Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-            GbaText(mv.name, OptionColors.label, OptionColors.labelShadow, m)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GbaText(mv.name, OptionColors.label, OptionColors.labelShadow, m, Modifier.weight(1f, fill = false))
+                if (forget) { Spacer(Modifier.width(u * 4)); ForgetTag() }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TypeBadge(mv.type)
                 Spacer(Modifier.weight(1f))

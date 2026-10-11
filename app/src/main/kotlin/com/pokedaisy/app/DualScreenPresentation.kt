@@ -122,7 +122,7 @@ class DualScreenPresentation(
             statusBar: (@androidx.compose.runtime.Composable () -> Unit)? = null,
             itemUse: com.pokedaisy.app.companion.ItemUse? = null,
             askForSupport: (() -> Unit)? = null,
-            tryBestEffort: (() -> Unit)? = null,
+            gamePick: com.pokedaisy.app.companion.GamePickActions? = null,
             shareBestEffort: ((com.pokedaisy.app.companion.data.BestEffortReport) -> Unit)? = null,
         ): View = CompanionColors.track(ComposeView(context)).apply {
             setContent {
@@ -130,7 +130,7 @@ class DualScreenPresentation(
                 CompanionScreen(
                     snap, slots, settings, battleInput, initialTab = initialTab,
                     back = back, clickSound = clickSound, achievements = achievements, statusBar = statusBar,
-                    itemUse = itemUse, askForSupport = askForSupport, tryBestEffort = tryBestEffort,
+                    itemUse = itemUse, askForSupport = askForSupport, gamePick = gamePick,
                     shareBestEffort = shareBestEffort,
                 )
             }

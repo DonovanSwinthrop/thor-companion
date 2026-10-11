@@ -115,8 +115,8 @@ fun CompanionScreen(
     itemUse: com.pokedaisy.app.companion.ItemUse? = null,
     /** NOT SUPPORTED's ASK FOR SUPPORT (a GitHub issue with the ROM's name and SHA-1); null hides it. */
     askForSupport: (() -> Unit)? = null,
-    /** NOT SUPPORTED's TRY BEST EFFORT ([com.pokedaisy.app.companion.data.BestEffort]); null hides it. */
-    tryBestEffort: (() -> Unit)? = null,
+    /** WHICH GAME IS THIS? ([com.pokedaisy.app.companion.data.BestEffort]): the player's answers; null = no picker. */
+    gamePick: com.pokedaisy.app.companion.GamePickActions? = null,
     /** The match notice's SHARE (the player's yes): sends exactly what it lists. Null = no ask. */
     shareBestEffort: ((com.pokedaisy.app.companion.data.BestEffortReport) -> Unit)? = null,
 ) {
@@ -137,6 +137,8 @@ fun CompanionScreen(
     // A tapped achievement popup: the achievement to open ACHIEVEMENTS on, and the tab BACK returns to.
     var achievementFocus by remember { mutableStateOf<AchievementFocus?>(null) }
     var popupReturn by remember { mutableStateOf<String?>(null) }
+    // WHICH GAME IS THIS? over the tabs (WRONG GAME?, PICK AGAIN, SETTINGS > GAME, PICK A GAME).
+    var pickerOpen by remember { mutableStateOf(false) }
     CompositionLocalProvider(
         LocalCompanionBack provides back, LocalClickSound provides clickSound, LocalGameFont provides gameFont,
         LocalGameTextScale provides if (gameFont != null) gameTextScale(snapshot.game) else 1f,
@@ -266,6 +268,12 @@ fun CompanionScreen(
         val canUseControls = battleInput != null && !snapshot.isDoubleBattle && isMyTurn
         val showHints = settings?.showHints ?: true
         val showFoeIvs = settings?.showFoeIvs ?: false
+        // The move advice (PARTY > LEARN, a TM's party row on ITEMS): the original games for now.
+        val learnContext = snapshot.pokedex?.tables
+            ?.takeIf { com.pokedaisy.app.companion.data.MoveLearning.available(it, snapshot.guideTables) }
+            ?.let { LearnContext(it, snapshot.guideTables, snapshot.items, showHints) }
+        // FOE DETAILS: the button's last state, for every battle after.
+        var foeDetails by remember { mutableStateOf(settings?.foeDetails ?: false) }
         val current = if (selectedLabel in tabs || selectedLabel in hiddenTabs) selectedLabel else tabs[0]
         // A hidden tab was opened from SETTINGS: the gear stays lit.
         val selectedIdx = tabs.indexOf(if (current in hiddenTabs) "SETTINGS" else current)
@@ -404,10 +412,12 @@ fun CompanionScreen(
                         // so the cream window behind them just read as a
                         // mismatched extra layer.
                         if (paneKey == "UNSUPPORTED") {
-                            UnsupportedView(
-                                snapshot.error, askForSupport,
-                                tryBestEffort?.takeIf { snapshot.canTryBestEffort }, snapshot.bestEffortMiss, Modifier.fillMaxSize(),
-                            )
+                            val picker = snapshot.gamePicker?.takeIf { gamePick != null }
+                            if (picker != null && !picker.declined) {
+                                GamePickerPage(picker, gamePick!!, askForSupport, Modifier.fillMaxSize())
+                            } else {
+                                UnsupportedView(snapshot.error, askForSupport, picker?.let { { pickerOpen = true } }, Modifier.fillMaxSize())
+                            }
                         } else if (paneKey == "LOADING") {
                             LoadingView(snapshot.error, Modifier.fillMaxSize())
                         } else if (paneKey == "PARTY/DETAIL") {
@@ -416,6 +426,7 @@ fun CompanionScreen(
                                 snapshot.party, lastDetail.value.coerceIn(0, (snapshot.party.size - 1).coerceAtLeast(0)),
                                 onIndexChange = { detailIndex = it },
                                 onBack = { detailIndex = null },
+                                learn = learnContext,
                             )
                         } else if (tab == "DEX" && dex != null) {
                             if (paneKey == "DEX/DETAIL") PokedexEntryScreen(dex, dexUi, lastDexEntry.value, guide = snapshot.guideTables)
@@ -447,6 +458,10 @@ fun CompanionScreen(
                                 initialPage = initialSettingsPage,
                                 ui = settingsUi,
                                 statusBarShown = statusBar != null && CompanionStatusBar.shown,
+                                playsAs = snapshot.gamePicker?.takeIf { gamePick != null }?.let { p ->
+                                    p.options.firstOrNull { it.id == p.current }?.title?.let(::shortGameTitle) ?: tk("NOT SET")
+                                },
+                                onPlaysAs = { pickerOpen = true },
                             )
                         } else if (tab == "ACHIEVEMENTS") {
                             AchievementsScreen(achievements, focus = achievementFocus, onFocused = { achievementFocus = null })
@@ -456,7 +471,14 @@ fun CompanionScreen(
                         } else if (tab == "ITEMS") {
                             // Draws its own bag-screen panels (folder tabs + list
                             // window) straight over the game backdrop, like PARTY.
-                            ItemsScreen(snapshot.items, modifier = Modifier.fillMaxSize(), itemUse = itemUse)
+                            val tmTables = learnContext?.tables
+                            val tmMoves = rememberLoaded(tmTables, cached = { null }, load = {
+                                tmTables?.let { com.pokedaisy.app.companion.data.MoveLearning.tmMoveNames(it) }
+                            }).orEmpty()
+                            ItemsScreen(
+                                snapshot.items, modifier = Modifier.fillMaxSize(), itemUse = itemUse, tmMoves = tmMoves,
+                                itemExtra = learnContext?.let { ctx -> { item, text, shadow -> TmLearnersRow(ctx, snapshot.party, item, text, shadow, rememberGbaTextMetrics()) } },
+                            )
                         } else if (tab == "BATTLE") {
                             // Three full-tab panes: the touch controls, and the
                             // INFO / SUGGESTIONS summaries they open (each with
@@ -522,6 +544,9 @@ fun CompanionScreen(
                                         foeHeading = foeHeading,
                                         // Tapping the one shown goes back to following the battle.
                                         onSelectFoe = { selectedFoe = if (it == shownFoe && selectedFoe != null) null else it },
+                                        foeDetails = foeDetails,
+                                        onToggleFoeDetails = { foeDetails = !foeDetails; settings?.setFoeDetails(foeDetails) },
+                                        dexTables = snapshot.pokedex?.tables,
                                     )
                                 }
                             }
@@ -551,95 +576,15 @@ fun CompanionScreen(
                 )
             }
 
-            // TRY BEST EFFORT just found a match: what the game is read as, and what's off.
-            snapshot.bestEffort?.takeIf { it.fresh }?.let { be ->
-                var seen by remember(be.title) { mutableStateOf(false) }
-                if (!seen) {
-                    val report = be.report
-                    if (report != null && shareBestEffort != null) {
-                        BestEffortShareNotice(be, report, onShare = { shareBestEffort(report); seen = true }, onDismiss = { seen = true })
-                    } else {
-                        BestEffortNotice(be) { seen = true }
-                    }
+            // BEST EFFORT's notices (a match it made, a party that doubts it) and WHICH GAME IS THIS? over the tabs.
+            if (gamePick != null) {
+                snapshot.bestEffort?.let { be -> if (!pickerOpen) BestEffortNotices(be, gamePick, shareBestEffort, onPick = { pickerOpen = true }) }
+                snapshot.gamePicker?.takeIf { pickerOpen }?.let { picker ->
+                    GamePickerOverlay(picker, gamePick, askForSupport, onDismiss = { pickerOpen = false })
                 }
             }
         }
     } } }
-}
-
-@Composable
-private fun bestEffortSummary(be: com.pokedaisy.app.companion.data.BestEffortView): String {
-    val parts = be.off.map {
-        when (it) {
-            com.pokedaisy.app.companion.data.BestEffort.Part.DEX -> tr("the POKéDEX")
-            com.pokedaisy.app.companion.data.BestEffort.Part.GUIDE -> tr("the GUIDE's live pages")
-            com.pokedaisy.app.companion.data.BestEffort.Part.ITEM_TEXT -> tr("item descriptions")
-        }
-    }
-    return if (be.full) tr("Read as {0}: everything matched, so it works like a supported game.", be.title)
-    else tr("Read as {0}: party, bag, map and battles should work, names may differ. Off: {1}. The library tags it PARTIALLY SUPPORTED.", be.title, parts.joinToString(", "))
-}
-
-/**
- * The match notice with the ask to share it: what the match is, then every field [com.pokedaisy.app.BestEffortShare]
- * would send, value by value - nothing goes out unless SHARE is tapped.
- */
-@Composable
-private fun BestEffortShareNotice(
-    be: com.pokedaisy.app.companion.data.BestEffortView,
-    report: com.pokedaisy.app.companion.data.BestEffortReport,
-    onShare: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val m = rememberGbaTextMetrics()
-    val small = rememberGbaTextMetrics(1f)
-    OptionOverlay(onDismiss, Modifier.widthIn(max = 640.dp).fillMaxHeight()) {
-        Column(Modifier.fillMaxHeight()) {
-            OptionTitleWindow(tr("BEST EFFORT"), m)
-            Spacer(Modifier.height(m.u * 4))
-            OptionListWindow(m, Modifier.fillMaxWidth().weight(1f)) {
-                Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = m.u * 8, vertical = m.u * 4)) {
-                    GbaText(bestEffortSummary(be), OptionColors.label, OptionColors.labelShadow, small, maxLines = Int.MAX_VALUE)
-                    Spacer(Modifier.height(m.u * 6))
-                    GbaText(tr("SHARE THIS MATCH?"), OptionColors.value, OptionColors.valueShadow, m)
-                    GbaText(
-                        tr("It helps other players and lets a future release support this ROM properly. Sent once to PokéDaisy's database (Google Firebase): exactly the lines below - no file name, account or device details."),
-                        OptionColors.label, OptionColors.labelShadow, small, maxLines = Int.MAX_VALUE,
-                        modifier = Modifier.padding(top = m.u * 2, bottom = m.u * 3),
-                    )
-                    com.pokedaisy.app.BestEffortShare.fields(report).forEach { (label, value) ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = m.u)) {
-                            GbaText(tr(label), OptionColors.muted, OptionColors.mutedShadow, small, Modifier.weight(0.35f))
-                            GbaText(value, OptionColors.label, OptionColors.labelShadow, small, Modifier.weight(0.65f), maxLines = 2)
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(m.u * 4))
-            Row(horizontalArrangement = Arrangement.spacedBy(m.u * 4), modifier = Modifier.fillMaxWidth()) {
-                OptionButton(tk("NO THANKS"), m, onClick = onDismiss, modifier = Modifier.weight(1f).height(m.rowHeight * 1.4f))
-                OptionButton(tk("SHARE"), m, onClick = onShare, emphasis = true, modifier = Modifier.weight(1f).height(m.rowHeight * 1.4f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun BestEffortNotice(be: com.pokedaisy.app.companion.data.BestEffortView, onDismiss: () -> Unit) {
-    val m = rememberGbaTextMetrics()
-    val parts = be.off.map {
-        when (it) {
-            com.pokedaisy.app.companion.data.BestEffort.Part.DEX -> tr("the POKéDEX")
-            com.pokedaisy.app.companion.data.BestEffort.Part.GUIDE -> tr("the GUIDE's live pages")
-            com.pokedaisy.app.companion.data.BestEffort.Part.ITEM_TEXT -> tr("item descriptions")
-        }
-    }
-    OptionConfirm(
-        tr("BEST EFFORT"),
-        if (be.full) tr("Read as {0}: everything matched, so it works like a supported game.", be.title)
-        else tr("Read as {0}: party, bag, map and battles should work, names may differ. Off: {1}. The library tags it PARTIALLY SUPPORTED.", be.title, parts.joinToString(", ")),
-        tk("OK"), m, onConfirm = onDismiss, onDismiss = onDismiss, cancelLabel = null,
-    )
 }
 
 /**
@@ -654,7 +599,7 @@ object CompanionStatusBar {
 /**
  * A tab id's label: the bag tab takes the game's own word from its START menu
  * (every ROM's checked headless, native-capture/menu-shots/<rom>/start.png) -
- * BAG nearly everywhere, Unbound's CUBE, R.O.W.E.'s INVENTORY. ACHIEVEMENTS
+ * BAG nearly everywhere, Unbound's CUBE, R.O.W.E.'s INVENTORY, Super Mariomon's POCKETS. ACHIEVEMENTS
  * doesn't fit a chip: CHEEVOS, RetroAchievements' own nickname for them.
  */
 internal fun companionTabLabel(id: String): String = when (id) {
@@ -671,6 +616,7 @@ internal fun companionTabLabel(id: String): String = when (id) {
     "ITEMS" -> when (activeGame) {
         GameKind.UNBOUND -> "CUBE"
         GameKind.ROWE -> "INVENTORY"
+        GameKind.MARIOMON -> "POCKETS"
         else -> tr("BAG")
     }
     else -> id
@@ -760,8 +706,7 @@ private fun TabChipShell(
  * read ([SnapshotView.unsupported]); [detail] is the reader's reason. */
 @Composable
 private fun UnsupportedView(
-    detail: String?, askForSupport: (() -> Unit)?, tryBestEffort: (() -> Unit)?,
-    miss: com.pokedaisy.app.companion.data.BestEffort.Miss?, modifier: Modifier = Modifier,
+    detail: String?, askForSupport: (() -> Unit)?, pickGame: (() -> Unit)?, modifier: Modifier = Modifier,
 ) {
     val m = rememberGbaTextMetrics()
     val big = rememberGbaTextMetrics(1.6f)
@@ -781,30 +726,16 @@ private fun UnsupportedView(
                     tr("The game plays normally on the top screen, but the second screen can't read its party, map, items or battles."),
                     OptionColors.label, OptionColors.labelShadow, m, maxLines = 4,
                 )
-                if (tryBestEffort == null) {
-                    Spacer(Modifier.height(m.u * 6))
-                    GbaText(
-                        tr("SETTINGS (the gear below) still works."),
-                        OptionColors.label, OptionColors.labelShadow, m, maxLines = 2,
-                    )
-                } else {
-                    Spacer(Modifier.height(m.u * 8))
-                    GbaText(
-                        when (miss) {
-                            com.pokedaisy.app.companion.data.BestEffort.Miss.NO_PARTY ->
-                                tr("Nothing to match yet: carry on until you have a Pokémon, then try again.")
-                            com.pokedaisy.app.companion.data.BestEffort.Miss.NO_MATCH ->
-                                tr("No game PokéDaisy knows reads this one. Asking for support is the way to go.")
-                            null -> tr("BEST EFFORT reads it as each game PokéDaisy knows and keeps the one that fits. Be in the game with a Pokémon.")
-                        },
-                        if (miss != null) OptionColors.value else OptionColors.label,
-                        if (miss != null) OptionColors.valueShadow else OptionColors.labelShadow, small, maxLines = 3,
-                    )
-                }
+                Spacer(Modifier.height(m.u * 6))
+                GbaText(
+                    if (pickGame == null) tr("SETTINGS (the gear below) still works.")
+                    else tr("You said it's none of the games PokéDaisy knows. If it's a version of one, pick it."),
+                    OptionColors.label, OptionColors.labelShadow, if (pickGame == null) m else small, maxLines = 3,
+                )
                 Spacer(Modifier.height(m.u * 6))
                 Row(horizontalArrangement = Arrangement.spacedBy(m.u * 6)) {
-                    tryBestEffort?.let { OptionButton(tk("TRY BEST EFFORT"), m, emphasis = true, onClick = it) }
-                    askForSupport?.let { OptionButton(tk("ASK FOR SUPPORT"), m, emphasis = tryBestEffort == null, onClick = it) }
+                    pickGame?.let { OptionButton(tk("PICK A GAME"), m, emphasis = true, onClick = it) }
+                    askForSupport?.let { OptionButton(tk("ASK FOR SUPPORT"), m, emphasis = pickGame == null, onClick = it) }
                 }
                 if (askForSupport != null) {
                     Spacer(Modifier.height(m.u * 4))

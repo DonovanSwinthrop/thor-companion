@@ -31,9 +31,16 @@ test('FireRed / Emerald: known dumps, unknown small ROMs, big hacks', () => {
   assert.deepEqual(v('BPRE', 0, 32 * MB, 'b4776b82a4c7915d0fadeaa27e013523f99dfd94'),
     { status: 'supported', title: 'Pokémon Unbound', version: 'v2.1.1.1', base: 'Pokémon FireRed' });
   assert.equal(v('BPEE', 0, 32 * MB).reason, 'unknown-hack');
-  // R.O.W.E. was "in progress" until its companion landed (2026-10-09).
+  // R.O.W.E. plays, but its companion is still in progress (in v1.1.4, the released app).
   assert.deepEqual(v('BPEE', 0, 32 * MB, '81bd0f4bfa1c04ab2c6faab1bddd10e8a390ea77'),
-    { status: 'supported', title: 'Pokémon R.O.W.E.', version: 'v2.1.9.1', base: 'Pokémon Emerald' });
+    { status: 'unsupported', reason: 'in-progress', title: 'Pokémon R.O.W.E.', version: 'v2.1.9.1', base: 'Pokémon Emerald' });
+});
+
+test('a hack under a game code of its own: Ultra Violet (PUVV)', () => {
+  assert.deepEqual(v('PUVV', 0, 16 * MB, '3b6c51d8fb6b513bdd01b7bda3ed8965bc985d58'),
+    { status: 'supported', title: 'Pokémon Ultra Violet', version: 'v1.22', base: 'Pokémon FireRed' });
+  // Another build: the app only knows this one.
+  assert.deepEqual(v('PUVV', 0, 16 * MB), { status: 'unsupported', reason: 'unknown-hack', base: 'Pokémon FireRed' });
 });
 
 test('other retail games: revisions and size', () => {

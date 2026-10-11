@@ -39,10 +39,23 @@ class RomRegionMapTest {
 
     @Test fun odysseyHasItsOwnRegion() {
         val m = read("Pokémon Odyssey (English) (v4.1.1).gba")
-        // Its own map plus FireRed's three Sevii screens, which it never shows.
-        assertEquals(4, m.images.size)
+        // Its own map; FireRed's three Sevii screens, drawn in its tiles (junk, never shown), are dropped.
+        assertEquals(1, m.images.size)
         assertEquals(MapSecInfo("Fibernia", 0, 6, 13, 1, 1), m.sections[89])
         assertEquals(MapSecInfo("Charon", 0, 18, 10, 1, 1), m.sections[144])
+    }
+
+    /** Sword and Shield Ultimate Plus: Galar on the first screen; FireRed's Sevii screens drawn in its tiles are junk. */
+    @Test fun swordShieldHasGalar() {
+        val m = read("Sword and Shield Ultimate Plus (1.2.1.2).gba")
+        assertEquals(208 to 144, m.images[0].width to m.images[0].height)
+        assertEquals(MapSecInfo("Postwick", 0, 10, 15, 1, 1), m.sections[0x58])
+        assertEquals(MapSecInfo("Wyndon", 0, 4, 5, 1, 1), m.sections[0x61])
+        // On a junk Sevii screen in the ROM: shown on Galar, nothing highlighted.
+        assertEquals(MapSecInfo("Isle Of Armor", 0, 0, 0, 0, 0), m.sections[0x8F])
+        assertEquals(1, m.images.size) // no MAP 2: the junk screens are gone
+        val model = RegionMapModel(arrayOf("galar"), m.sections, m.layouts)
+        assertEquals(0x58, model.pick(0, 10, 15)?.mapsec)
     }
 
     @Test fun amethystKeepsSeviiScreens() {

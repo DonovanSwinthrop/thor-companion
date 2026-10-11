@@ -146,6 +146,35 @@ class SoulGoldDecodeTest {
     }
 
     @Test
+    fun `v1_2 third build - the same save at the same RAM addresses`() {
+        activeGame = GameKind.SOULGOLD
+        val t = decodeNative("soulgold_v12c", NATIVE_SOULGOLD_V1_2C)
+        val mon = t.party.single()
+        assertEquals(155 to 6, mon.species to mon.level)
+        assertEquals(21 to 21, mon.hp to mon.maxHp)
+        assertEquals(listOf("Tackle", "Leer"), mon.moves.filter { it != 0 }.map { lookupMove(it).name })
+        assertEquals("Cherrygrove City", lookupLocation(t.regionMapSectionId).mapSecName)
+        assertEquals(3080L, t.money)
+        assertEquals("Potion", itemName(t.items.single().itemId))
+    }
+
+    @Test
+    fun `v1_2 third build battle - at the action menu`() {
+        activeGame = GameKind.SOULGOLD
+        val ram = FixtureMemoryReader.load("soulgold_v12c_battle")
+        val cfg = NATIVE_SOULGOLD_V1_2C
+        val t = readNativeTelemetry(ram, cfg)
+        assertTrue(t.inBattle)
+        val me = t.battleMons[BATTLE_POS_PLAYER_LEFT]
+        assertEquals(155 to 6, me.species to me.level)
+        val foe = t.battleMons[BATTLE_POS_OPPONENT_LEFT]
+        assertEquals(25 to 5, foe.species to foe.level)
+        assertEquals(0 to BATTLE_INPUT_ACTION_SELECT, readNativeBattleInputFast(ram, cfg))
+        val foeMon = decodePartyMon(ram.readCoreMemory(cfg.enemyParty, 96), 0, SOULGOLD_PARTY_MON)!!
+        assertEquals(25 to 5, (foeMon.species and 0x7FF) to foeMon.level)
+    }
+
+    @Test
     fun `v1_2 TM75 teaches Agility`() {
         activeGame = GameKind.SOULGOLD
         try {

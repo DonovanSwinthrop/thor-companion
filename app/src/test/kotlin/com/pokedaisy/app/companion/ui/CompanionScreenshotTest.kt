@@ -49,8 +49,12 @@ import com.pokedaisy.app.companion.data.NATIVE_IMPERIUM
 import com.pokedaisy.app.companion.data.NATIVE_QUETZAL
 import com.pokedaisy.app.companion.data.NATIVE_QUETZAL_ES
 import com.pokedaisy.app.companion.data.NATIVE_ORANGE_ISLANDS
+import com.pokedaisy.app.companion.data.NATIVE_RECHARGED_YELLOW_V1_8_0
+import com.pokedaisy.app.companion.data.NATIVE_RECHARGED_YELLOW_V1_9_7
 import com.pokedaisy.app.companion.data.NATIVE_UNBOUND_FR
 import com.pokedaisy.app.companion.data.NATIVE_ROWE
+import com.pokedaisy.app.companion.data.NATIVE_MARIOMON_V1_3
+import com.pokedaisy.app.companion.data.NATIVE_MARIOMON_V1_5_1
 import com.pokedaisy.app.companion.data.NATIVE_EMERALD_SEAGLASS
 import com.pokedaisy.app.companion.data.NATIVE_LAZARUS
 import com.pokedaisy.app.companion.data.NATIVE_SOULGOLD
@@ -87,7 +91,9 @@ import com.pokedaisy.app.companion.data.buildSnapshotView
 import com.pokedaisy.app.companion.data.readNativeTelemetry
 import com.pokedaisy.app.companion.data.resetNativeBagCache
 import com.pokedaisy.app.companion.ui.theme.QolTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import org.junit.Before
@@ -116,6 +122,9 @@ open class CompanionScreenshotTest {
     @Before
     fun game() {
         activeGame = GameKind.FIRERED
+        // A retail() shot of another language leaves its ROM's globals behind (Japanese type names on SUGGESTIONS).
+        romLanguage = 'E'
+        romGameCode = ""
         OptionColors.inGame = true
         RomItemText.use(null) // a retail() shot's game must not leave its descriptions to the next
         // The party menu art, backdrops and region maps come from the ROM too (RomArt).
@@ -337,7 +346,29 @@ open class CompanionScreenshotTest {
 
     /** A trainer battle: move verdicts against an Onix, the FOE TEAM strip, an out-of-PP move. */
     @Test
-    fun battleInfoTrainer() = paparazzi.snapshot {
+    fun battleInfoTrainer() = trainerBattle(foeDetails = false)
+
+    /** FOE DETAILS (GitHub #34): the foe's side widened, the player's narrowed to a column. */
+    @Test
+    fun battleInfoFoeDetails() = trainerBattle(foeDetails = true)
+
+    /** FOE DETAILS in a double battle: two sprites / HP bars on the player's strip, two foe cards. */
+    @Test
+    fun battleInfoFoeDetailsDouble() = paparazzi.snapshot {
+        QolTheme {
+            val party = SampleCompanion.snapshot.party
+            // The sample party has two: each side gets both.
+            val foes = listOf(party[1], party[0]).map {
+                it.copy(abilityName = "KEEN EYE", heldItem = "", battleStats = listOf(12, 11, 15, 10, 10), statStages = List(7) { 0 })
+            }
+            BattleInfoScreen(
+                listOf(party[0], party[1]).map { it.withMovesVs(foes) }, foes, isDouble = true, showHints = true,
+                onBack = {}, onShowSuggestions = {}, foeDetails = true, onToggleFoeDetails = {},
+            )
+        }
+    }
+
+    private fun trainerBattle(foeDetails: Boolean) = paparazzi.snapshot {
         QolTheme {
             fun foe(species: Int, level: Int, hp: Int, maxHp: Int): MonView {
                 val mu = com.pokedaisy.app.companion.data.typeMatchups(
@@ -347,7 +378,14 @@ open class CompanionScreenshotTest {
                 return MonView(
                     species, if (species == 95) "ONIX" else "GEODUDE", level, hp, maxHp, "", listOf("Rock", "Ground"),
                     spriteAsset("pokemon", species), GENDER_SYMBOL_MALE,
+                    moves = listOf(
+                        MoveView("Tackle", "Normal", 35, 35), MoveView("Bind", "Normal", 20, 15),
+                        MoveView("Rock Tomb", "Rock", 9, 50), MoveView("Harden", "Normal", 30, 0),
+                    ),
                     weaknesses = mu.weaknesses, resistances = mu.resistances, immunities = mu.immunities,
+                    // Brock's Onix after a Harden: Defense +1.
+                    abilityName = "STURDY", heldItem = "",
+                    battleStats = listOf(18, 41, 21, 13, 16), statStages = listOf(0, 1, 0, 0, 0, 0, 0),
                 )
             }
             val team = listOf(foe(74, 12, 0, 33), foe(95, 14, 21, 40), foe(74, 12, 33, 33))
@@ -356,6 +394,7 @@ open class CompanionScreenshotTest {
             BattleInfoScreen(
                 listOf(me), listOf(team[1]), isDouble = false, showHints = true, onBack = {}, onShowSuggestions = {},
                 foeTeam = team, seenFoes = setOf(0, 1), shownFoe = 1,
+                foeDetails = foeDetails, onToggleFoeDetails = {},
             )
         }
     }
@@ -376,24 +415,86 @@ open class CompanionScreenshotTest {
         )
     }
 
-    /** An unknown FireRed-based hack: TRY BEST EFFORT above ASK FOR SUPPORT. */
+    /** An unknown Emerald-based hack before the player has a Pokémon: WHICH GAME IS THIS?, the likely games first. */
     @Test
-    fun unsupportedBestEffort() = paparazzi.snapshot {
+    fun gamePicker() = paparazzi.snapshot {
         CompanionScreen(
-            SnapshotView(connected = false, error = "unrecognized FireRed-based ROM hack (BPRE, 32 MB, sha1 0123456789ab…)", unsupported = true, canTryBestEffort = true),
-            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, tryBestEffort = {},
+            SnapshotView(
+                connected = false, error = "unrecognized Emerald-based ROM hack (BPEE, 32 MB, sha1 0123456789ab…)", unsupported = true,
+                gamePicker = SamplePicker.picker(miss = com.pokedaisy.app.companion.data.BestEffort.Miss.NO_PARTY),
+            ),
+            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, gamePick = SamplePicker.actions,
         )
     }
 
-    /** ...tried before the player had a Pokémon. */
+    /** ...a party that reads as none of them. */
     @Test
-    fun unsupportedBestEffortNoParty() = paparazzi.snapshot {
+    fun gamePickerNoMatch() = paparazzi.snapshot {
         CompanionScreen(
             SnapshotView(
-                connected = false, error = "unrecognized FireRed-based ROM hack (BPRE, 32 MB, sha1 0123456789ab…)", unsupported = true,
-                canTryBestEffort = true, bestEffortMiss = com.pokedaisy.app.companion.data.BestEffort.Miss.NO_PARTY,
+                connected = false, error = "unrecognized Emerald-based ROM hack", unsupported = true,
+                gamePicker = SamplePicker.picker(miss = com.pokedaisy.app.companion.data.BestEffort.Miss.NO_MATCH, likely = false),
             ),
-            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, tryBestEffort = {},
+            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, gamePick = SamplePicker.actions,
+        )
+    }
+
+    /** NONE OF THESE: NOT SUPPORTED again, with PICK A GAME back to the list. */
+    @Test
+    fun gamePickerDeclined() = paparazzi.snapshot {
+        CompanionScreen(
+            SnapshotView(
+                connected = false, error = "unrecognized Emerald-based ROM hack", unsupported = true,
+                gamePicker = SamplePicker.picker(declined = true),
+            ),
+            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, gamePick = SamplePicker.actions,
+        )
+    }
+
+    /** The picker over a game it's read as (WRONG GAME? / SETTINGS > GAME): the one in use marked. */
+    @Test
+    fun gamePickerOverlay() = paparazzi.snapshot {
+        QolTheme {
+            Box(Modifier.fillMaxSize()) {
+                CompanionScreen(SampleCompanion.snapshot, SampleCompanion.Slots, SampleCompanion.Settings())
+                GamePickerOverlay(SamplePicker.picker(current = "SOULGOLD_V1_2"), SamplePicker.actions, askForSupport = {}, onDismiss = {})
+            }
+        }
+    }
+
+    /** SETTINGS of a ROM read through best effort: PLAYS AS at the top. */
+    @Test
+    fun settingsPlaysAs() = paparazzi.snapshot {
+        CompanionScreen(
+            SampleCompanion.snapshot.copy(gamePicker = SamplePicker.picker(current = "SOULGOLD_V1_2")),
+            SampleCompanion.Slots, SampleCompanion.Settings(), initialTab = "SETTINGS", gamePick = SamplePicker.actions,
+        )
+    }
+
+    /** A guess from the ROM's names (no party yet): WRONG GAME? / OK. */
+    @Test
+    fun bestEffortGuessNotice() = paparazzi.snapshot {
+        CompanionScreen(
+            SampleCompanion.snapshot.copy(
+                bestEffort = com.pokedaisy.app.companion.data.BestEffortView(
+                    "Pokémon SoulGold v1.2", full = false, off = emptySet(), fresh = true, id = "SOULGOLD_V1_2", guess = true,
+                ),
+            ),
+            SampleCompanion.Slots, SampleCompanion.Settings(), gamePick = SamplePicker.actions,
+        )
+    }
+
+    /** The player's pick, which the party then didn't hold with: PICK AGAIN / KEEP. */
+    @Test
+    fun bestEffortDoubtNotice() = paparazzi.snapshot {
+        CompanionScreen(
+            SampleCompanion.snapshot.copy(
+                bestEffort = com.pokedaisy.app.companion.data.BestEffortView(
+                    "Pokémon Lazarus", full = false, off = emptySet(), fresh = false, id = "LAZARUS", picked = true,
+                    doubt = true, suggest = "Pokémon SoulGold v1.2",
+                ),
+            ),
+            SampleCompanion.Slots, SampleCompanion.Settings(), gamePick = SamplePicker.actions,
         )
     }
 
@@ -410,7 +511,7 @@ open class CompanionScreenshotTest {
                     ),
                 ),
             ),
-            SampleCompanion.Slots, SampleCompanion.Settings(), shareBestEffort = {},
+            SampleCompanion.Slots, SampleCompanion.Settings(), shareBestEffort = {}, gamePick = SamplePicker.actions,
         )
     }
 
@@ -421,10 +522,10 @@ open class CompanionScreenshotTest {
             SampleCompanion.snapshot.copy(
                 bestEffort = com.pokedaisy.app.companion.data.BestEffortView(
                     "Pokémon FireRed", full = false,
-                    off = setOf(com.pokedaisy.app.companion.data.BestEffort.Part.DEX, com.pokedaisy.app.companion.data.BestEffort.Part.GUIDE), fresh = true,
+                    off = setOf(com.pokedaisy.app.companion.data.BestEffort.Part.DEX, com.pokedaisy.app.companion.data.BestEffort.Part.MON_ICONS), fresh = true,
                 ),
             ),
-            SampleCompanion.Slots, SampleCompanion.Settings(),
+            SampleCompanion.Slots, SampleCompanion.Settings(), gamePick = SamplePicker.actions,
         )
     }
     @Test fun dex() = tab("DEX")
@@ -531,6 +632,8 @@ open class CompanionScreenshotTest {
         val rom = RomFileReader.load(RETAIL_ROM_DIR + romFile) ?: return
         activeGame = kind
         amethystV141 = cfg === NATIVE_AMETHYST_V1_4_1 // the Poller sets these with activeGame
+        com.pokedaisy.app.companion.data.ultraViolet = cfg === com.pokedaisy.app.companion.data.NATIVE_ULTRA_VIOLET
+        com.pokedaisy.app.companion.data.mariomonV13 = cfg === NATIVE_MARIOMON_V1_3
         romLanguage = cfg.language
         romGameCode = cfg.gameCode
         resetNativeBagCache()
@@ -771,6 +874,18 @@ open class CompanionScreenshotTest {
     @Test fun roweBattle() = retail("rowe_battle", NATIVE_ROWE, ROWE_ROM, GameKind.ROWE, "BATTLE", art = true)
     @Test fun roweDexEntry() = retail("rowe", NATIVE_ROWE, ROWE_ROM, GameKind.ROWE, "DEX", entry = 884, art = true)
     @Test fun glazedBattle() = retail("glazed_battle", NATIVE_GLAZED, GLAZED_ROM, GameKind.GLAZED, "BATTLE", art = true)
+    // Super Mariomon: its own species / names (CAPTURES, POCKETS), its party / bag colours, its world map.
+    @Test fun mariomonParty() = retail("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, GameKind.MARIOMON, "PARTY", art = true)
+    @Test fun mariomonItems() = retail("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, GameKind.MARIOMON, "ITEMS", art = true)
+    @Test fun mariomonItemDescription() = retail("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, GameKind.MARIOMON, "ITEMS", art = true, describe = true)
+    @Test fun mariomonMap() = retail("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, GameKind.MARIOMON, "MAP", art = true)
+    @Test fun mariomonBattle() = retail("mariomon_v1_5_1_battle", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, GameKind.MARIOMON, "BATTLE", art = true)
+    @Test fun mariomonDex() = retail("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, GameKind.MARIOMON, "DEX", art = true)
+    @Test fun mariomonDexEntry() = retail("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, GameKind.MARIOMON, "DEX", entry = 7, art = true)
+    @Test fun mariomonGuideBoss() = retailGuide("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, "NEXT BOSS", kind = GameKind.MARIOMON)
+    @Test fun mariomonGuideHere() = retailGuide("mariomon_v1_5_1", NATIVE_MARIOMON_V1_5_1, MARIOMON_ROM, "HERE", kind = GameKind.MARIOMON)
+    @Test fun mariomonV13Party() = retail("mariomon_v1_3", NATIVE_MARIOMON_V1_3, MARIOMON_V13_ROM, GameKind.MARIOMON, "PARTY", art = true)
+    @Test fun mariomonV13Items() = retail("mariomon_v1_3", NATIVE_MARIOMON_V1_3, MARIOMON_V13_ROM, GameKind.MARIOMON, "ITEMS", art = true)
     // Pokémon Orange Islands (FireRed 1.0 edited in place): its names, CRYSTL type and own archipelago map.
     @Test fun orangeIslandsParty() = retail("orange_islands", NATIVE_ORANGE_ISLANDS, OI_ROM, GameKind.ORANGE_ISLANDS, "PARTY", art = true)
     @Test fun orangeIslandsItems() = retail("orange_islands", NATIVE_ORANGE_ISLANDS, OI_ROM, GameKind.ORANGE_ISLANDS, "ITEMS", art = true)
@@ -778,6 +893,39 @@ open class CompanionScreenshotTest {
     @Test fun orangeIslandsBattle() = retail("orange_islands_battle", NATIVE_ORANGE_ISLANDS, OI_ROM, GameKind.ORANGE_ISLANDS, "BATTLE", art = true)
     @Test fun orangeIslandsDexEntry() = retail("orange_islands", NATIVE_ORANGE_ISLANDS, OI_ROM, GameKind.ORANGE_ISLANDS, "DEX", entry = 25, art = true)
     @Test fun orangeIslandsGuideBoss() = retailGuide("orange_islands", NATIVE_ORANGE_ISLANDS, OI_ROM, "NEXT BOSS", kind = GameKind.ORANGE_ISLANDS)
+    // Ultra Violet: FireRed's look and tables with its own names; its maps' own HERE / WHERE IS.
+    @Test fun ultraVioletParty() = retail("ultra_violet", NATIVE_UV, UV_ROM, GameKind.FIRERED, "PARTY", art = true)
+    @Test fun ultraVioletItems() = retail("ultra_violet", NATIVE_UV, UV_ROM, GameKind.FIRERED, "ITEMS", art = true)
+    @Test fun ultraVioletMap() = retail("ultra_violet", NATIVE_UV, UV_ROM, GameKind.FIRERED, "MAP", art = true)
+    @Test fun ultraVioletBattle() = retail("ultra_violet_battle", NATIVE_UV, UV_ROM, GameKind.FIRERED, "BATTLE", art = true)
+    @Test fun ultraVioletDexEntry() = retail("ultra_violet", NATIVE_UV, UV_ROM, GameKind.FIRERED, "DEX", entry = 4, art = true)
+    @Test fun ultraVioletGuideBoss() = retailGuide("ultra_violet", NATIVE_UV, UV_ROM, "NEXT BOSS", kind = GameKind.FIRERED)
+    @Test fun ultraVioletGuideHere() = retailGuide("ultra_violet", NATIVE_UV, UV_ROM, "HERE", kind = GameKind.FIRERED)
+    // Sword and Shield Ultimate Plus: Galar on CFRU, its sampled party / bag look, its map from the ROM.
+    @Test fun swordShieldParty() = retail("sword_shield_up", NATIVE_SS, SS_ROM, GameKind.SWORD_SHIELD, "PARTY", art = true)
+    @Test fun swordShieldItems() = retail("sword_shield_up", NATIVE_SS, SS_ROM, GameKind.SWORD_SHIELD, "ITEMS", art = true)
+    @Test fun swordShieldMap() = retail("sword_shield_up", NATIVE_SS, SS_ROM, GameKind.SWORD_SHIELD, "MAP", art = true, romMap = true)
+    @Test fun swordShieldBattle() = retail("sword_shield_up_battle", NATIVE_SS, SS_ROM, GameKind.SWORD_SHIELD, "BATTLE", art = true)
+    @Test fun swordShieldDex() = hackDex("sword_shield_up", NATIVE_SS, SS_ROM, GameKind.SWORD_SHIELD)
+    @Test fun swordShieldDexEntry() = retail("sword_shield_up", NATIVE_SS, SS_ROM, GameKind.SWORD_SHIELD, "DEX", entry = 813, art = true)
+    @Test fun swordShieldDexEvolve() = dexSection("sword_shield_up", NATIVE_SS, SS_ROM, GameKind.SWORD_SHIELD, 813, DexSection.EVOLVE)
+    @Test fun swordShieldGuideBoss() = retailGuide("sword_shield_up", NATIVE_SS, SS_ROM, "NEXT BOSS", kind = GameKind.SWORD_SHIELD)
+    @Test fun swordShieldGuideHere() = retailGuide("sword_shield_up", NATIVE_SS, SS_ROM, "HERE", kind = GameKind.SWORD_SHIELD)
+    // Recharged Yellow (v1.9.7; the user's v1.8.0 save): FireRed's look, its own names, FireRed's region map from its ROM.
+    @Test fun rechargedYellowParty() = retail("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, GameKind.RECHARGED_YELLOW, "PARTY", art = true)
+    @Test fun rechargedYellowItems() = retail("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, GameKind.RECHARGED_YELLOW, "ITEMS", art = true, describe = true)
+    @Test fun rechargedYellowMap() = retail("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, GameKind.RECHARGED_YELLOW, "MAP", art = true)
+    @Test fun rechargedYellowBattle() = retail("recharged_yellow_battle", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, GameKind.RECHARGED_YELLOW, "BATTLE", art = true)
+    @Test fun rechargedYellowTrainerBattle() =
+        retail("recharged_yellow_trainer", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, GameKind.RECHARGED_YELLOW, "BATTLE", art = true)
+    @Test fun rechargedYellowDex() = retail("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, GameKind.RECHARGED_YELLOW, "DEX", art = true)
+    @Test fun rechargedYellowDexEntry() = retail("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, GameKind.RECHARGED_YELLOW, "DEX", entry = 25, art = true)
+    @Test fun rechargedYellowGuideBoss() =
+        retailGuide("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, "NEXT BOSS", kind = GameKind.RECHARGED_YELLOW)
+    @Test fun rechargedYellowGuideWhereIs() =
+        retailGuide("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7, RY_ROM, "WHERE IS", kind = GameKind.RECHARGED_YELLOW)
+    @Test fun rechargedYellowV180Party() =
+        retail("recharged_yellow_v180", NATIVE_RECHARGED_YELLOW_V1_8_0, RY180_ROM, GameKind.RECHARGED_YELLOW, "PARTY", art = true)
     // Unbound's French translation: English's RAM, French names / descriptions / dex text / map names.
     @Test fun unboundFrParty() = retail("unbound_fr", NATIVE_UNBOUND_FR, UB_FR_ROM, GameKind.UNBOUND, "PARTY", art = true)
     @Test fun unboundFrItems() = retail("unbound_fr", NATIVE_UNBOUND_FR, UB_FR_ROM, GameKind.UNBOUND, "ITEMS", art = true, describe = true)
@@ -863,6 +1011,8 @@ open class CompanionScreenshotTest {
     private fun retail(
         fixture: String, cfg: NativeConfig, romFile: String, kind: GameKind, tab: String, entry: Int? = null, art: Boolean = false,
         describe: Boolean = false, romMap: Boolean = false,
+        /** The move advice: PARTY > LEARN on the first Pokémon with something to replace, or a TM's party row. */
+        learn: Boolean = false, tmRow: Boolean = false,
     ) {
         val rom = RomFileReader.load(RETAIL_ROM_DIR + romFile) ?: return
         if (art) RomArt.extractTo(java.io.File(RETAIL_ROM_DIR + romFile).readBytes(), RomArt.dirOverride!!)
@@ -871,6 +1021,8 @@ open class CompanionScreenshotTest {
             if (romMap) com.pokedaisy.app.companion.data.RomRegionMap.loadNow(RomArt.dirOverride!!, fixture, java.io.File(RETAIL_ROM_DIR + romFile)) else null
         activeGame = kind
         amethystV141 = cfg === NATIVE_AMETHYST_V1_4_1 // the Poller sets these with activeGame
+        com.pokedaisy.app.companion.data.ultraViolet = cfg === com.pokedaisy.app.companion.data.NATIVE_ULTRA_VIOLET
+        com.pokedaisy.app.companion.data.mariomonV13 = cfg === NATIVE_MARIOMON_V1_3
         romLanguage = cfg.language
         romGameCode = cfg.gameCode
         com.pokedaisy.app.companion.data.quetzalNames =
@@ -893,8 +1045,32 @@ open class CompanionScreenshotTest {
             val species = PokedexSource.speciesFor(dex.tables, entry)
             PokedexSource.entry(dex.tables, entry); PokedexSource.frontSprite(dex.tables, species); PokedexSource.footprint(dex.tables, species)
         }
+        val ctx = if (learn || tmRow) LearnContext(dex!!.tables, v.guideTables, v.items, showHints = true) else null
+        // The advice is read on IO in the app; worked out here first, the screens start from it.
+        val learnAt = if (!learn) -1 else v.party.indices.firstOrNull { i ->
+            com.pokedaisy.app.companion.data.MoveLearning.options(ctx!!.tables, ctx.guide, v.party[i], v.items)
+                .any { it.advice.verdict == com.pokedaisy.app.companion.data.Verdict.REPLACE }
+        } ?: 0
+        val learnPick = if (!learn) null else com.pokedaisy.app.companion.data.MoveLearning.options(ctx!!.tables, ctx.guide, v.party[learnAt], v.items)
+            .let { o -> o.firstOrNull { it.advice.verdict == com.pokedaisy.app.companion.data.Verdict.REPLACE } ?: o.firstOrNull() }?.move ?: 0
+        // A TM someone in the party is BEST for, else the first.
+        val tms = if (!tmRow) emptyList() else v.items.filter { com.pokedaisy.app.companion.data.MoveLearning.isTm(it.itemId) }
+        val tm = tms.firstOrNull { item ->
+            com.pokedaisy.app.companion.data.MoveLearning.learners(ctx!!.tables, ctx.guide, v.party, item.itemId)
+                ?.let { com.pokedaisy.app.companion.data.MoveLearning.best(it) } != null
+        } ?: tms.firstOrNull()
         paparazzi.snapshot {
-            if (describe) QolTheme { ItemsScreen(v.items, androidx.compose.ui.Modifier.fillMaxSize(), initialItemId = v.items.first().itemId) }
+            if (learn) QolTheme { MonDetailScreen(v.party, learnAt, {}, {}, learn = ctx, initialLearnPick = learnPick) }
+            else if (tmRow) QolTheme {
+                // The TMs & HMs alone, so their rows ("TM06 TOXIC") show above the bar.
+                ItemsScreen(
+                    v.items.filter { com.pokedaisy.app.companion.data.MoveLearning.isTm(it.itemId) },
+                    androidx.compose.ui.Modifier.fillMaxSize(), initialItemId = tm?.itemId,
+                    tmMoves = com.pokedaisy.app.companion.data.MoveLearning.tmMoveNames(ctx!!.tables),
+                    itemExtra = { item, text, shadow -> TmLearnersRow(ctx!!, v.party, item, text, shadow, rememberGbaTextMetrics()) },
+                )
+            }
+            else if (describe) QolTheme { ItemsScreen(v.items, androidx.compose.ui.Modifier.fillMaxSize(), initialItemId = v.items.first().itemId) }
             else if (entry == null) CompanionScreen(v, SampleCompanion.Slots, SampleCompanion.Settings(), initialTab = tab)
             else QolTheme {
                 val ui = DexUiState(androidx.compose.foundation.lazy.rememberLazyListState())
@@ -967,6 +1143,8 @@ open class CompanionScreenshotTest {
         val rom = RomFileReader.load(RETAIL_ROM_DIR + romFile) ?: return
         activeGame = kind
         amethystV141 = cfg === NATIVE_AMETHYST_V1_4_1 // the Poller sets these with activeGame
+        com.pokedaisy.app.companion.data.ultraViolet = cfg === com.pokedaisy.app.companion.data.NATIVE_ULTRA_VIOLET
+        com.pokedaisy.app.companion.data.mariomonV13 = cfg === NATIVE_MARIOMON_V1_3
         romLanguage = cfg.language
         romGameCode = cfg.gameCode
         val t = cfg.pokedex!!
@@ -992,6 +1170,11 @@ open class CompanionScreenshotTest {
     }
 
     // The dex page's EVOLVE / AREA / MOVES (GitHub #28), each from the game's own ROM and save.
+    // The move advice (original games): PARTY > LEARN with a pick, and a TM's party row on ITEMS.
+    @Test fun fireRedLearn() = retail("firered_vanilla", NATIVE_FIRERED_REV1, FR_ROM, GameKind.FIRERED, "PARTY", art = true, learn = true)
+    @Test fun fireRedTmRow() = retail("firered_vanilla", NATIVE_FIRERED_REV1, FR_ROM, GameKind.FIRERED, "ITEMS", art = true, tmRow = true)
+    @Test fun emeraldLearn() = retail("emerald_vanilla", NATIVE_EMERALD_RETAIL, EM_ROM, GameKind.EMERALD, "PARTY", art = true, learn = true)
+    @Test fun emeraldTmRow() = retail("emerald_vanilla", NATIVE_EMERALD_RETAIL, EM_ROM, GameKind.EMERALD, "ITEMS", art = true, tmRow = true)
     @Test fun fireRedDexInfo() = dexSection("firered_vanilla", NATIVE_FIRERED_REV1, FR_ROM, GameKind.FIRERED, 133, DexSection.INFO)
     @Test fun fireRedDexEvolve() = dexSection("firered_vanilla", NATIVE_FIRERED_REV1, FR_ROM, GameKind.FIRERED, 133, DexSection.EVOLVE)
     @Test fun fireRedDexArea() = dexSection("firered_vanilla", NATIVE_FIRERED_REV1, FR_ROM, GameKind.FIRERED, 129, DexSection.AREA)
@@ -1013,6 +1196,7 @@ open class CompanionScreenshotTest {
         val rom = RomFileReader.load(RETAIL_ROM_DIR + romFile) ?: return
         activeGame = kind
         amethystV141 = false
+        com.pokedaisy.app.companion.data.ultraViolet = cfg === com.pokedaisy.app.companion.data.NATIVE_ULTRA_VIOLET
         romLanguage = cfg.language
         romGameCode = cfg.gameCode
         val t = cfg.pokedex!!
@@ -1074,6 +1258,11 @@ open class CompanionScreenshotTest {
         CompanionScreen(SampleCompanion.snapshot, SampleCompanion.Slots, SampleCompanion.Settings(cheatList = SampleCompanion.cheats), initialTab = "SETTINGS", initialSettingsPage = "CHEATS")
     }
 
+    /** SETTINGS > SHADERS: FILTER, GRID, SMOOTHING, GBA COLORS, ON COMPANION. */
+    @Test fun settingsShaders() = paparazzi.snapshot {
+        CompanionScreen(SampleCompanion.snapshot, SampleCompanion.Slots, SampleCompanion.Settings(), initialTab = "SETTINGS", initialSettingsPage = "SHADERS")
+    }
+
     @Test fun settingsCheatsEmpty() = paparazzi.snapshot {
         CompanionScreen(SampleCompanion.snapshot, SampleCompanion.Slots, SampleCompanion.Settings(), initialTab = "SETTINGS", initialSettingsPage = "CHEATS")
     }
@@ -1124,8 +1313,16 @@ private const val IMPERIUM_ROM = "Emerald Imperium (v1.3.1).gba"
 private const val QUETZAL_ROM = "PokemonQuetzalEnglishAlpha9v0.gba"
 private const val QUETZAL_ES_ROM = "QuetzalDaisy/PokemonQuetzalSpanishAlpha9v0.gba"
 private const val OI_ROM = "Pokemon Orange Islands.gba"
+private const val UV_ROM = "ultra-violet-v1.22.gba"
+private const val SS_ROM = "Sword and Shield Ultimate Plus (1.2.1.2).gba"
+private val NATIVE_UV get() = com.pokedaisy.app.companion.data.NATIVE_ULTRA_VIOLET
+private val NATIVE_SS get() = com.pokedaisy.app.companion.data.NATIVE_SWORD_SHIELD
+private const val RY_ROM = "Recharged Yellow v1.9.7.gba"
+private const val RY180_ROM = "Recharged Yellow v1.8.0.gba"
 private const val UB_FR_ROM = "Pokémon Unbound v2.1.1.1 FR.gba"
 private const val ROWE_ROM = "Pokémon R.O.W.E. (v2.1.9.1 Experimental).gba"
+private const val MARIOMON_ROM = "Super Mariomon v1.5.1-Anniversary.gba"
+private const val MARIOMON_V13_ROM = "Super Mariomon v1.3.gba"
 private const val SAPPHIRE_ROM = "Pokemon - Sapphire Version (USA, Europe) (Rev 1).gba"
 private const val HNS_ROM = "Pokémon Heart and Soul (v2.0.6).gba"
 
@@ -1287,6 +1484,8 @@ object SampleCompanion {
         override fun setScreenFilter(filter: com.pokedaisy.app.companion.ScreenFilter) {}
         override val gridStrength = com.pokedaisy.app.companion.GridStrength.MEDIUM
         override fun setGridStrength(strength: com.pokedaisy.app.companion.GridStrength) {}
+        override val smoothing = com.pokedaisy.app.companion.Smoothing.OFF
+        override fun setSmoothing(mode: com.pokedaisy.app.companion.Smoothing) {}
         override val companionShaders = true
         override fun setCompanionShaders(on: Boolean) {}
         override val gameName = "Pokémon FireRed"

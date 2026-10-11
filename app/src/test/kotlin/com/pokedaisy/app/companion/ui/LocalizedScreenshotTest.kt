@@ -137,11 +137,22 @@ class LocalizedScreenshotTest(private val lang: AppLanguage) {
     }
 
     /** The LANGUAGE row - "(LANGUAGE)" beside the word, so it's findable from any language - in the settings look. */
-    /** NOT SUPPORTED with both buttons side by side: the longest labels must still fit. */
-    @Test fun unsupportedBestEffort() = paparazzi.snapshot(lang.code) {
+    /** WHICH GAME IS THIS? - its message, LIKELY tags and NONE OF THESE must fit in every language. */
+    @Test fun gamePicker() = paparazzi.snapshot(lang.code) {
         CompanionScreen(
-            SnapshotView(connected = false, error = "unrecognized FireRed-based ROM hack", unsupported = true, canTryBestEffort = true),
-            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, tryBestEffort = {},
+            SnapshotView(
+                connected = false, error = "unrecognized FireRed-based ROM hack", unsupported = true,
+                gamePicker = SamplePicker.picker(miss = com.pokedaisy.app.companion.data.BestEffort.Miss.NO_PARTY),
+            ),
+            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, gamePick = SamplePicker.actions,
+        )
+    }
+
+    /** NOT SUPPORTED after NONE OF THESE, both buttons side by side: the longest labels must still fit. */
+    @Test fun gamePickerDeclined() = paparazzi.snapshot(lang.code) {
+        CompanionScreen(
+            SnapshotView(connected = false, error = "unrecognized FireRed-based ROM hack", unsupported = true, gamePicker = SamplePicker.picker(declined = true)),
+            SampleCompanion.Slots, SampleCompanion.Settings(), askForSupport = {}, gamePick = SamplePicker.actions,
         )
     }
 

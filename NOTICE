@@ -39,6 +39,12 @@ The app shows every license below in full under Settings > LICENSES.
   GBA colours from mGBA's gba-color shader by Pokefan531 and hunterk. LCD PAPER
   follows RetroArch's simpletex_lcd (jdgleaver, GPL-2.0-or-later) and its grid
   curve zfast_lcd (Copyright Greg Hogan (SoltanGris42), GPL-2.0-or-later).
+- Edge-smoothing shaders (app/src/main/assets/shaders, SHADERS > SMOOTHING), from
+  libretro's glsl-shaders (https://github.com/libretro/glsl-shaders), unmodified:
+  xBR level 2 and xBRZ freescale's xBR code, Copyright (C) 2011-2016 Hyllian, MIT
+  License; xBRZ, Copyright (C) Zenju, GNU GPL 3.0 (from HqMAME); ScaleFX,
+  Copyright (c) 2016 Sp00kyFox, MIT License
+  (third_party/licenses/libretro-shaders.txt).
 - Pixel Operator font (app/src/main/assets/fonts), by Jayvee Enaguas,
   CC0 1.0 (public domain dedication).
 - PixelMplus10 (app/src/main/assets/fonts/PixelMplusJP.ttf), by itouhiro,
@@ -51,6 +57,13 @@ The app shows every license below in full under Settings > LICENSES.
   (third_party/licenses/Apache-2.0.txt; their NOTICE files in
   third_party/licenses/Apache-Commons-NOTICE.txt); XZ for Java, BSD Zero
   Clause (third_party/licenses/XZ-Java-0BSD.txt).
+- Firebase Crashlytics (with -ndk, Firebase Sessions, Installations and their
+  support libraries), Apache License 2.0 - active only in builds made with the
+  project's Firebase config (the official releases), and sending nothing until
+  the player turns CRASH REPORTS on. They pull in
+  Google Play services' play-services-basement and play-services-tasks, under
+  the Android Software Development Kit License
+  (https://developer.android.com/studio/terms).
 - Some decoders and layouts follow the community decompilations of the games
   (pret's pokefirered / pokeemerald / pokeruby / pokeyellow and
   pokeemerald-expansion), which publish no license of their own: the Gen 1

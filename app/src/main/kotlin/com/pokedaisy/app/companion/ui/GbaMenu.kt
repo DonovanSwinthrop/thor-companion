@@ -156,6 +156,11 @@ object OptionColors {
     val spritePaper: Color? get() = if (gen1 && dark) Color(0xFFFFFFFF) else null
     /** Text on an [OptionBadge] (the value colour's pill): white, or Gen 1's paper (its value is the ink). */
     val badgeText get() = if (gen1) G1_PAPER else Color(0xFFFFFFFF)
+    /** A NEW tag's fill (the library's just-added games): a party-menu HP green, softer at night. */
+    val newBadge get() = if (gen1) G1_INK else c(0xFF2F9E44, 0xFF3FAF57)
+    /** A favorite game's star (the library): a Poké Ball gold. */
+    val favorite get() = c(0xFFE0A010, 0xFFF2C24A)
+    val newBadgeShadow get() = if (gen1) Color.Transparent else c(0x99135C24, 0x99103A1A)
     /** The dark box behind a picture that isn't there yet (covers, badges, state thumbnails); darker
      * still in dark mode, so it stays a hole in the window rather than matching it. */
     val imageWell get() = c(0xFF20242C, 0xFF0C0E12)
@@ -317,7 +322,10 @@ fun OptionLine(
 
 /** A small tag on a row ("ALPHA" on a mode that isn't finished): white on the value red, pill-shaped. */
 @Composable
-fun OptionBadge(text: String, m: GbaTextMetrics, modifier: Modifier = Modifier, fill: Color = OptionColors.value) {
+fun OptionBadge(
+    text: String, m: GbaTextMetrics, modifier: Modifier = Modifier, fill: Color = OptionColors.value,
+    shadow: Color = OptionColors.valueShadow.copy(alpha = 0.6f),
+) {
     // ~2/3 of the row's own text: 0.85 next to the main lists' 1.25, smaller beside denser text.
     val small = rememberGbaTextMetrics(0.68f * m.fontPixel / m.px)
     Box(
@@ -325,7 +333,7 @@ fun OptionBadge(text: String, m: GbaTextMetrics, modifier: Modifier = Modifier, 
             .background(fill, PixelPillShape)
             .padding(horizontal = m.u * 5, vertical = m.u),
     ) {
-        GbaText(tr(text), OptionColors.badgeText, OptionColors.valueShadow.copy(alpha = 0.6f), small)
+        GbaText(tr(text), OptionColors.badgeText, shadow, small)
     }
 }
 
@@ -400,7 +408,8 @@ fun OptionButton(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
         modifier = modifier
-            .gbaFocusRing(focused, PixelRoundedShape(u * 4))
+            // The button's own corner: its box below is drawn at a 3u radius.
+            .gbaFocusRing(focused, PixelRoundedShape(u * 3))
             .heightIn(min = m.rowHeight)
             .drawBehind {
                 drawLayeredBox(

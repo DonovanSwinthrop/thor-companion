@@ -92,6 +92,15 @@ internal val trLibrary: Map<String, Tr> = mapOf(
     "SECOND SCREEN" to Tr(ja = "サブがめん", fr = "2ND ÉCRAN", de = "2. BILDSCHIRM", it = "SECONDO SCHERMO", es = "2.ª PANTALLA"),
     "Supported" to Tr(ja = "たいおう", fr = "Pris en charge", de = "Unterstützt", it = "Supportato", es = "Compatible"),
     "Not supported" to Tr(ja = "たいおうがい", fr = "Non pris en charge", de = "Nicht unterstützt", it = "Non supportato", es = "No compatible"),
+    // The library's order and its just-added games.
+    "NEW" to Tr(ja = "NEW", fr = "NOUVEAU", de = "NEU", it = "NUOVO", es = "NUEVO"),
+    "Sort" to Tr(ja = "ならびかえ", fr = "Trier", de = "Sortieren", it = "Ordina", es = "Ordenar"),
+    "SORT BY" to Tr(ja = "ならびかえ", fr = "TRIER PAR", de = "SORTIEREN NACH", it = "ORDINA PER", es = "ORDENAR POR"),
+    "DATE ADDED" to Tr(ja = "ついかした ひ", fr = "DATE D'AJOUT", de = "HINZUGEFÜGT", it = "DATA AGGIUNTA", es = "FECHA AÑADIDO"),
+    // The library menu's favorite toggle: short, the menu is narrow.
+    "FAVORITE" to Tr(ja = "おきにいり", fr = "FAVORI", de = "FAVORIT", it = "PREFERITO", es = "FAVORITO"),
+    "UNFAVORITE" to Tr(ja = "おきにいり はずす", fr = "RETIRER FAVORI", de = "KEIN FAVORIT", it = "TOGLI PREFERITO", es = "QUITAR FAVORITO"),
+    "Favorite" to Tr(ja = "おきにいり", fr = "Favori", de = "Favorit", it = "Preferito", es = "Favorito"),
     "LAST PLAYED" to Tr(ja = "さいきん プレイ", fr = "DERNIÈRE PARTIE", de = "ZULETZT", it = "ULTIMA PARTITA", es = "ÚLTIMA PARTIDA"),
     "#{0} in recent games" to Tr(ja = "さいきんの ゲームで {0}ばんめ", fr = "N° {0} des jeux récents", de = "Nr. {0} der letzten Spiele", it = "N. {0} tra i giochi recenti", es = "N.º {0} de los juegos recientes"),
     "COVER" to Tr(ja = "カバー", fr = "JAQUETTE", de = "COVER", it = "COPERTINA", es = "PORTADA"),
@@ -132,6 +141,11 @@ internal val trLibrary: Map<String, Tr> = mapOf(
     "{0} of {1}" to Tr(ja = "{0} / {1}", fr = "{0} sur {1}", de = "{0} von {1}", it = "{0} di {1}", es = "{0} de {1}"),
     "{0} hardcore" to Tr(ja = "ハードコア {0}", fr = "{0} hardcore", de = "{0} Hardcore", it = "{0} hardcore", es = "{0} hardcore"),
     "Couldn't load your progress" to Tr(ja = "しんちょくを よみこめません", fr = "Impossible de charger votre progression", de = "Fortschritt konnte nicht geladen werden", it = "Impossibile caricare i tuoi progressi", es = "No se pudo cargar tu progreso"),
+    // Crash reports: the one-time ask (CrashReports)
+    "CRASH REPORTS?" to Tr(ja = "クラッシュ レポート？", fr = "RAPPORTS DE PLANTAGE ?", de = "ABSTURZBERICHTE?", it = "SEGNALAZIONI CRASH?", es = "¿INFORMES DE FALLOS?"),
+    "When PokéDaisy crashes, it can send a report so the bug gets fixed sooner: the device model, Android version and where the app crashed. Never your ROMs, saves or anything personal. You can change this any time in Settings." to Tr(ja = "PokéDaisyが とまったとき、レポートを おくれます。バグが はやく なおります：きしゅ、Androidの バージョン、とまった ばしょ。ROMや セーブ、こじんの じょうほうは おくりません。せっていで いつでも かえられます。", fr = "Quand PokéDaisy plante, il peut envoyer un rapport pour que le bug soit corrigé plus vite : le modèle de l'appareil, la version d'Android et l'endroit du plantage. Jamais vos ROM, vos sauvegardes ni rien de personnel. Modifiable à tout moment dans les Options.", de = "Wenn PokéDaisy abstürzt, kann es einen Bericht senden, damit der Fehler schneller behoben wird: Gerätemodell, Android-Version und die Absturzstelle. Nie deine ROMs, Spielstände oder Persönliches. Jederzeit in den Optionen änderbar.", it = "Quando PokéDaisy si blocca, può inviare una segnalazione per correggere prima il bug: modello del dispositivo, versione di Android e punto del crash. Mai le tue ROM, i salvataggi o dati personali. Puoi cambiarlo quando vuoi nelle Opzioni.", es = "Cuando PokéDaisy falla, puede enviar un informe para que el error se corrija antes: el modelo del dispositivo, la versión de Android y dónde falló. Nunca tus ROM, partidas ni nada personal. Puedes cambiarlo cuando quieras en Ajustes."),
+    "SEND REPORTS" to Tr(ja = "おくる", fr = "ENVOYER", de = "SENDEN", it = "INVIA", es = "ENVIAR"),
+
     // App update
     "PokéDaisy {0} is the newest version" to Tr(ja = "PokéDaisy {0}は さいしんばんです", fr = "PokéDaisy {0} est la dernière version", de = "PokéDaisy {0} ist die neueste Version", it = "PokéDaisy {0} è la versione più recente", es = "PokéDaisy {0} es la versión más reciente"),
     "THE DOWNLOAD ISN'T A POKéDAISY UPDATE - NOT INSTALLED" to Tr(ja = "PokéDaisyの アップデートでは ありません - インストールしません", fr = "CE N'EST PAS UNE MISE À JOUR DE POKéDAISY - NON INSTALLÉE", de = "KEIN POKéDAISY-UPDATE - NICHT INSTALLIERT", it = "NON È UN AGGIORNAMENTO DI POKéDAISY - NON INSTALLATO", es = "NO ES UNA ACTUALIZACIÓN DE POKéDAISY - NO SE INSTALA"),

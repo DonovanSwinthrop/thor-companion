@@ -68,6 +68,8 @@ import com.pokedaisy.app.companion.data.POCKET_TM_HM
 import com.pokedaisy.app.companion.data.activeGame
 import com.pokedaisy.app.companion.data.itemNamesEmeraldGame
 import com.pokedaisy.app.companion.data.itemNamesFireRedGame
+import com.pokedaisy.app.companion.data.itemNamesUltraVioletGame
+import com.pokedaisy.app.companion.data.ultraViolet
 import com.pokedaisy.app.companion.data.localText
 import com.pokedaisy.app.companion.data.pocketLabel
 import com.pokedaisy.app.companion.data.pocketOrder
@@ -85,7 +87,7 @@ private enum class ItemSort(val label: String) { DEFAULT(tk("Default")), NAME(tk
  */
 private fun gameItemNames(game: GameKind): Map<Int, String>? = when (game) {
     // A localized game's own (GameText), already in its casing.
-    GameKind.FIRERED -> localText?.items ?: itemNamesFireRedGame
+    GameKind.FIRERED -> localText?.items ?: if (ultraViolet) itemNamesUltraVioletGame else itemNamesFireRedGame
     GameKind.EMERALD -> localText?.items ?: itemNamesEmeraldGame
     else -> null
 }
@@ -289,6 +291,24 @@ private val RadicalRedBag = BagPalette(
 )
 
 /**
+ * Sampled from Sword and Shield Ultimate Plus' bag screen (FireRed's layout): a cream list with
+ * dashed beige row lines and the vanilla grey text, framed charcoal / dark red / red / near-black
+ * (the tabs: red with white text), the black description bar, a light icon box with a gold
+ * edge, the orange pocket arrows (underline) and a flat light-grey backdrop.
+ */
+private val SwordShieldBag = BagPalette(
+    panelLayers = listOf(Color(0xFF393939) to 2, Color(0xFFA50018) to 1, Color(0xFFD60021) to 3, Color(0xFF292929) to 2),
+    tabLayerCount = 2,
+    fill = Color(0xFFF7E7D6), divider = Color(0xFFD6CEC6),
+    text = Color(0xFF636363), textShadow = Color(0xFFD6D6CE),
+    tabText = Color(0xFFFFFFFF), tabTextShadow = Color(0xFF636363), tabUnderline = Color(0xFFFF5200),
+    descLayers = listOf(Color(0xFF393939) to 1), descFill = Color(0xFF000000),
+    descText = Color(0xFFFFFFFF), descTextShadow = Color(0xFF636363),
+    iconBox = Color(0xFFDEDED6), iconBoxEdge = Color(0xFFEFB518),
+    backdrop = Color(0xFFDEDED6) to Color(0xFFDEDED6),
+)
+
+/**
  * Sampled from Odyssey's bag screen: light grey-cream rows split by solid
  * gold lines on a gold ground, the vanilla grey text, the dark pocket-title
  * box (the tabs: dark with white text, gold edge), the dark description bar,
@@ -351,6 +371,24 @@ private val RoweBag = BagPalette(
     descText = Color(0xFF39394A), descTextShadow = Color(0xFFA5A5A5),
     iconBox = Color(0xFFEFEFEF), iconBoxEdge = Color(0xFF181818),
     backdrop = Color(0xFF292929) to Color(0xFF292929),
+)
+
+/**
+ * Sampled 1:1 from Super Mariomon's bag (headless, its MEDICINE pocket): a sky-blue list window -
+ * a slate line, a light edge, a deeper blue band - with white names on a grey-brown shadow, a
+ * white description box and icon box in grey lines, black text, the pocket banner's orange
+ * arrows, and the screen's brown chevrons behind.
+ */
+private val MariomonBag = BagPalette(
+    panelLayers = listOf(Color(0xFF293942) to 1, Color(0xFF9CBDFF) to 1, Color(0xFF638CDE) to 2),
+    tabLayerCount = 2,
+    fill = Color(0xFF9CBDFF), divider = null,
+    text = Color.White, textShadow = Color(0xFF736B63),
+    tabText = Color.White, tabTextShadow = Color(0xFF736B63), tabUnderline = Color(0xFFFF5200),
+    descLayers = listOf(Color(0xFF7B7B7B) to 1), descFill = Color.White,
+    descText = Color.Black, descTextShadow = Color(0xFFB5B5B5),
+    iconBox = Color.White, iconBoxEdge = Color(0xFF7B7B7B),
+    backdrop = Color(0xFFC69C7B) to Color(0xFFA57B63),
 )
 
 /**
@@ -444,11 +482,13 @@ private fun lightBagFor(game: GameKind): BagPalette = when (game) {
     GameKind.AMETHYST -> AmethystBag
     GameKind.RADICAL_RED -> RadicalRedBag
     GameKind.ODYSSEY -> OdysseyBag
+    GameKind.SWORD_SHIELD -> SwordShieldBag
     GameKind.EMERALD_ROGUE -> RogueBag
     GameKind.LAZARUS, GameKind.EMERALD_SEAGLASS -> PlainExpansionBag
     GameKind.ROWE -> RoweBag
     GameKind.SOULGOLD -> SoulGoldBag
     GameKind.YELLOW -> YellowBag
+    GameKind.MARIOMON -> MariomonBag
     // Too Many Types 2's, Glazed's, Imperium's and Quetzal's bags are Emerald's; Gaia's and Celia's are FireRed's.
     GameKind.TMT2, GameKind.GLAZED, GameKind.IMPERIUM, GameKind.QUETZAL -> EmeraldBag
     else -> FireRedBag
@@ -461,6 +501,10 @@ fun ItemsScreen(
     itemUse: com.pokedaisy.app.companion.ItemUse? = null,
     /** The item whose description is open first - for screenshot tests, which can't tap. */
     initialItemId: Int? = null,
+    /** More under an open item's description, in the bar's text colours (a TM's party row). */
+    itemExtra: (@Composable (item: ItemView, text: Color, shadow: Color) -> Unit)? = null,
+    /** TM / HM items' moves, shown after their names ("TM06 TOXIC") as the games' TM cases do. */
+    tmMoves: Map<Int, String> = emptyMap(),
 ) {
     var selectedCategory by remember { mutableStateOf<Int?>(null) } // null = All
     var sort by remember { mutableStateOf(ItemSort.DEFAULT) }
@@ -468,7 +512,10 @@ fun ItemsScreen(
     var selectedKey by remember { mutableStateOf(selectedItem?.let { "${it.itemId}#0" }) }
     val pal = bagPaletteFor(activeGame)
     val caps = gameItemNames(activeGame)
-    val shown = if (caps == null) items else items.map { it.copy(name = caps[it.itemId] ?: it.name) }
+    val shown = items.map { item ->
+        val name = caps?.get(item.itemId) ?: item.name
+        item.copy(name = tmMoves[item.itemId]?.let { "$name $it" } ?: name)
+    }
     val m = rememberGbaTextMetrics()
     val u = m.u
 
@@ -619,6 +666,7 @@ fun ItemsScreen(
                 item, pal, m,
                 onDismiss = { selectedItem = null },
                 itemUse = itemUse,
+                extra = itemExtra,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .onSizeChanged { descHeight = with(density) { it.height.toDp() } },
@@ -810,14 +858,14 @@ private fun BagCursor(pal: BagPalette, m: GbaTextMetrics) {
 private fun ItemDescriptionBar(
     item: ItemView, pal: BagPalette, m: GbaTextMetrics, onDismiss: () -> Unit, modifier: Modifier = Modifier,
     itemUse: com.pokedaisy.app.companion.ItemUse? = null,
+    extra: (@Composable (item: ItemView, text: Color, shadow: Color) -> Unit)? = null,
 ) {
     val u = m.u
     val noRipple = remember { MutableInteractionSource() }
     // What the last USE did, shown in place of the description until another item is picked.
     var used by remember(item.itemId) { mutableStateOf<String?>(null) }
-    Row(
-        verticalAlignment = Alignment.Top,
-        modifier = modifier
+    Column(
+        modifier
             .fillMaxWidth()
             .drawBehind {
                 drawLayeredBox(pal.descLayers.inPx(u.toPx()), pal.descFill, radius = 4 * u.toPx())
@@ -825,6 +873,7 @@ private fun ItemDescriptionBar(
             .soundClickable(interactionSource = noRipple, indication = null, onClick = onDismiss)
             .padding(start = u * 7, end = u * 7, top = u * 7, bottom = u * 7),
     ) {
+    Row(verticalAlignment = Alignment.Top) {
         // No icon box where the game has no item icons (Gen 1): the text takes the room.
         val hasIcon = item.iconAsset != null
         if (hasIcon) Box(
@@ -855,6 +904,8 @@ private fun ItemDescriptionBar(
                 modifier = Modifier.padding(start = u * 6),
             )
         }
+    }
+    extra?.invoke(item, pal.descText, pal.descTextShadow)
     }
 }
 

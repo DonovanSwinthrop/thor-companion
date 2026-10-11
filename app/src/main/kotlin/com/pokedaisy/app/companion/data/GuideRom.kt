@@ -44,6 +44,10 @@ data class GuideTables(
     val wildSet: Int = 0,
     /** CFRU's 3-byte learnset entries (Radical Red, Unbound, Amethyst). */
     val learnsetCfru: Boolean = false,
+    /** An old pokeemerald-expansion's {u16 move, u16 level} learnset entries, ending at move 0xFFFF
+     * (Super Mariomon) - for [trainerMon]s without moves of their own, which get their level-up
+     * moves (CreateNPCTrainerParty's GiveMonInitialMoveset). */
+    val learnsetPairs: Boolean = false,
     /** More gTrainers tables a hack picks between (Amethyst's per difficulty): a
      * trainer id or'd with (k + 1) << [TRAINER_TABLE_SHIFT] reads table k, and
      * an empty record there falls back to [trainers], as the game does. */
@@ -62,6 +66,10 @@ data class GuideTables(
      * 0x100 + id (Quetzal's Johto) - as [NativeConfig.mapSecWide] / [NativeConfig.altMapSecGroups]. */
     val mapSecWide: Boolean = false,
     val altMapSecGroups: IntRange? = null,
+    /** A second (HARD) party pointer in the same trainer record, its size in the size byte's high
+     * nibble and the normal one's in the low (Recharged Yellow); -1 = none. A trainer id or'd with
+     * 1 << [TRAINER_TABLE_SHIFT] reads it. */
+    val trainerHardPartyOff: Int = -1,
 )
 
 /** A WildPokemonHeader's size and the pointer slot (after the 4-byte map id) of each method. */
@@ -346,17 +354,26 @@ object GuideRomSource {
                 ?.takeIf { it[0].toInt() != 0 || u32le(it, t.trainerPartyOff) != 0L }
                 ?: rd(t.trainers + local * t.trainerStride, t.trainerStride)
             val flags = rec[0].toInt() and 0xFF
-            val size = rec[t.trainerSizeOff].toInt() and 0xFF
-            val ptr = u32le(rec, t.trainerPartyOff)
+            val sizeByte = rec[t.trainerSizeOff].toInt() and 0xFF
+            val hard = t.trainerHardPartyOff >= 0 && id shr TRAINER_TABLE_SHIFT == 1
+            val size = when {
+                t.trainerHardPartyOff < 0 -> sizeByte
+                hard -> sizeByte shr 4
+                else -> sizeByte and 0x0F
+            }
+            val ptr = u32le(rec, if (hard) t.trainerHardPartyOff else t.trainerPartyOff)
             if (size !in 1..6 || !Gfx.inRom(ptr)) return@runCatching emptyList()
             t.trainerMon?.let { m ->
                 val raw = rd(ptr, size * m.stride)
                 return@runCatching (0 until size).map { i ->
                     val o = i * m.stride
+                    val species = u16le(raw, o + m.speciesOff)
+                    val level = raw[o + m.levelOff].toInt() and 0xFF
                     TrainerMon(
-                        u16le(raw, o + m.speciesOff), raw[o + m.levelOff].toInt() and 0xFF,
+                        species, level,
                         heldItem = u16le(raw, o + m.itemOff),
-                        moves = (0 until 4).map { u16le(raw, o + m.movesOff + 2 * it) }.filter { it != 0 },
+                        moves = (0 until 4).map { u16le(raw, o + m.movesOff + 2 * it) }.filter { it != 0 }
+                            .ifEmpty { defaultMoves(t, species, level) },
                     )
                 }
             }
@@ -391,6 +408,15 @@ object GuideRomSource {
             if (move in moves) return
             if (moves.size == 4) moves.removeFirst()
             moves.addLast(move)
+        }
+        if (t.learnsetPairs) { // {u16 move, u16 level}, ending at move 0xFFFF
+            val raw = rd(ptr, 4 * 64)
+            for (o in 0 until raw.size - 3 step 4) {
+                val move = u16le(raw, o)
+                if (move == 0xFFFF || u16le(raw, o + 2) > level) break
+                learn(move)
+            }
+            return moves.toList()
         }
         if (t.learnsetCfru) { // {u16 move, u8 level}, ending at level 0xFF
             val raw = rd(ptr, 3 * 64)
@@ -735,9 +761,10 @@ val GUIDE_TABLES_SOULGOLD = GuideTables(
     mapGroups = 0x09587364L, mapSecWide = true,
 )
 
-// v1.2 / v1.2b: the same layouts, ids, flags and scripts; only the tables moved.
+// v1.2 / v1.2b / v1.2c: the same layouts, ids, flags and scripts; only the tables moved.
 val GUIDE_TABLES_SOULGOLD_V1_2 = GUIDE_TABLES_SOULGOLD.copy(trainers = 0x084A5800L, wildHeaders = 0x09420BA8L, altTrainers = listOf(0x084B4470L), mapGroups = 0x09592634L)
 val GUIDE_TABLES_SOULGOLD_V1_2B = GUIDE_TABLES_SOULGOLD.copy(trainers = 0x084A5768L, wildHeaders = 0x09420B04L, altTrainers = listOf(0x084B43D8L), mapGroups = 0x09592590L)
+val GUIDE_TABLES_SOULGOLD_V1_2C = GUIDE_TABLES_SOULGOLD.copy(trainers = 0x084A58F4L, wildHeaders = 0x0944EA34L, altTrainers = listOf(0x084B4564L), mapGroups = 0x095C04C0L)
 
 val GUIDE_TABLES_CELIA = GuideTables(
     trainers = 0x0871FCA0L,
@@ -747,6 +774,35 @@ val GUIDE_TABLES_CELIA = GuideTables(
     sb1VarsOff = 0x1010,
     guide = GuideId.CELIA,
     mapGroups = 0x089DCD7CL,
+)
+
+/**
+ * Pokémon Ultra Violet: retail FireRed rev 0's gTrainers (FireRed's gyms and League, one
+ * trainer added at 530) and gLevelUpLearnsets, its own gWildMonHeaders (0x087339C0, all 14
+ * literal-pool words) and gMapGroups (0x0872AF04); FireRed's SaveBlock1 flags / vars.
+ */
+val GUIDE_TABLES_ULTRA_VIOLET = GuideTables(
+    trainers = 0x0823EAC8L,
+    learnsets = 0x0825D7B4L,
+    wildHeaders = 0x087339C0L,
+    guide = GuideId.ULTRA_VIOLET,
+    mapGroups = 0x0872AF04L,
+)
+
+/**
+ * Pokémon Sword and Shield Ultimate Plus (CFRU): gTrainers rewritten in place at FireRed rev
+ * 0's address (trainer 414 is MILO), CFRU's 3-byte learnsets at 0x099F4D98, gWildMonHeaders
+ * 0x0892E408 (all 14 literal-pool words), gMapGroups 0x087B1010.
+ */
+val GUIDE_TABLES_SWORD_SHIELD = GuideTables(
+    trainers = 0x0823EAC8L,
+    learnsets = 0x099F4D98L,
+    learnsetCfru = true,
+    wildHeaders = 0x0892E408L,
+    probeTrainer = 414,
+    probeName = "Milo",
+    guide = GuideId.SWORD_SHIELD,
+    mapGroups = 0x087B1010L,
 )
 
 /**
@@ -763,4 +819,93 @@ val GUIDE_TABLES_ORANGE_ISLANDS = GuideTables(
     probeName = "CISSY",
     guide = GuideId.ORANGE_ISLANDS,
     mapGroups = 0x083526A8L,
+)
+
+/**
+ * Pokémon Recharged Yellow: FireRed's trainer ids (414 = Brock), map groups and wild-header shape, its own
+ * tables. gTrainers is 0x24-byte records - aiFlags, party +4, items, class +0x10, name +0x13 (11 bytes,
+ * title-cased), doubleBattle +0x1E, sizes +0x1F (normal in the low nibble, HARD in the high one) and a
+ * HARD party +0x20, chosen when SaveBlock2+0x6E0's low bits read 1 (its difficulty option) - read off the
+ * code that loads them. Its parties are 0x20-byte TrainerMons with their own moves. gLevelUpLearnsets by
+ * BULBASAUR's list, gWildMonHeaders by its 132 FireRed-shaped headers (the first, MONEAN CHAMBER's
+ * UNOWN), gMapGroups by shape (its Overworld_GetMapHeader loads it). SaveBlock1 flags / vars at
+ * +0xEFB / +0x1028 (the GF ROM header's offsets; trainer flag 0x500 + 414 and the three badges are set
+ * on the user's three-badge save). Every release moved the tables; the layouts are the same.
+ */
+private val GUIDE_TABLES_RECHARGED_YELLOW = GuideTables(
+    trainers = 0, learnsets = 0, wildHeaders = 0,
+    sb1FlagsOff = 0xEFB,
+    sb1VarsOff = 0x1028,
+    flagBytes = 0x12C,
+    probeTrainer = 414,
+    probeName = "Brock",
+    guide = GuideId.RECHARGED_YELLOW,
+    trainerStride = 0x24,
+    trainerNameOff = 0x13,
+    trainerNameLen = 11,
+    trainerSizeOff = 0x1F,
+    trainerPartyOff = 4,
+    trainerMon = TrainerMonLayout(stride = 0x20, movesOff = 0x0C, speciesOff = 0x14, itemOff = 0x16, levelOff = 0x1A),
+    trainerHardPartyOff = 0x20,
+)
+
+val GUIDE_TABLES_RECHARGED_YELLOW_V1_8_0 = GUIDE_TABLES_RECHARGED_YELLOW.copy(
+    trainers = 0x08664374L, learnsets = 0x08869920L, wildHeaders = 0x08962648L, mapGroups = 0x08A356F0L,
+    guide = GuideId.RECHARGED_YELLOW_V180,
+)
+val GUIDE_TABLES_RECHARGED_YELLOW_V1_9_0 = GUIDE_TABLES_RECHARGED_YELLOW.copy(
+    trainers = 0x08661578L, learnsets = 0x088693DCL, wildHeaders = 0x08962810L, mapGroups = 0x08A35758L,
+    guide = GuideId.RECHARGED_YELLOW_V190,
+)
+val GUIDE_TABLES_RECHARGED_YELLOW_V1_9_4 = GUIDE_TABLES_RECHARGED_YELLOW.copy(
+    trainers = 0x087414F4L, learnsets = 0x089493E0L, wildHeaders = 0x08A42E88L, mapGroups = 0x08B16238L,
+    guide = GuideId.RECHARGED_YELLOW_V194,
+)
+val GUIDE_TABLES_RECHARGED_YELLOW_V1_9_7 = GUIDE_TABLES_RECHARGED_YELLOW.copy(
+    trainers = 0x08768748L, learnsets = 0x089721F0L, wildHeaders = 0x08A6BD84L, mapGroups = 0x08B3F134L,
+)
+
+/**
+ * Super Mariomon v1.5.1-Anniversary: its own struct Trainer (0x2C bytes: aiFlags, party* +4,
+ * items, class +0x10, trainerName[12] +0x13, partySize +0x1F; two more parties the game picks by
+ * flags 0x29 / 0x885 at +0x24 / +0x28, sizes +0x20 / +0x21 - CreateNPCTrainerParty, read from its
+ * code) and 0x20-byte TrainerMons (moves +0xC, species +0x14, item +0x16, level +0x1A; no moves =
+ * the level-up ones). Trainer 102 is PEACH, the first STAR's leader. gWildMonHeaders: vanilla's
+ * 20-byte headers, Emerald's Hoenn entries left in front of its own (the table the code loads).
+ * Flags / vars at SaveBlock1+0x1468 / +0x1594 (the GF header's offsets), 300 flag bytes.
+ */
+val GUIDE_TABLES_MARIOMON_V1_5_1 = GuideTables(
+    trainers = 0x08417360L,
+    learnsets = 0x08473D9CL,
+    learnsetPairs = true,
+    wildHeaders = 0x087CBA10L,
+    sb1FlagsOff = 0x1468,
+    sb1VarsOff = 0x1594,
+    flagBytes = 0x12C,
+    probeTrainer = 102,
+    probeName = "PEACH",
+    guide = GuideId.MARIOMON,
+    trainerStride = 0x2C,
+    trainerNameOff = 0x13,
+    trainerNameLen = 12,
+    trainerSizeOff = 0x1F,
+    trainerPartyOff = 4,
+    trainerMon = TrainerMonLayout(stride = 0x20, movesOff = 0x0C, speciesOff = 0x14, itemOff = 0x16, levelOff = 0x1A),
+    mapGroups = 0x0869821CL,
+)
+
+val GUIDE_TABLES_MARIOMON_V1_5_2 = GUIDE_TABLES_MARIOMON_V1_5_1.copy(
+    trainers = 0x084177F0L, learnsets = 0x08474230L, wildHeaders = 0x087CBEC4L, mapGroups = 0x086986B0L,
+)
+
+val GUIDE_TABLES_MARIOMON_V1_3 = GUIDE_TABLES_MARIOMON_V1_5_1.copy(
+    trainers = 0x08405F2CL, learnsets = 0x08461C10L, wildHeaders = 0x087AF0C8L, mapGroups = 0x08680194L,
+)
+
+val GUIDE_TABLES_MARIOMON_V1_2_2 = GUIDE_TABLES_MARIOMON_V1_5_1.copy(
+    trainers = 0x08405F6CL, learnsets = 0x08461C50L, wildHeaders = 0x087AF0E4L, mapGroups = 0x086801D4L,
+)
+
+val GUIDE_TABLES_MARIOMON_V1_2_1 = GUIDE_TABLES_MARIOMON_V1_5_1.copy(
+    trainers = 0x08405F8CL, learnsets = 0x08461C70L, wildHeaders = 0x087AF104L, mapGroups = 0x086801F4L,
 )

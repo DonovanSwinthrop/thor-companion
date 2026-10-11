@@ -1,5 +1,24 @@
 package com.pokedaisy.app
 
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.Key
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.DpSize
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -40,6 +59,7 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Code
@@ -47,6 +67,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOff
@@ -64,6 +88,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -146,6 +171,9 @@ class LibraryActivity : ComponentActivity() {
 
     /** First-time setup over the library while non-null (internal for the ui-preview harness). */
     internal var setup by mutableStateOf<SetupState?>(null)
+
+    /** The one-time "send crash reports?" ask (CrashReports.shouldAsk) is up. Internal for ui-preview. */
+    internal var crashAsk by mutableStateOf(false)
     private val pickRomsFolder = registerForActivityResult(StorageAccess.PickFolder()) { uri ->
         pickedFolder(uri)?.let(::linkRomsFolder)
     }
@@ -232,6 +260,9 @@ class LibraryActivity : ComponentActivity() {
             }
         }
 
+        // Once ever, from the third open on and two days after the install: may we send crash reports?
+        if (savedInstanceState == null && setup == null && CrashReports.shouldAsk(this, prefs)) crashAsk = true
+
         // Every app open looks for a newer GitHub release. Not in debug builds: a
         // release APK can't install over a debug-signed one (Settings > VERSION still checks).
         if (savedInstanceState == null && !BuildConfig.DEBUG) updates.check()
@@ -272,7 +303,9 @@ class LibraryActivity : ComponentActivity() {
         @Suppress("UNUSED_EXPRESSION") revision
         val m = rememberGbaTextMetrics()
         val small = rememberGbaTextMetrics(textScale = 1f)
-        val roms = remember(revision) { listRoms() }
+        var sort by remember { mutableStateOf(LibrarySort.of(prefs.librarySort)) }
+        var pickingSort by remember { mutableStateOf(false) }
+        val roms = remember(revision, sort) { sortLibrary(this@LibraryActivity, prefs, listRoms(), sort) }
         var renaming by remember { mutableStateOf<File?>(null) }
         var deleting by remember { mutableStateOf<File?>(null) }
         var gridView by remember { mutableStateOf(prefs.libraryViewMode == 1) }
@@ -280,12 +313,17 @@ class LibraryActivity : ComponentActivity() {
             prefs.recentRomPaths().mapNotNull { path -> roms.find { it.absolutePath == path } }.take(3)
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        Box(modifier = Modifier.fillMaxSize().onSizeChanged { screenSize = with(density) { DpSize(it.width.toDp(), it.height.toDp()) } }) {
             AppBackdrop(logos = true)
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                OptionTitleWindow("POKéDAISY", m, leading = {
+            // The lists scroll to the screen's edges (their margin is padding inside them), so a card
+            // slides off the screen rather than being cut at an inner box's edge.
+            Column(modifier = Modifier.fillMaxSize()) {
+                OptionTitleWindow("POKéDAISY", m, Modifier.padding(start = SCREEN_MARGIN, end = SCREEN_MARGIN, top = SCREEN_MARGIN), leading = {
                     PixelArt(LOGO_ROWS, LOGO_PALETTE, Modifier.size(m.lineHeight))
                 }) {
+                    // The header's first button: where UP from the top of the games lands.
+                    HeaderIcon(Icons.AutoMirrored.Filled.Sort, tr("Sort"), m, Modifier.focusRequester(headerFirst)) { pickingSort = true }
                     HeaderIcon(if (gridView) Icons.AutoMirrored.Filled.ViewList else Icons.Filled.GridView, tr("Toggle view"), m) {
                         gridView = !gridView
                         prefs.libraryViewMode = if (gridView) 1 else 0
@@ -299,7 +337,7 @@ class LibraryActivity : ComponentActivity() {
                 Spacer(Modifier.height(m.u * 4))
 
                 if (roms.isEmpty()) {
-                    OptionListWindow(m, Modifier.fillMaxWidth()) {
+                    OptionListWindow(m, Modifier.fillMaxWidth().padding(horizontal = SCREEN_MARGIN)) {
                         GbaText(
                             tr(
                                 "No ROMs yet. Tap + to import a .gba (or a .zip / .7z), link your ROMs folder in SETTINGS > FOLDERS, or drop files into {0}",
@@ -326,6 +364,14 @@ class LibraryActivity : ComponentActivity() {
                         onDelete = { deleting = it },
                     )
                 }
+            }
+
+            if (pickingSort) {
+                OptionSelector(
+                    tr("SORT BY"), LibrarySort.entries.toList(), sort, { tr(it.label) }, m,
+                    onPick = { sort = it; prefs.librarySort = it.id; pickingSort = false },
+                    onDismiss = { pickingSort = false },
+                )
             }
 
             renaming?.let { rom ->
@@ -377,11 +423,42 @@ class LibraryActivity : ComponentActivity() {
                         gameInfo = null
                         rescanRomsFolder()
                     },
+                    onPickGame = { gp, id ->
+                        val store = com.pokedaisy.app.companion.data.BestEffortStore
+                        when (id) {
+                            GAME_AUTO -> store.forget(gp.sha1)
+                            GAME_NONE -> store.decline(gp.sha1)
+                            // Its ROM-side parts are checked when the game next runs (the companion's sampler).
+                            else -> com.pokedaisy.app.companion.data.BestEffort.candidate(id)?.let { c ->
+                                store.save(gp.sha1, com.pokedaisy.app.companion.data.BestEffort.Match(c, full = false, off = emptySet(), score = 0), com.pokedaisy.app.companion.data.BestEffortStore.Source.PICKED, verified = false)
+                            }
+                        }
+                        gameInfo = null
+                        rescanRomsFolder()
+                    },
                 ) }
 
             UpdateDialog(updates, m, small)
 
-            if (expandIntro && setup == null) {
+            // After any update offer, never over setup (this screen isn't composed then).
+            if (crashAsk && updates.release == null) {
+                // Shown = asked, whatever the answer (or none, if the app goes away): only once.
+                LaunchedEffect(Unit) { prefs.crashReportsAsked = true }
+                OptionConfirm(
+                    title = tr("CRASH REPORTS?"),
+                    message = tr(
+                        "When PokéDaisy crashes, it can send a report so the bug gets fixed sooner: the device model, Android version and where the app crashed. Never your ROMs, saves or anything personal. You can change this any time in Settings.",
+                    ),
+                    confirmLabel = tr("SEND REPORTS"),
+                    cancelLabel = tk("NO THANKS"),
+                    m = m,
+                    onDismiss = { crashAsk = false },
+                    onConfirm = { crashAsk = false; CrashReports.setEnabled(prefs, true) },
+                )
+            }
+
+            // After the crash-reports question, one at a time.
+            if (expandIntro && setup == null && !crashAsk && updates.release == null) {
                 com.pokedaisy.app.companion.ui.ExpandIntro(
                     m, small,
                     onTurnOn = {
@@ -436,6 +513,8 @@ class LibraryActivity : ComponentActivity() {
                     onDismiss = { deleting = null },
                     onConfirm = {
                         rom.delete()
+                        RomAdded.forget(this@LibraryActivity, rom)
+                        prefs.favoriteRoms = prefs.favoriteRoms - rom.absolutePath
                         prefs.setRomDisplayName(rom, null)
                         prefs.setRomSourcePath(rom, null)
                         prefs.setRomCoverManual(rom, false)
@@ -451,10 +530,18 @@ class LibraryActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun HeaderIcon(icon: ImageVector, label: String, m: GbaTextMetrics, onClick: () -> Unit) {
+    private fun HeaderIcon(icon: ImageVector, label: String, m: GbaTextMetrics, modifier: Modifier = Modifier, onClick: () -> Unit) {
         Spacer(Modifier.width(m.u * 4))
-        OptionButton(null, m, onClick = onClick, icon = icon, contentDescription = label)
+        OptionButton(null, m, onClick = onClick, modifier = modifier, icon = icon, contentDescription = label)
     }
+
+    /** The header's leftmost button (sort). */
+    private val headerFirst = FocusRequester()
+
+    /** For a card in the games' top row (the RECENTLY PLAYED tiles, or the first row without them):
+     * D-pad UP goes to the header's leftmost button. A lazy list's top row had nowhere to go - UP did nothing. */
+    private val toHeader: () -> FocusRequester? = { headerFirst }
+    private val noUp: () -> FocusRequester? = { null }
 
     @Composable
     private fun RomList(
@@ -469,6 +556,7 @@ class LibraryActivity : ComponentActivity() {
     ) {
         LazyColumn(
             modifier = modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(start = SCREEN_MARGIN, end = SCREEN_MARGIN, bottom = SCREEN_MARGIN),
             verticalArrangement = Arrangement.spacedBy(m.u * 4),
         ) {
             if (recentRoms.isNotEmpty()) {
@@ -477,8 +565,8 @@ class LibraryActivity : ComponentActivity() {
                 }
                 item(key = "all") { BackdropText(tr("ALL GAMES"), small) }
             }
-            items(roms, key = { it.absolutePath }) { rom ->
-                RomRow(rom, m, small, onRename = { onRename(rom) }, onDelete = { onDelete(rom) })
+            itemsIndexed(roms, key = { _, rom -> rom.absolutePath }) { i, rom ->
+                RomRow(rom, m, small, onRename = { onRename(rom) }, onDelete = { onDelete(rom) }, upTo = if (i == 0 && recentRoms.isEmpty()) toHeader else noUp)
             }
         }
     }
@@ -494,9 +582,16 @@ class LibraryActivity : ComponentActivity() {
         onRename: (File) -> Unit,
         onDelete: (File) -> Unit,
     ) {
+        val grid = rememberLazyGridState()
+        // Without RECENTLY PLAYED the games start at item 0; the top row is what the grid laid out as row 0.
+        fun topRow(index: Int): () -> FocusRequester? = {
+            headerFirst.takeIf { recentRoms.isEmpty() && grid.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.row == 0 }
+        }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 150.dp),
+            state = grid,
             modifier = modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(start = SCREEN_MARGIN, end = SCREEN_MARGIN, bottom = SCREEN_MARGIN),
             horizontalArrangement = Arrangement.spacedBy(m.u * 4),
             verticalArrangement = Arrangement.spacedBy(m.u * 4),
         ) {
@@ -506,8 +601,8 @@ class LibraryActivity : ComponentActivity() {
                 }
                 item(key = "all", span = { GridItemSpan(maxLineSpan) }) { BackdropText(tr("ALL GAMES"), small) }
             }
-            gridItems(roms, key = { it.absolutePath }) { rom ->
-                RomTile(rom, m, small, onRename = { onRename(rom) }, onDelete = { onDelete(rom) })
+            gridItemsIndexed(roms, key = { _, rom -> rom.absolutePath }) { i, rom ->
+                RomTile(rom, m, small, onRename = { onRename(rom) }, onDelete = { onDelete(rom) }, upTo = topRow(i))
             }
         }
     }
@@ -520,6 +615,7 @@ class LibraryActivity : ComponentActivity() {
      * horizontalScroll — only ever up to 3 items, laziness would be
      * pointless) since 3 tiles/rows can easily be wider than the screen. */
     @Composable
+    @OptIn(ExperimentalFoundationApi::class)
     private fun RecentPlayedSection(
         recentRoms: List<File>,
         gridView: Boolean,
@@ -527,11 +623,21 @@ class LibraryActivity : ComponentActivity() {
         small: GbaTextMetrics,
         onPlay: (File) -> Unit,
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = m.u * 4)) {
+        // A tile focused with the D-pad brings the whole section into view, its title too (the list
+        // alone scrolled just far enough for the tile, leaving RECENTLY PLAYED off the top).
+        val section = remember { BringIntoViewRequester() }
+        val scope = rememberCoroutineScope()
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(bottom = m.u * 4)
+                .bringIntoViewRequester(section)
+                .onFocusChanged { if (it.hasFocus) scope.launch { section.bringIntoView() } },
+        ) {
             BackdropText(tr("RECENTLY PLAYED"), small, Modifier.padding(bottom = m.u * 3))
+            // Out to the screen's edges, the margin inside the scroll: a tile slides off the side.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(m.u * 4),
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                modifier = Modifier.bleedHorizontally(SCREEN_MARGIN).horizontalScroll(rememberScrollState())
+                    .padding(horizontal = SCREEN_MARGIN),
             ) {
                 recentRoms.forEach { rom ->
                     if (gridView) {
@@ -585,6 +691,26 @@ class LibraryActivity : ComponentActivity() {
         }
     }
 
+    private val MENU_ITEM_MIN_HEIGHT = 48.dp
+    /** The library's margin to the screen's edges. */
+    private val SCREEN_MARGIN = 16.dp
+
+    /** Wider than the parent by [d] each side (the list's own margin), drawn from [d] left of it. */
+    private fun Modifier.bleedHorizontally(d: androidx.compose.ui.unit.Dp) = layout { measurable, constraints ->
+        val extra = d.roundToPx() * 2
+        val wide = constraints.copy(
+            minWidth = (constraints.minWidth + extra).coerceAtLeast(0),
+            maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + extra else constraints.maxWidth,
+        )
+        val p = measurable.measure(wide)
+        layout((p.width - extra).coerceAtLeast(0), p.height) { p.place(-extra / 2, 0) }
+    }
+    /** About a menu column's width (Material's menus are 112-280 dp). */
+    private val MENU_COLUMN_WIDTH = 280.dp
+
+    /** The library screen's size, for a game's menu to pick one or two columns. */
+    private var screenSize by mutableStateOf(DpSize.Zero)
+
     @Composable
     private fun RomOptionsMenu(
         expanded: Boolean,
@@ -594,15 +720,60 @@ class LibraryActivity : ComponentActivity() {
         onRename: () -> Unit,
         onDelete: () -> Unit,
     ) {
+        class Item(val label: String, val icon: ImageVector, val danger: Boolean = false, val onClick: () -> Unit)
+        val items = buildList {
+            if (rom.absolutePath in prefs.favoriteRoms) {
+                add(Item(tr("UNFAVORITE"), Icons.Filled.StarBorder) { setFavorite(rom, false) })
+            } else {
+                add(Item(tr("FAVORITE"), Icons.Filled.Star) { setFavorite(rom, true) })
+            }
+            add(Item(tr("INFO"), Icons.Filled.Info) { showInfo(rom) })
+            add(Item(tr("RENAME"), Icons.Filled.Edit, onClick = onRename))
+            add(Item(tr("REPLACE COVER"), Icons.Filled.Search) { coverError = null; coverPickerFor = rom })
+            add(Item(tr("SET COVER"), Icons.Filled.Image) { pendingCoverTarget = rom; pickCoverImage.launch("image/*") })
+            if (prefs.romCoverManual(rom)) {
+                add(Item(tr("RESET COVER"), Icons.Filled.Refresh) { resetCover(rom) })
+            }
+            add(Item(tr("LOAD SAVE"), Icons.Filled.FileOpen) { saveTarget = rom; pickSaveFile.launch(arrayOf("*/*")) })
+            add(Item(tr("RESTORE BACKUP"), Icons.Filled.History) { showBackups(rom) })
+            // This game's saves in a folder of its own (another emulator's), or back to the usual search.
+            add(Item(tr("SAVE FOLDER"), Icons.Filled.Folder) {
+                if (!StorageAccess.hasAllFilesAccess(this@LibraryActivity)) {
+                    StorageAccess.requestAllFilesAccess(this@LibraryActivity)
+                    Toast.makeText(this@LibraryActivity, tr("Grant \"All files access\", then tap the button again"), Toast.LENGTH_LONG).show()
+                } else {
+                    saveFolderTarget = rom
+                    pickGameSaveFolder.launch(null)
+                }
+            })
+            if (prefs.romSaveDir(rom) != null) {
+                add(Item(tr("DEFAULT SAVE FOLDER"), Icons.Filled.FolderOff) { setGameSaveFolder(rom, null) })
+            }
+            // The game's cheats, on Settings' CHEATS page.
+            add(Item(tr("CHEATS"), Icons.Filled.Code) {
+                startActivity(Intent(this@LibraryActivity, SettingsActivity::class.java).putExtra(SettingsActivity.EXTRA_CHEATS_ROM, rom.absolutePath))
+            })
+            add(Item(tr("HIDE"), Icons.Filled.VisibilityOff) { hideRom(rom) })
+            // A linked folder's ROM is the player's own file: it can be hidden, never deleted.
+            if (!RomFolder.isLinked(prefs, rom)) {
+                add(Item(tr("DELETE"), Icons.Filled.Delete, danger = true, onClick = onDelete))
+            }
+        }
+
         @Composable
-        fun MenuItem(label: String, icon: ImageVector, danger: Boolean = false, onClick: () -> Unit) {
-            val fg = if (danger) OptionColors.value else OptionColors.label
+        fun MenuItem(item: Item) {
+            val fg = if (item.danger) OptionColors.value else OptionColors.label
             DropdownMenuItem(
-                text = { GbaText(label, fg, if (danger) OptionColors.valueShadow else OptionColors.labelShadow, m) },
-                leadingIcon = { Icon(icon, null, tint = fg) },
-                onClick = { onDismiss(); onClick() },
+                text = { GbaText(item.label, fg, if (item.danger) OptionColors.valueShadow else OptionColors.labelShadow, m) },
+                leadingIcon = { Icon(item.icon, null, tint = fg) },
+                onClick = { onDismiss(); item.onClick() },
             )
         }
+        // Two columns where one would run off the screen and two fit across it (a wide screen):
+        // the list had grown past a landscape screen's height.
+        val itemHeight = maxOf(MENU_ITEM_MIN_HEIGHT, m.lineHeight + 16.dp)
+        val twoColumns = screenSize.width >= MENU_COLUMN_WIDTH * 2 + 32.dp &&
+            itemHeight * items.size + 16.dp > screenSize.height - 32.dp
         // Square corners on the popup's own surface (its shape must be a
         // CornerBasedShape - no pixel steps possible), and a subtle 1u frame
         // just inside it rather than Material's smooth-rounded edge.
@@ -617,51 +788,49 @@ class LibraryActivity : ComponentActivity() {
                         drawLayeredFrame(listOf(MenuBorder to u.toPx()), radius = 0f)
                     },
             ) {
-                MenuItem(tr("INFO"), Icons.Filled.Info) { showInfo(rom) }
-                MenuItem(tr("RENAME"), Icons.Filled.Edit, onClick = onRename)
-                MenuItem(tr("REPLACE COVER"), Icons.Filled.Search) { coverError = null; coverPickerFor = rom }
-                MenuItem(tr("SET COVER"), Icons.Filled.Image) { pendingCoverTarget = rom; pickCoverImage.launch("image/*") }
-                if (prefs.romCoverManual(rom)) {
-                    MenuItem(tr("RESET COVER"), Icons.Filled.Refresh) { resetCover(rom) }
-                }
-                MenuItem(tr("LOAD SAVE"), Icons.Filled.FileOpen) { saveTarget = rom; pickSaveFile.launch(arrayOf("*/*")) }
-                MenuItem(tr("RESTORE BACKUP"), Icons.Filled.History) { showBackups(rom) }
-                // This game's saves in a folder of its own (another emulator's), or back to the usual search.
-                MenuItem(tr("SAVE FOLDER"), Icons.Filled.Folder) {
-                    if (!StorageAccess.hasAllFilesAccess(this@LibraryActivity)) {
-                        StorageAccess.requestAllFilesAccess(this@LibraryActivity)
-                        Toast.makeText(this@LibraryActivity, tr("Grant \"All files access\", then tap the button again"), Toast.LENGTH_LONG).show()
-                    } else {
-                        saveFolderTarget = rom
-                        pickGameSaveFolder.launch(null)
+                if (!twoColumns) {
+                    items.forEach { MenuItem(it) }
+                } else {
+                    // Down the first column, then the second (DELETE last, bottom right); a 1u rule between.
+                    val half = (items.size + 1) / 2
+                    Row(Modifier.height(IntrinsicSize.Min)) {
+                        Column(Modifier.width(IntrinsicSize.Max)) { items.take(half).forEach { MenuItem(it) } }
+                        Box(Modifier.fillMaxHeight().padding(vertical = u * 4).width(u).background(MenuBorder))
+                        Column(Modifier.width(IntrinsicSize.Max)) { items.drop(half).forEach { MenuItem(it) } }
                     }
-                }
-                if (prefs.romSaveDir(rom) != null) {
-                    MenuItem(tr("DEFAULT SAVE FOLDER"), Icons.Filled.FolderOff) { setGameSaveFolder(rom, null) }
-                }
-                // The game's cheats, on Settings' CHEATS page.
-                MenuItem(tr("CHEATS"), Icons.Filled.Code) {
-                    startActivity(Intent(this@LibraryActivity, SettingsActivity::class.java).putExtra(SettingsActivity.EXTRA_CHEATS_ROM, rom.absolutePath))
-                }
-                MenuItem(tr("HIDE"), Icons.Filled.VisibilityOff) { hideRom(rom) }
-                // A linked folder's ROM is the player's own file: it can be hidden, never deleted.
-                if (!RomFolder.isLinked(prefs, rom)) {
-                    MenuItem(tr("DELETE"), Icons.Filled.Delete, danger = true, onClick = onDelete)
                 }
             }
         }
     }
 
-    /** "⋮" button + its menu, sharing one Box so the popup anchors at the icon. */
+    /** "⋮" button + its menu, sharing one Box so the popup anchors at the icon. [menu] / [onMenu]: the
+     * row's own (a long press on the row opens it too). */
     @Composable
-    private fun RomMenuButton(rom: File, m: GbaTextMetrics, onRename: () -> Unit, onDelete: () -> Unit) {
-        var menu by remember { mutableStateOf(false) }
+    private fun RomMenuButton(rom: File, m: GbaTextMetrics, menu: Boolean, onMenu: (Boolean) -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
         Box {
-            Box(modifier = Modifier.clip(PixelRoundedShape(m.u * 3)).clickable { menu = true }.padding(m.u * 3)) {
+            Box(modifier = Modifier.clip(PixelRoundedShape(m.u * 3)).clickable { onMenu(true) }.padding(m.u * 3)) {
                 Icon(Icons.Filled.MoreVert, contentDescription = tr("ROM options"), tint = OptionColors.label, modifier = Modifier.size(m.lineHeight))
             }
-            RomOptionsMenu(menu, onDismiss = { menu = false }, rom = rom, m = m, onRename = onRename, onDelete = onDelete)
+            RomOptionsMenu(menu, onDismiss = { onMenu(false) }, rom = rom, m = m, onRename = onRename, onDelete = onDelete)
         }
+    }
+
+    /** A long press's menu: opens it with a light tick (the device's long-press haptic). */
+    @Composable
+    private fun longPressMenu(open: () -> Unit): () -> Unit {
+        val haptic = LocalHapticFeedback.current
+        return { haptic.performHapticFeedback(HapticFeedbackType.LongPress); open() }
+    }
+
+    /** A favorite's star, beside its title. */
+    @Composable
+    private fun FavoriteStar(size: androidx.compose.ui.unit.Dp) {
+        Icon(Icons.Filled.Star, contentDescription = tr("Favorite"), tint = OptionColors.favorite, modifier = Modifier.size(size))
+    }
+
+    private fun setFavorite(rom: File, on: Boolean) {
+        prefs.favoriteRoms = if (on) prefs.favoriteRoms + rom.absolutePath else prefs.favoriteRoms - rom.absolutePath
+        bump()
     }
 
     /** A card in the OPTION list-window look; the last-played ROM gets the
@@ -673,6 +842,8 @@ class LibraryActivity : ComponentActivity() {
         m: GbaTextMetrics,
         modifier: Modifier = Modifier,
         onLongClick: (() -> Unit)? = null,
+        /** Where D-pad UP goes from this card, if not the card above ([toHeader] for the top row). */
+        upTo: () -> FocusRequester? = noUp,
         onClick: () -> Unit,
         content: @Composable () -> Unit,
     ) {
@@ -681,27 +852,37 @@ class LibraryActivity : ComponentActivity() {
         OptionListWindow(
             m,
             modifier
-                .gbaFocusRing(focused, PixelRoundedShape(m.u * 4))
+                // The list window's own corner (OptionListWindow draws its frame at a 2u radius).
+                .gbaFocusRing(focused, PixelRoundedShape(m.u * 2))
+                .focusProperties { upTo()?.let { up = it } }
                 .combinedClickable(interactionSource = interaction, indication = null, onLongClick = onLongClick, onClick = onClick),
             fill = if (selected || focused) OptionColors.rowSelected else OptionColors.listFill,
         ) { content() }
     }
 
     @Composable
-    private fun RomRow(rom: File, m: GbaTextMetrics, small: GbaTextMetrics, onRename: () -> Unit, onDelete: () -> Unit) {
+    private fun RomRow(rom: File, m: GbaTextMetrics, small: GbaTextMetrics, onRename: () -> Unit, onDelete: () -> Unit, upTo: () -> FocusRequester? = noUp) {
         val isLast = rom.absolutePath == prefs.lastRomPath
+        val isNew = remember(rom, revision) { RomAdded.isNew(this@LibraryActivity, rom) }
         val display = romLabel(rom)
         // Existing progress indicator: does a .sav/.srm already exist for this ROM?
         val hasSave = remember(rom, revision) {
             SavesLocation.saveFor(this@LibraryActivity, prefs, rom).exists()
         }
-        RomCard(isLast, m, Modifier.fillMaxWidth(), onClick = { play(rom) }) {
+        val favorite = rom.absolutePath in prefs.favoriteRoms
+        // The ⋮ menu opens from a long press on the row too, like a grid tile.
+        var menu by remember { mutableStateOf(false) }
+        RomCard(isLast, m, Modifier.fillMaxWidth(), onLongClick = longPressMenu { menu = true }, upTo = upTo, onClick = { play(rom) }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CoverThumb(rom, m, modifier = Modifier.height(56.dp))
                 Spacer(Modifier.width(m.u * 6))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         GbaText(display, OptionColors.label, OptionColors.labelShadow, m, Modifier.weight(1f, fill = false))
+                        if (favorite) {
+                            Spacer(Modifier.width(m.u * 4))
+                            FavoriteStar(small.lineHeight)
+                        }
                         if (hasSave) {
                             Spacer(Modifier.width(m.u * 4))
                             Icon(
@@ -712,6 +893,10 @@ class LibraryActivity : ComponentActivity() {
                         if (isLast) {
                             Spacer(Modifier.width(m.u * 4))
                             GbaText(tr("PLAYING"), OptionColors.value, OptionColors.valueShadow, small)
+                        }
+                        if (isNew) {
+                            Spacer(Modifier.width(m.u * 4))
+                            OptionBadge(tk("NEW"), m, fill = OptionColors.newBadge, shadow = OptionColors.newBadgeShadow)
                         }
                         if (rom.absolutePath in unsupportedRoms) {
                             Spacer(Modifier.width(m.u * 4))
@@ -726,14 +911,15 @@ class LibraryActivity : ComponentActivity() {
                         OptionColors.muted, OptionColors.mutedShadow, small,
                     )
                 }
-                RomMenuButton(rom, m, onRename, onDelete)
+                RomMenuButton(rom, m, menu, { menu = it }, onRename, onDelete)
             }
         }
     }
 
     @Composable
-    private fun RomTile(rom: File, m: GbaTextMetrics, small: GbaTextMetrics, onRename: () -> Unit, onDelete: () -> Unit) {
+    private fun RomTile(rom: File, m: GbaTextMetrics, small: GbaTextMetrics, onRename: () -> Unit, onDelete: () -> Unit, upTo: () -> FocusRequester? = noUp) {
         val isLast = rom.absolutePath == prefs.lastRomPath
+        val isNew = remember(rom, revision) { RomAdded.isNew(this@LibraryActivity, rom) }
         val display = romLabel(rom)
         val hasSave = remember(rom, revision) {
             SavesLocation.saveFor(this@LibraryActivity, prefs, rom).exists()
@@ -743,7 +929,8 @@ class LibraryActivity : ComponentActivity() {
         Box {
             RomCard(
                 isLast, m, Modifier.fillMaxWidth(),
-                onLongClick = { menu = true },
+                onLongClick = longPressMenu { menu = true },
+                upTo = upTo,
                 onClick = { play(rom) },
             ) {
                 Column {
@@ -751,6 +938,10 @@ class LibraryActivity : ComponentActivity() {
                     Spacer(Modifier.height(m.u * 3))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         GbaText(display, OptionColors.label, OptionColors.labelShadow, small, Modifier.weight(1f))
+                        if (rom.absolutePath in prefs.favoriteRoms) {
+                            Spacer(Modifier.width(m.u * 2))
+                            FavoriteStar(small.lineHeight)
+                        }
                         if (hasSave) {
                             Spacer(Modifier.width(m.u * 2))
                             Icon(
@@ -759,12 +950,17 @@ class LibraryActivity : ComponentActivity() {
                             )
                         }
                     }
-                    if (rom.absolutePath in unsupportedRoms) {
+                    val support = when (rom.absolutePath) {
+                        in unsupportedRoms -> tk("NOT SUPPORTED") to OptionColors.value
+                        in partialRoms -> tk("PARTIALLY SUPPORTED") to OptionColors.muted
+                        else -> null
+                    }
+                    if (isNew || support != null) {
                         Spacer(Modifier.height(m.u * 2))
-                        OptionBadge(tk("NOT SUPPORTED"), m)
-                    } else if (rom.absolutePath in partialRoms) {
-                        Spacer(Modifier.height(m.u * 2))
-                        OptionBadge(tk("PARTIALLY SUPPORTED"), m, fill = OptionColors.muted)
+                        Row(horizontalArrangement = Arrangement.spacedBy(m.u * 2)) {
+                            if (isNew) OptionBadge(tk("NEW"), m, fill = OptionColors.newBadge, shadow = OptionColors.newBadgeShadow)
+                            support?.let { (label, fill) -> OptionBadge(label, m, fill = fill) }
+                        }
                     }
                 }
             }
@@ -777,7 +973,7 @@ class LibraryActivity : ComponentActivity() {
     @Composable
     private fun RecentTile(rom: File, m: GbaTextMetrics, small: GbaTextMetrics, onClick: () -> Unit) {
         val display = romLabel(rom)
-        RomCard(false, m, Modifier.width(112.dp), onClick = onClick) {
+        RomCard(false, m, Modifier.width(112.dp), upTo = toHeader, onClick = onClick) {
             Column {
                 CoverThumb(rom, m, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(m.u * 3))
@@ -795,7 +991,7 @@ class LibraryActivity : ComponentActivity() {
     @Composable
     private fun RecentListItem(rom: File, m: GbaTextMetrics, small: GbaTextMetrics, onClick: () -> Unit) {
         val display = romLabel(rom)
-        RomCard(false, m, Modifier.width(220.dp), onClick = onClick) {
+        RomCard(false, m, Modifier.width(220.dp), upTo = toHeader, onClick = onClick) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CoverThumb(rom, m, modifier = Modifier.height(44.dp))
                 Spacer(Modifier.width(m.u * 4))
@@ -834,14 +1030,25 @@ class LibraryActivity : ComponentActivity() {
     }
 
     /** Imported ROMs plus the linked folder's supported ones (from its last scan). */
-    private fun listRoms(): List<File> = RomFolder.libraryRoms(this, prefs)
+    /** The library, alphabetical. Every ROM it lists for the first time is dated ([RomAdded]): NEW
+     * unless setup is running or a newly linked folder's first scan brought it in. Any thread. */
+    private fun listRoms(): List<File> = RomFolder.libraryRoms(this, prefs).also { roms ->
+        RomAdded.record(this, roms, initial = setup != null || linkingFolder)
+    }
+
+    /** A folder was just linked: its first scan's ROMs are the library being set up, not new games. */
+    @Volatile private var linkingFolder = false
 
     private fun coverFile(rom: File): File = File(coversDir, "${rom.name}.png")
 
     private fun play(rom: File) {
         prefs.lastRomPath = rom.absolutePath
         prefs.pushRecentRom(rom.absolutePath)
-        startActivity(Intent(this, PokeDaisyActivity::class.java).putExtra(EXTRA_ROM, rom.absolutePath))
+        // Opened on the bottom screen, the game still goes to the top one (Screens.mainDisplayLaunch).
+        val onMain = Screens.mainDisplayLaunch(this)
+        val intent = Intent(this, PokeDaisyActivity::class.java).putExtra(EXTRA_ROM, rom.absolutePath)
+        if (onMain != null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent, onMain)
     }
 
     /** Blocking: fetches+caches [rom]'s cover over the network - its
@@ -1225,6 +1432,7 @@ class LibraryActivity : ComponentActivity() {
         if (path != prefs.romsFolder) {
             prefs.romsFolder = path
             RomFolder.clearCache(this)
+            linkingFolder = true
         }
         val s = setup
         s?.romsFolder = path
@@ -1299,6 +1507,8 @@ class LibraryActivity : ComponentActivity() {
             }
             RomFolder.checkImported(this)
             GameTitles.identify(this, listRoms())
+            // The linked folder's ROMs are dated now (as the library being set up, not NEW).
+            if (result.readable) linkingFolder = false
             val found = RomFolder.found(this, prefs).map(::romLabel)
             runOnUiThread {
                 scanningFolder = false

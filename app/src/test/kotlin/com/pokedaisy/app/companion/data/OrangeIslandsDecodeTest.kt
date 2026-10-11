@@ -47,6 +47,12 @@ class OrangeIslandsDecodeTest {
         val foe = t.battleMons[BATTLE_POS_OPPONENT_LEFT]
         assertEquals(409, foe.species)
         assertEquals("ONIX" to 8, speciesName(foe.species) to foe.level)
+        // FOE DETAILS' battle fields (vanilla layout): the player's Pikachu holds a Light Ball (202)
+        // and has Static (9); battle stats are the party struct's, nothing staged yet.
+        assertEquals(9 to 202, me.ability to me.item)
+        assertEquals(t.party[0].stats!!.stats.drop(1), me.stats!!.toList())
+        assertEquals(List(7) { 6 }, foe.statStages!!.toList())
+        assertEquals(listOf(14, 32, 17, 11, 12), foe.stats!!.toList())
         // The hack's 24th type: CRYSTL (23) / GROUND.
         assertEquals(listOf("Crystal", "Ground"), listOf(typeName(foe.type1), typeName(foe.type2)))
         // WATER doesn't touch CRYSTL; GRASS is super effective on both its types.

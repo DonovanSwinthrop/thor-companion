@@ -20,7 +20,8 @@ class SpeciesTypesTest {
             "Imperium" to speciesTypeDataImperium, "Lazarus" to speciesTypeDataLazarus,
             "OrangeIslands" to speciesTypeDataOrangeIslands, "Quetzal" to speciesTypeDataQuetzal,
             "RadicalRed" to speciesTypeDataRadicalRed, "Rogue" to speciesTypeDataRogue, "Rowe" to speciesTypeDataRowe,
-            "Seaglass" to speciesTypeDataSeaglass, "SoulGold" to speciesTypeDataSoulGold, "Tmt2" to speciesTypeDataTmt2,
+            "Seaglass" to speciesTypeDataSeaglass, "SoulGold" to speciesTypeDataSoulGold, "SwordShield" to speciesTypeDataSwordShield,
+            "Tmt2" to speciesTypeDataTmt2,
             "Unbound" to speciesTypeDataUnbound, "Yellow" to speciesTypeDataYellow,
         )) assertNull("$name has a species 0", table[0])
     }

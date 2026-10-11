@@ -112,7 +112,14 @@ data class Boss(
  * map sections - but their guides differ, so each game's [GuideTables] names
  * its own.
  */
-enum class GuideId { FIRERED, LEAFGREEN, EMERALD, RUBY, SAPPHIRE, HEART_AND_SOUL, UNBOUND, RADICAL_RED, ODYSSEY, GAIA, AMETHYST, AMETHYST_V141, CELIA, GLAZED, IMPERIUM, QUETZAL, LAZARUS, SEAGLASS, TMT2, SOULGOLD, ORANGE_ISLANDS }
+enum class GuideId {
+    FIRERED, LEAFGREEN, EMERALD, RUBY, SAPPHIRE, HEART_AND_SOUL, UNBOUND, RADICAL_RED, ODYSSEY, GAIA, AMETHYST, AMETHYST_V141, CELIA, GLAZED,
+    IMPERIUM, QUETZAL, LAZARUS, SEAGLASS, TMT2, SOULGOLD, ORANGE_ISLANDS,
+    // Recharged Yellow v1.9.7, and its earlier releases with their own area data (same guide text).
+    RECHARGED_YELLOW, RECHARGED_YELLOW_V180, RECHARGED_YELLOW_V190, RECHARGED_YELLOW_V194,
+    MARIOMON,
+    ULTRA_VIOLET, SWORD_SHIELD,
+}
 
 /** [live]'s guide on the native path; else by [game] (the QoL builds have no live tables). */
 fun guideId(game: GameKind?, live: GuideTables?): GuideId? = live?.guide ?: when (game) {
@@ -143,6 +150,11 @@ fun gameGuide(id: GuideId?): GameGuide? = when (id) {
     GuideId.TMT2 -> GUIDE_TMT2
     GuideId.SOULGOLD -> GUIDE_SOULGOLD
     GuideId.ORANGE_ISLANDS -> GUIDE_ORANGE_ISLANDS
+    GuideId.ULTRA_VIOLET -> GUIDE_ULTRA_VIOLET
+    GuideId.SWORD_SHIELD -> GUIDE_SWORD_SHIELD
+    GuideId.RECHARGED_YELLOW, GuideId.RECHARGED_YELLOW_V180, GuideId.RECHARGED_YELLOW_V190,
+    GuideId.RECHARGED_YELLOW_V194 -> GUIDE_RECHARGED_YELLOW
+    GuideId.MARIOMON -> GUIDE_MARIOMON
     null -> null
 }
 

@@ -42,6 +42,9 @@ enum class EvoScheme {
     /** pokeemerald-expansion 1.12+ (TMT2, Heart and Soul, SoulGold): EVO_LEVEL / TRADE / ITEM / ...
      * plus a list of {condition, arg1, arg2, arg3} (IF_GENDER, IF_TIME, IF_HOLD_ITEM, ...). */
     EXPANSION_PARAMS,
+    /** Recharged Yellow: vanilla's, plus 16 = use item [param] (its LINKING CORD) while holding the
+     * row's 4th u16 - the trade-with-an-item evolutions (POLIWHIRL + KING'S ROCK, ONIX + METAL COAT). */
+    RECHARGED_YELLOW,
 }
 
 /**
@@ -167,6 +170,7 @@ object DexDetails {
     @Volatile private var parents: Map<Int, List<EvoLink>>? = null
     private val levelUp = ConcurrentHashMap<Int, List<LevelMove>>()
     private val teach = ConcurrentHashMap<Int, List<TeachMove>>()
+    @Volatile private var tmhm: List<Int>? = null
     @Volatile private var movesFor: Pair<PokedexTables, GuideTables?>? = null
     @Volatile private var tmhmOk: Boolean? = null
     @Volatile private var spotsFor: GuideTables? = null
@@ -321,6 +325,7 @@ object DexDetails {
             EvoScheme.QUETZAL -> if (m <= 42) expansion(m, p) else null
             EvoScheme.ROWE -> if (m <= 31) expansion(m, p) else null
             EvoScheme.EXPANSION_PARAMS -> null
+            EvoScheme.RECHARGED_YELLOW -> vanilla(m, p) ?: if (m == 16) listOf(EvoReq.UseItem(p), EvoReq.Hold(extra)) else null
         } ?: listOf(EvoReq.Special)
         return EvoLink(from, target, reqs)
     }
@@ -480,7 +485,7 @@ object DexDetails {
         if (movesFor == key) return
         synchronized(this) {
             if (movesFor == key) return
-            levelUp.clear(); teach.clear(); tmhmOk = null
+            levelUp.clear(); teach.clear(); tmhmOk = null; tmhm = null
             movesFor = key
         }
     }
@@ -561,6 +566,16 @@ object DexDetails {
         return (0 until 58).filter { (bits[it / 8].toInt() shr (it % 8)) and 1 != 0 }.map { i ->
             TeachMove(if (i < 50) "TM%02d".format(i + 1) else "HM%02d".format(i - 49), u16le(moves, i * 2))
         }
+    }
+
+    /** gTMHMMoves: TM01..TM50 then HM01..HM08's moves; null = not read (or not checked) for [t]. */
+    fun tmhmMoves(t: PokedexTables): List<Int>? {
+        if (t.gen1 != null || t.tmhmMoves == 0L || t.tmhmLearnsets == 0L) return null
+        // The caches below are [t]'s (keeping the guide tables they were synced with, if [t]'s).
+        syncMoves(t, movesFor?.takeIf { it.first == t }?.second)
+        tmhm?.let { return it }
+        if (!tmhmChecks(t)) return null
+        return runCatching { rd(t.tmhmMoves, 58 * 2).let { raw -> List(58) { u16le(raw, it * 2) } } }.getOrNull()?.also { tmhm = it }
     }
 
     /** The TM tables hold what they should: TM01-04 FOCUS PUNCH, DRAGON CLAW, WATER PULSE, CALM MIND,

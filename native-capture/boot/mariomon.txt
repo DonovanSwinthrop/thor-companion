@@ -1,0 +1,20 @@
+# Super Mariomon (every release): its splash ("Too Many Productions", then POWERED BY) and title
+# take 3 x START like rhh_splash.txt, then CONTINUE and two B presses close the field's popups.
+# The user's save stands in WORLD 1-1 with nothing to talk to, so the presses are harmless. The
+# party is loaded by frame ~1100 (checked in every release; v1.3 and before get the v1.5.1 save
+# with SaveBlock1 cut to their size: scripts/trim_save_block1.py).
+wait 300
+press START
+wait 60
+press START
+wait 90
+press START
+wait 90
+press A
+wait 120
+press A
+wait 400
+press B
+wait 30
+press B
+wait 30

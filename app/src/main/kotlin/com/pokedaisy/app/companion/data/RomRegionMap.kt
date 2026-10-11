@@ -59,7 +59,7 @@ object RomRegionMap {
     private const val SCREEN_BYTES = 30 * 20 * 2
 
     /** Bump when the images change, so ROMs read before get new ones. */
-    private const val VERSION = 1
+    private const val VERSION = 2 // 2: junk Sevii screens dropped (Odyssey, Sword and Shield Ultimate Plus)
 
     /** Reads [rom] in the background and publishes its map as [current]. */
     fun load(filesDir: File, romKey: String, rom: File) {
@@ -136,6 +136,12 @@ object RomRegionMap {
         }
         val imageOf = mapOffs.map { distinct.indexOf(it) }
         val crops = screens.map { backdropCrop(it, pal[0]) }
+        // A Sevii screen with none of the backdrop border the main one has is FireRed's tilemap
+        // drawn with the hack's own tiles - junk (Sword and Shield Ultimate Plus redrew only Galar,
+        // yet its Isle of Armor / Crown Tundra sections still sit on those screens; Odyssey's are
+        // never shown). Dropped: their sections go on the main map, with nothing highlighted.
+        fun uncut(c: IntArray) = c[0] == 0 && c[1] == 0 && c[2] == 30 && c[3] == 20
+        val junk = screens.indices.filter { it != imageOf[0] && uncut(crops[it]) && !uncut(crops[imageOf[0]]) }.toSet()
         val images = screens.mapIndexed { i, img ->
             val (left, top, right, bottom) = crops[i]
             RomArt.Image((right - left) * 8, (bottom - top) * 8).also { out ->
@@ -172,10 +178,10 @@ object RomRegionMap {
             val y = u16(corners, i * 4 + 2)
             val w = u16(dims, i * 4)
             val h = u16(dims, i * 4 + 2)
-            val image = imageOf[regionOf(mapsec)]
+            val image = imageOf[regionOf(mapsec)].let { if (it in junk) imageOf[0] else it }
             // {0,0} is the tables' "not on the map" (dungeons, most buildings):
             // the map still shows, with nothing highlighted.
-            sections[mapsec] = if ((x == 0 && y == 0) || w == 0 || h == 0) {
+            sections[mapsec] = if ((x == 0 && y == 0) || w == 0 || h == 0 || imageOf[regionOf(mapsec)] in junk) {
                 MapSecInfo(name, image, 0, 0, 0, 0)
             } else {
                 MapSecInfo(name, image, x + GRID_OFFSET - crops[image][0], y + GRID_OFFSET - crops[image][1], w, h)
@@ -185,6 +191,7 @@ object RomRegionMap {
         // Each image's cursor grid (the first region drawn on it), kept only
         // if it names this ROM's own sections - else taps fall back to the rects.
         val layouts = images.indices.map { image ->
+            if (image in junk) return@map null
             val off = ptr(LIT_GRIDS[imageOf.indexOf(image)]) ?: return@map null
             val bytes = rom.read(off, 2 * GRID_W * GRID_H)
             if (bytes.size < 2 * GRID_W * GRID_H) return@map null
@@ -195,7 +202,13 @@ object RomRegionMap {
                 (0 until 2).map { l -> bytes.copyOfRange(l * GRID_W * GRID_H, (l + 1) * GRID_W * GRID_H) },
             )
         }
-        return Parsed(images, sections, layouts)
+        if (junk.isEmpty()) return Parsed(images, sections, layouts)
+        val kept = images.indices.filter { it !in junk }
+        return Parsed(
+            kept.map { images[it] },
+            sections.mapValues { (_, s) -> s.copy(region = kept.indexOf(s.region)) },
+            kept.map { layouts[it] },
+        )
     }
 
     /** A tilemap cut short of the whole 30x20 screen (Unbound's) ends, from its last whole row, in its top-left tile - the border's. */

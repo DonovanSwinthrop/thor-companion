@@ -172,7 +172,9 @@ class FfMusicRenderer(
         val code = if (romBytes.size >= 0xB0) String(romBytes, 0xAC, 4, Charsets.US_ASCII) else ""
         val retail = romBytes.size <= RETAIL_MAX_BYTES
         return when {
-            retail && (code.startsWith("BPR") || code.startsWith("BPG")) -> MapMusicFireRed.allSongIds.toList()
+            // Recharged Yellow is FireRed-sized, but its song ids aren't FireRed's: all its BGM, like a hack.
+            retail && (code.startsWith("BPR") || code.startsWith("BPG")) && !com.pokedaisy.app.companion.data.isRechargedYellowRom(romBytes) ->
+                MapMusicFireRed.allSongIds.toList()
             retail && (code == "BPEE" || code in EMERALD_LOCALIZED_CODES) -> MapMusicEmerald.allSongIds.toList()
             else -> songs.bgmSongIds
         }
@@ -330,11 +332,13 @@ class FfMusicRenderer(
      * game: null, as song 257 there could be anything.
      */
     private fun fanfareSongId(): Int? {
-        val code = runCatching {
-            java.io.RandomAccessFile(rom, "r").use { f -> f.seek(0xAC); ByteArray(3).also { f.readFully(it) } }
-        }.getOrNull()?.toString(Charsets.US_ASCII) ?: return null
-        return when (code) {
-            "BPR", "BPG" -> 257
+        val head = runCatching {
+            java.io.RandomAccessFile(rom, "r").use { f -> ByteArray(0x200).also { f.readFully(it) } }
+        }.getOrNull() ?: return null
+        // Recharged Yellow's song table is ordered like Emerald's: its sFanfares[0] (FANFARE_LEVEL_UP) is 367.
+        if (com.pokedaisy.app.companion.data.isRechargedYellowRom(head)) return 367
+        return when (String(head, 0xAC, 3, Charsets.US_ASCII)) {
+            "BPR", "BPG", "PUV" -> 257 // PUV: Ultra Violet, FireRed's song table
             "BPE", "AXV", "AXP" -> 367
             else -> null
         }

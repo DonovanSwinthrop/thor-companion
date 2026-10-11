@@ -126,8 +126,13 @@ fun PartyGrid(
     }
 }
 
-/** Wider than this (width / height), the party grid goes to three columns. */
-private const val WIDE_PARTY_ASPECT = 1.6f
+/**
+ * Wider than this (width / height), the party grid goes to three columns. The grids measured: the
+ * Thor's bottom screen ~1.4, a 4:3 screen (the Retroid Pocket Duo Lite's 1280x960) ~1.56 and up to
+ * ~1.75 with a bigger density or the status bar over the tabs - 1.6 put that one in three columns -
+ * and the Thor's 1920x1080 top screen 2.2+.
+ */
+private const val WIDE_PARTY_ASPECT = 2.0f
 
 /** A slot's tap: with the companion's click, or silent when the game makes its own sound. */
 internal fun Modifier.slotClickable(sound: Boolean, enabled: Boolean, onClick: () -> Unit): Modifier =
@@ -247,6 +252,19 @@ val ImperiumPartyPalette = FireRedPartyPalette.copy(
 )
 
 /**
+ * Super Mariomon (headless, its party grid with a selected, a low-HP, a fainted and empty slots):
+ * FireRed's slot in greens - mint boxes in a dark brown line, pale green in a lilac line under the
+ * cursor - the fainted slot FireRed's orange in its own darker line, empty slots the menu's wood
+ * planks (two browns) in the brown line. Text, HP bar and Poké Ball are FireRed's.
+ */
+val MariomonPartyPalette = FireRedPartyPalette.copy(
+    normal = PartySlotColors(Color(0xFF4A4239), Color(0xFFB5FFA5), Color(0xFF7BDE84), Color(0xFF42A521)),
+    selected = PartySlotColors(Color(0xFFA573FF), Color(0xFFC6F7B5), Color(0xFF84D694), Color(0xFF84D694)),
+    fainted = PartySlotColors(Color(0xFFA54A00), Color(0xFFD6A521), Color(0xFFC66B10), Color(0xFFA54A00)),
+    empty = PartySlotColors(Color(0xFF4A4239), Color(0xFFC69C7B), Color(0xFFC69C7B), Color(0xFFA57B63)),
+)
+
+/**
  * R.O.W.E. (headless, its party grid with a selected, a poisoned, a fainted, a low-HP and empty
  * slots): slate boxes in a white line, the cursor's box charcoal in red; a fainted slot looks like
  * any other (its FNT pill says it); empty slots are the charcoal grid in a white line. Its own
@@ -294,6 +312,31 @@ val SoulGoldPartyPalette = FireRedPartyPalette.copy(
     hpEmpty = HpBarColors(Color(0xFF848484), Color(0xFF848484)),
 )
 
+/**
+ * Sword and Shield Ultimate Plus (headless, its CFRU party grid with a selected, a fainted and
+ * empty slots): charcoal boxes in a black line with a cyan edge, the cursor's a little bluer in a
+ * white edge; fainted slots dark red with a deeper diagonal band in a pink edge, bright pink under
+ * the cursor; white text, green "HP" letters, a frameless bar on charcoal (the green flat, the
+ * yellow CFRU's), no Poké Ball; empty slots are the backdrop's dark stripes on red.
+ */
+val SwordShieldPartyPalette = FireRedPartyPalette.copy(
+    normal = PartySlotColors(Color(0xFF101010), Color(0xFF94FFFF), Color(0xFF212121), Color(0xFF212121), band = Color(0xFF212121)),
+    selected = PartySlotColors(Color(0xFFFFFFFF), Color(0xFF9CF7FF), Color(0xFF293131), Color(0xFF293131), band = Color(0xFF293131)),
+    fainted = PartySlotColors(Color(0xFFC63184), Color(0xFFFF94AD), Color(0xFF8C1821), Color(0xFF8C1821), band = Color(0xFF6B2121)),
+    selectedFainted = PartySlotColors(Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0xFFEF086B), Color(0xFFEF086B), band = Color(0xFFB50852)),
+    empty = flatSlot(Color(0xFFCEE7EF), Color(0xFF9C2121)),
+    text = Color.White, textShadow = Color(0xFF737373),
+    male = Color(0xFF00EFFF), maleShadow = Color(0xFF006B63),
+    female = Color(0xFFE73939), femaleShadow = Color(0xFF732131),
+    hpFrame = Color(0xFF212121), hpInner = Color(0xFF212121),
+    hpLabel = Color(0xFF00FF4A), hpLabelShade = Color(0xFF00FF4A),
+    hpGreen = HpBarColors(Color(0xFF18C621), Color(0xFF18C621)),
+    hpYellow = HpBarColors(Color(0xFFEFAD00), Color(0xFFFFDE00)),
+    hpRed = HpBarColors(Color(0xFFFF4A39), Color(0xFFFF9C9C)),
+    hpEmpty = HpBarColors(Color(0xFF737373), Color(0xFF737373)),
+    ball = mapOf('K' to Color.Transparent, 'R' to Color.Transparent, 'H' to Color.Transparent, 'W' to Color.Transparent),
+)
+
 /** A slot in one [fill] inside an [outline]: no separate edge, band or shade. */
 private fun flatSlot(outline: Color, fill: Color, text: Color? = null) =
     PartySlotColors(outline, fill, fill, fill, text = text, textShadow = if (text != null) Color.Transparent else null)
@@ -336,6 +379,8 @@ fun partyPaletteFor(game: GameKind): PartyPalette = when (game) {
     GameKind.YELLOW -> YellowPartyPalette
     GameKind.GLAZED, GameKind.QUETZAL -> GlazedPartyPalette
     GameKind.IMPERIUM -> ImperiumPartyPalette
+    GameKind.SWORD_SHIELD -> SwordShieldPartyPalette
+    GameKind.MARIOMON -> MariomonPartyPalette
     // Celia's and Too Many Types 2's slots are FireRed's own colors (only TMT2's backdrop differs).
     else -> FireRedPartyPalette
 }
@@ -368,8 +413,15 @@ fun partySlotStyleFor(game: GameKind): PartySlotStyle? = when (game) {
     GameKind.RADICAL_RED -> RadicalRedPartyStyle
     GameKind.ODYSSEY -> OdysseyPartyStyle
     GameKind.AMETHYST -> AmethystPartyStyle
+    // CFRU's slot in its own palette (RomArt's partyswsh/); SwordShieldPartyPalette until a scan has made it.
+    GameKind.SWORD_SHIELD -> SwordShieldPartyStyle
     // Orange Islands kept FireRed's party menu art (its own backdrop: theme's backdropColors).
     GameKind.ORANGE_ISLANDS -> FireRedPartyStyle
+    // Recharged Yellow's party menu is FireRed's, slots and teal backdrop alike (sampled headless: 216B63
+    // stripes, the bag FireRed's too). Its ROM changed the backdrop tiles, the status icons
+    // and the small font (RomArt finds only the slot frames and Poké Ball there), so the slot art comes from a
+    // FireRed ROM's scan; without one, FireRed's palette slot.
+    GameKind.RECHARGED_YELLOW -> FireRedPartyStyle
     else -> null
 }
 

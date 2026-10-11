@@ -46,6 +46,20 @@ class M4aSongsTest {
         assertEquals(0x08087824L, s.idleLoop)
     }
 
+    @Test fun rechargedYellowGccBuild() {
+        // Its gcc m4aSongNumStart; headless, Viridian City's BGM was song 526's header, and `call 0x08000B69 300`
+        // switched the BGM player to song 300's. Its song ids follow Emerald's table: sFanfares[0] is 367.
+        val dir = File(RomFileReader.FIRERED_REV1_PATH).parentFile
+        val s = songs(File(dir, "Recharged Yellow v1.9.7.gba").path)
+        assertEquals(0x08000B69L, s.songNumStart)
+        assertEquals(0x08B7EC90L, s.songTable)
+        assertEquals(526, s.songId("song_0e1da7c"))
+        for (v in listOf("1.8.0", "1.9.0", "1.9.4", "1.9.7")) {
+            assertTrue(v, isRechargedYellowRom(File(dir, "Recharged Yellow v$v.gba").readBytes().copyOf(0x200)))
+        }
+        assertFalse(isRechargedYellowRom(File(RomFileReader.FIRERED_REV1_PATH).readBytes().copyOf(0x200)))
+    }
+
     @Test fun newerExpansionBuilds() {
         // m4aSongNumStart with expansion's ident check (the third signature).
         val dir = File(RomFileReader.FIRERED_REV1_PATH).parentFile
@@ -77,5 +91,22 @@ class M4aSongsTest {
         assertEquals(0, M4aSongs.alt(559))
         // Both soundtracks are rendered in the background.
         assertTrue(559 in s.bgmSongIds && alt in s.bgmSongIds)
+    }
+
+    @Test fun superMariomon() {
+        // Agbcc's m4aSongNumStart in every release; the field's music in WORLD 1-1 (headless
+        // mgba_dump `bgm`: the BGM player's song header) is a BGM-player song of its table.
+        val dir = File(RomFileReader.FIRERED_REV1_PATH).parentFile
+        for ((file, header) in listOf(
+            "Super Mariomon v1.5.2-Anniversary.gba" to "song_0f8ecc8", "Super Mariomon v1.5.1-Anniversary.gba" to "song_0f8e7e0",
+            "Super Mariomon v1.3.gba" to "song_0f6c124", "Super Mariomon v1.2.2.gba" to "song_0f6c11c", "Super Mariomon v1.2.1.gba" to "song_0f6c13c",
+        )) {
+            val f = File(dir, file)
+            if (!f.isFile) continue
+            val s = assertNotNullAnd(M4aSongs.locate(f.readBytes()))
+            val id = s.songId(header)
+            assertNotNull(file, id)
+            assertTrue(file, id!! in s.bgmSongIds)
+        }
     }
 }

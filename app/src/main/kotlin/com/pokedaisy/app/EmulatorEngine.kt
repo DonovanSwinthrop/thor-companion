@@ -15,6 +15,7 @@ import com.pokedaisy.app.companion.data.FfMenuWatch
 import com.pokedaisy.app.companion.data.FfMusicKey
 import com.pokedaisy.app.companion.data.InProcessReader
 import com.pokedaisy.app.companion.data.RegionMapWatch
+import com.pokedaisy.app.companion.data.ShopWatch
 import java.io.File
 import java.nio.ByteBuffer
 import kotlin.math.roundToInt
@@ -78,7 +79,7 @@ class EmulatorEngine(
 
     /** What fast-forward sounds like (Settings: STEADY / SPED-UP / OFF). */
     @Volatile var ffMusicMode = FfMusicMode.STEADY
-    /** SMART: 1x while a menu screen or the region map is up ([FfMenuWatch], [RegionMapWatch]). */
+    /** SMART: 1x while a menu screen or the region map is up ([FfMenuWatch], [RegionMapWatch]) - not a shop's ([ShopWatch]). */
     @Volatile var ffMode = FfMode.SMART
 
     @Volatile var currentSlot = 0
@@ -566,7 +567,8 @@ class EmulatorEngine(
 
                 // GBA memory watchers; a Game Boy game has none of these screens / engines to read.
                 mapOpen = gba && RegionMapWatch.isOpen(InProcessReader)
-                menuOpen = gba && FfMenuWatch.tick(InProcessReader)
+                // A shop's screens count as the field: its clerk talks inside them (GitHub #41).
+                menuOpen = gba && FfMenuWatch.tick(InProcessReader) && !ShopWatch.isOpen(InProcessReader)
                 val speed = effectiveSpeed()
                 // FF the player still has on - SMART only holding it at 1x for a menu.
                 val ffWanted = requestedSpeed() > 1f

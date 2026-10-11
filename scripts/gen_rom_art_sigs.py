@@ -19,8 +19,8 @@ put it. Source: the pinned decomp builds (see CLAUDE.md) and their ELFs.
 
 Usage: scripts/gen_rom_art_sigs.py   (needs $DECOMPS/pokefirered and
 $DECOMPS/pokeemerald built once, and the hack ROMs at the *_ROM paths below - Unbound /
-Radical Red / Odyssey / Amethyst / Heart and Soul / Lazarus / Seaglass / SoulGold / Glazed / Imperium /
-Quetzal / R.O.W.E.; a missing one keeps its rows as they were. Re-run only if a pin changes)
+Radical Red / Odyssey / Amethyst / Sword and Shield Ultimate Plus / Heart and Soul / Lazarus / Seaglass / SoulGold / Glazed / Imperium /
+Quetzal / R.O.W.E. / Super Mariomon; a missing one keeps its rows as they were. Re-run only if a pin changes)
 """
 import os
 import subprocess
@@ -116,6 +116,9 @@ def unbound_symbols(rom):
 RADICAL_RED_ROM = GBA_DIR + "Pokemon - Radical Red (v4.1).gba"
 ODYSSEY_ROM = GBA_DIR + "Pokémon Odyssey (English) (v4.1.1).gba"
 AMETHYST_ROM = GBA_DIR + "Pokemon Amethyst (v1.3.0).gba"  # v1.4.1's status icons are the same bytes
+# Sword and Shield Ultimate Plus kept CFRU's party tiles, backdrop tilemap and slot tilemaps byte for
+# byte; only its palette (Galar red / charcoal) is its own (its status icons are Odyssey's).
+SWORD_SHIELD_ROM = GBA_DIR + "Sword and Shield Ultimate Plus (1.2.1.2).gba"
 
 
 def cfru_symbols(rom):
@@ -226,6 +229,19 @@ ROWE_ROM = os.path.expanduser("~/Downloads/Game ROMs & Emulation/gba/Pokémon R.
 def rowe_symbols(rom):
     return {"RegionPal": (0xFCE754, 0x40), "RegionGfx": (0xFCE794, 0), "RegionMap": (0xFCF604, 0),
             "KantoGfx": (0xFCFB34, 0), "KantoMap": (0xFD069C, 0), "SeviiGfx": (0xFD0B9C, 0), "SeviiMap": (0xFD17C4, 0)}
+
+
+# Super Mariomon v1.5.1-Anniversary (sha1 831fe0f9...): Emerald's region_map.c with its own
+# world map - LoadRegionMapGfx's literal pool (0x08154968, retail's code) holds the tiles,
+# tilemap and palette (the same bytes in all five releases) - and its own head for the map's
+# player icon in the BRENDAN slot (CreateRegionMapPlayerIcon's pool: an 11-colour palette packed
+# right before the 16x16 tiles; MAY's slot keeps retail's).
+MARIOMON_ROM = os.path.expanduser("~/Downloads/Game ROMs & Emulation/gba/Super Mariomon v1.5.1-Anniversary.gba")
+
+
+def mariomon_symbols(rom):
+    return {"RegionGfx": (0x834E48, 0), "RegionMap": (0x835C34, 0), "RegionPal": (0x834E08, 0x40),
+            "PlayerGfx": (0x835FD6, 0x80), "PlayerPal": (0x835FC0, 0x20)}
 
 
 def glazed_symbols(rom):
@@ -368,6 +384,8 @@ GAMES = {
     "RR": (RADICAL_RED_ROM, None, [("RR_STATUS_GFX", "StatusGfx", True)]),
     "OD": (ODYSSEY_ROM, None, [("OD_STATUS_GFX", "StatusGfx", True)]),
     "AM": (AMETHYST_ROM, None, [("AM_STATUS_GFX", "StatusGfx", True)]),
+    # (its status icons are Odyssey's bytes: OD_STATUS_GFX finds them)
+    "SS": (SWORD_SHIELD_ROM, None, [("SS_PARTY_BG_PAL", "PartyBgPal", True)]),
     "LZ": (LAZARUS_ROM, None, [
         ("LZ_REGION_GFX", "RegionGfx", True),
         ("LZ_REGION_PAL", "RegionPal", False),
@@ -426,6 +444,13 @@ GAMES = {
         ("GZ_PIC_FEMALE_PAL", "PicFemalePal", True),
         ("GZ_FONT_NORMAL", "FontNormal", False),
     ]),
+    "MM": (MARIOMON_ROM, None, [
+        ("MM_REGION_GFX", "RegionGfx", True),
+        ("MM_REGION_PAL", "RegionPal", False),
+        ("MM_REGION_MAP", "RegionMap", True),
+        ("MM_PLAYER_MARIO_GFX", "PlayerGfx", False),
+        ("MM_PLAYER_MARIO_PAL", "PlayerPal", False),
+    ]),
     "SG": (SOULGOLD_ROM, None, [
         ("SG_BAG_STARS_GFX", "BagStarsGfx", "smol"),
         ("SG_BAG_STARS_MAP", "BagStarsMap", "smol"),
@@ -476,8 +501,8 @@ def fireRed_symbols(p):
 
 
 # The binary hacks' made-up symbols (no ELF).
-ROM_SYMBOLS = {"UB": unbound_symbols, "RR": cfru_symbols, "OD": cfru_symbols, "AM": cfru_symbols, "LZ": lazarus_symbols, "SGL": seaglass_symbols, "SG": soulgold_symbols,
-               "GZ": glazed_symbols, "IMP": imperium_symbols, "QTZ": quetzal_symbols, "HNS": hns_symbols, "RW": rowe_symbols,
+ROM_SYMBOLS = {"UB": unbound_symbols, "RR": cfru_symbols, "OD": cfru_symbols, "AM": cfru_symbols, "SS": cfru_symbols, "LZ": lazarus_symbols, "SGL": seaglass_symbols, "SG": soulgold_symbols,
+               "GZ": glazed_symbols, "IMP": imperium_symbols, "QTZ": quetzal_symbols, "HNS": hns_symbols, "RW": rowe_symbols, "MM": mariomon_symbols,
                **{"EM" + lang: emerald_eu_symbols(lang) for lang in EMERALD_EU_ROMS},
                **{"FR" + lang: fireRed_symbols(p) for lang, p in fireRed_ports().items()}}
 

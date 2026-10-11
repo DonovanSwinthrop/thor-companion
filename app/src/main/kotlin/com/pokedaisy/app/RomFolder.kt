@@ -1,6 +1,7 @@
 package com.pokedaisy.app
 
 import android.content.Context
+import com.pokedaisy.app.companion.data.TelemetrySampler
 import java.io.File
 
 /**
@@ -174,15 +175,24 @@ object RomFolder {
 
     private fun cacheFile(context: Context) = File(context.filesDir, "rom-folder-scan.tsv")
 
+    /** Which games the companion supported when the cache was written ([CompanionSupport]'s sets). */
+    private val SUPPORTED = "#supported\t" + Integer.toHexString(
+        (TelemetrySampler.SUPPORTED_HACK_SHA1S.sorted() + TelemetrySampler.SUPPORTED_GB_SHA1S.sorted()).hashCode(),
+    )
+
     private fun load(context: Context): Map<String, Entry> {
         val f = cacheFile(context)
         if (!f.isFile) return emptyMap()
         return runCatching {
-            f.readLines().mapNotNull { line ->
+            val lines = f.readLines()
+            // Written before a game got its companion (an app update): only SUPPORTED answers still stand.
+            val stale = SUPPORTED !in lines
+            lines.mapNotNull { line ->
                 val p = line.split('\t')
                 if (p.size != 4) return@mapNotNull null
                 val size = p[1].toLongOrNull() ?: return@mapNotNull null
                 val modified = p[2].toLongOrNull() ?: return@mapNotNull null
+                if (stale && p[3] != "1") return@mapNotNull null
                 p[0] to Entry(size, modified, p[3] == "1" || p[3] == "M", partial = p[3] == "P", matched = p[3] == "M", tryable = p[3] == "T", legacy = p[3] == "0")
             }.toMap()
         }.getOrDefault(emptyMap())
@@ -192,7 +202,7 @@ object RomFolder {
         val f = cacheFile(context)
         val tmp = File(f.parentFile, "${f.name}.tmp")
         runCatching {
-            tmp.writeText(entries.entries.joinToString("") { (path, e) ->
+            tmp.writeText(SUPPORTED + "\n" + entries.entries.joinToString("") { (path, e) ->
                 "$path\t${e.size}\t${e.modified}\t${if (e.matched) "M" else if (e.supported) "1" else if (e.partial) "P" else if (e.tryable) "T" else "U"}\n"
             })
             tmp.renameTo(f)

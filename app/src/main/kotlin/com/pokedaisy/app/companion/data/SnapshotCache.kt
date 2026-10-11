@@ -17,7 +17,8 @@ import java.io.File
  */
 object SnapshotCache {
     private const val MAGIC = 0x50445343   // "PDSC"
-    private const val VERSION = 1
+    // 2: move ids (the move advice reads them).
+    private const val VERSION = 2
     private const val MAX_BYTES = 256 * 1024
 
     fun fileFor(state: File) = File(state.path + ".companion")
@@ -143,7 +144,7 @@ object SnapshotCache {
         nullableUTF(m.iconAsset)
         writeInt(m.genderSymbol); writeBoolean(m.isEgg)
         writeInt(m.moves.size)
-        m.moves.forEach { writeUTF(it.name); writeUTF(it.type); writeInt(it.pp); writeInt(it.power) }
+        m.moves.forEach { writeUTF(it.name); writeUTF(it.type); writeInt(it.pp); writeInt(it.power); writeInt(it.id) }
         matchups(m.weaknesses); matchups(m.resistances); matchups(m.immunities)
         writeBoolean(m.exp != null)
         m.exp?.let { writeLong(it.total); writeLong(it.levelStart); writeLong(it.nextLevel) }
@@ -158,7 +159,7 @@ object SnapshotCache {
         val types = List(count(4)) { readUTF() }
         val icon = nullableUTF()
         val gender = readInt(); val egg = readBoolean()
-        val moves = List(count(8)) { MoveView(readUTF(), readUTF(), readInt(), readInt()) }
+        val moves = List(count(8)) { MoveView(readUTF(), readUTF(), readInt(), readInt(), id = readInt()) }
         val weak = matchups(); val resist = matchups(); val immune = matchups()
         val exp = if (readBoolean()) ExpProgress(readLong(), readLong(), readLong()) else null
         val personality = readLong()

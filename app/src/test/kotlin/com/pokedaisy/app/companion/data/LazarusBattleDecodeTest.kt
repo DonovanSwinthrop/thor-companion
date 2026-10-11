@@ -26,6 +26,11 @@ class LazarusBattleDecodeTest {
         assertEquals(14 to 14, foe.type1 to foe.type2) // Electric
         assertEquals(listOf(39, 84, 45, 0), foe.moves.toList()) // Tail Whip, Thunder Shock, Growl
         assertEquals(listOf(30, 30, 40, 0), foe.pp.toList())
+        // FOE DETAILS' battle fields (expansion layout: u16 ability, item at +0x30).
+        assertEquals(217, me.ability) // Battery
+        assertEquals(9 to 0, foe.ability to foe.item) // Static, nothing held
+        assertEquals(t.party[0].stats!!.stats.drop(1), me.stats!!.toList())
+        assertEquals(listOf(11, 9, 15, 11, 9), foe.stats!!.toList())
     }
 
     @Test

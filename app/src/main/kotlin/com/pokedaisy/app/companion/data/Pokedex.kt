@@ -161,6 +161,11 @@ data class PokedexTables(
     val evolutions: Long = 0,
     /** Entry 1's category, as [pokedexMatchesRom] expects to read it: the game's own language. */
     val probeCategory: String = "SEED",
+    /** Entry 1's height / weight, and the species whose national number is 1 (BULBASAUR's 7 / 69 / 1;
+     * Super Mariomon's No.1 is PIRANHA P., species 906). */
+    val probeHeight: Int = 7,
+    val probeWeight: Int = 69,
+    val probeSpecies: Int = 1,
     /** Japanese Emerald's 0x1C-byte entries: categoryName[6], height at +6, weight +8, the text at +0x0C. */
     val entryCategoryLen: Int = 12,
     /** The entry starts with a pointer to its category's text, not the text (Quetzal's 12-byte entries). */
@@ -847,6 +852,164 @@ val POKEDEX_ORANGE_ISLANDS = POKEDEX_FIRERED_REV1.copy(
     evolutions = 0x08259754L,
 )
 
+/**
+ * Pokémon Ultra Violet: retail FireRed rev 0's tables at rev 0's addresses (its literal pools
+ * still name them), the dex text edited in place; TM / HM learnsets and moves rev 0's too.
+ */
+val POKEDEX_ULTRA_VIOLET = POKEDEX_ORANGE_ISLANDS.copy(
+    tmhmLearnsets = 0x08252BC8L,
+    tmhmMoves = 0x0845A5A4L,
+)
+
+/**
+ * Pokémon Sword and Shield Ultimate Plus v1.2.1.2 (CFRU): every table found through the
+ * literal-pool word FireRed 1.0 loads it from (entries 0x09A04D08, front pics 0x099EDB5C,
+ * palettes 0x09A02128, base stats 0x099AFBEC, species -> national 0x09A11274, ability names
+ * 0x094A9324 - 13 bytes, vanilla's length - and the evolutions at 0x099C2C06, CFRU's 16 rows a
+ * species: BULBASAUR's LEVEL 16 -> IVYSAUR at +0x80). SCORBUNNY is species 1105, No. 813.
+ * The flags are Unbound's CFRU ones: the save's seen bits are GROOKEY / SCORBUNNY / WOOLOO /
+ * ZACIAN, caught SCORBUNNY. Its POKéDEX (opened headless with FLAG_SYS_POKEDEX_GET 0x829 set)
+ * lists one dex in national order; three Gen 9 species carry No. 1018-1019, which have no entries.
+ */
+val POKEDEX_SWORD_SHIELD = PokedexTables(
+    entries = 0x09A04D08L,
+    frontPics = 0x099EDB5CL,
+    palettes = 0x09A02128L,
+    speciesInfo = 0x099AFBECL,
+    speciesToNational = 0x09A11274L,
+    abilityNames = 0x094A9324L,
+    footprints = 0,
+    hiddenAbilityOff = 0x1A,
+    categorySuffix = "Pokémon",
+    speciesCount = 1268,
+    nationalCount = 898,
+    // One dex, in national order from No001 (its table of contents has Numerical Mode only).
+    regionalCount = 898,
+    regionName = null,
+    flags = CFRU_DEX_FLAGS,
+    nationalMagicOff = -1,
+    evoLayout = EvoLayout(EvoScheme.CFRU, table = 0x099C2C06L, perMon = 16),
+)
+
+/**
+ * Pokémon Recharged Yellow: FireRed's dex - Kanto (1-151) + National, FireRed's species ids -
+ * with its own entry shape: categoryName[14] ("Seed"), height +0x0E, weight +0x10, the text
+ * +0x14 (no second page), 0x24 bytes. Found through BULBASAUR's text; the front pics / palettes /
+ * gBaseStats / ability names from the GF ROM header; sSpeciesToNationalPokedexNum, footprints,
+ * sTMHMLearnsets and sTMHMMoves are FireRed's bytes, moved. Its evolutions are FireRed's plus a
+ * LINKING CORD for every trade evolution ([EvoScheme.RECHARGED_YELLOW]). The flags are FireRed's
+ * struct Pokedex in SaveBlock2 with no anti-cheat copies (its GF header points both copies at one
+ * unused spot): owned 31 / seen 58 on the user's save, what its POKéDEX screen shows.
+ */
+private val POKEDEX_RECHARGED_YELLOW = PokedexTables(
+    entries = 0, frontPics = 0, palettes = 0, speciesInfo = 0, speciesToNational = 0, abilityNames = 0, footprints = 0,
+    entryCategoryLen = 14,
+    entryHeightOff = 0x0E,
+    entryDescOff = 0x14,
+    categorySuffix = "Pokémon",
+    probeCategory = "Seed",
+    flags = DexFlags(DexFlagBlock.SAVE_BLOCK_2, 0x5C, 0x28, 52),
+)
+
+private fun rechargedYellowDex(
+    entries: Long, frontPics: Long, palettes: Long, speciesInfo: Long, speciesToNational: Long, abilityNames: Long,
+    footprints: Long, evolutions: Long, tmhmLearnsets: Long, tmhmMoves: Long,
+) = POKEDEX_RECHARGED_YELLOW.copy(
+    entries = entries, frontPics = frontPics, palettes = palettes, speciesInfo = speciesInfo,
+    speciesToNational = speciesToNational, abilityNames = abilityNames, footprints = footprints,
+    evoLayout = EvoLayout(EvoScheme.RECHARGED_YELLOW, table = evolutions), tmhmLearnsets = tmhmLearnsets, tmhmMoves = tmhmMoves,
+)
+
+val POKEDEX_RECHARGED_YELLOW_V1_8_0 = rechargedYellowDex(
+    0x088540B0L, 0x086543F4L, 0x0864D848L, 0x08860750L, 0x0885CC40L, 0x085F7E9CL,
+    0x08857820L, 0x088658C0L, 0x0885EC18L, 0x08847F84L,
+)
+val POKEDEX_RECHARGED_YELLOW_V1_9_0 = rechargedYellowDex(
+    0x08853B6CL, 0x08651518L, 0x0864A95CL, 0x0886020CL, 0x0885C6FCL, 0x085F5060L,
+    0x088572DCL, 0x0886537CL, 0x0885E6D4L, 0x08847A40L,
+)
+val POKEDEX_RECHARGED_YELLOW_V1_9_4 = rechargedYellowDex(
+    0x08933B70L, 0x08731494L, 0x0872A8D8L, 0x08940210L, 0x0893C700L, 0x085F779CL,
+    0x089372E0L, 0x08945380L, 0x0893E6D8L, 0x08927A44L,
+)
+val POKEDEX_RECHARGED_YELLOW_V1_9_7 = rechargedYellowDex(
+    0x0895C980L, 0x08757534L, 0x08750978L, 0x08969020L, 0x08965510L, 0x0861D454L,
+    0x089600F0L, 0x0896E190L, 0x089674E8L, 0x08950854L,
+)
+
+/**
+ * Super Mariomon v1.5.1-Anniversary: vanilla-shaped tables (an old pokeemerald-expansion's), the
+ * Mario species from 906 numbered 1..155 (sSpeciesToNationalPokedexNum: PIRANHA P. 906 = No.1,
+ * BOB-OMB 912 = No.7). Its TATTLEDEX lists the WORLD dex (sHoennToNationalOrder, the national
+ * numbers in order but No.153 BOWSER): 152 entries in v1.5 (No.152 TIPTRON), 151 in v1.3 - the
+ * game's own list, all flags poked on headlessly. gPokedexEntries are 0x24 bytes by dex number
+ * (category[13] "Explosive", height +0xE 6 = 2'00", weight +0x10 104 = 22.9 lbs., text +0x14 -
+ * BOB-OMB's page as the game prints it, "CAPTURE" after the category); gBaseStats 0x24-byte
+ * entries (gender +0x12, egg groups +0x16, three u16 abilities +0x18, the third hidden); front
+ * pics two 64x64 frames. Flags: SaveBlock1 dexSeen / dexCaught, 20 bytes each (the header's
+ * seen offsets point there): the save's SEEN 2 / OWN 1 (No.1 seen, No.7 caught). Evolutions
+ * 10 {method, param, target, pad} rows per species, expansion's numbering (BOB-OMB: LEVEL 14 ->
+ * CHUCKYA); level-up learnsets {u16 move, u16 level} (BOB-OMB: Tackle 1, Charge 3, Self-Destruct 5,
+ * Ember 6 - its moves on the save).
+ */
+val POKEDEX_MARIOMON_V1_5_1 = PokedexTables(
+    entries = 0x087E9C28L,
+    frontPics = 0x08406E30L,
+    palettes = 0x083F4078L,
+    speciesInfo = 0x08439060L,
+    speciesToNational = 0x0843668EL,
+    abilityNames = 0x0842CB86L,
+    footprints = 0,
+    abilityNameLength = 17,
+    hiddenAbilityOff = 0x1C,
+    entryStride = 0x24,
+    entryCategoryLen = 14,
+    entryHeightOff = 0x0E,
+    entryDescOff = 0x14,
+    baseStats = BaseStatsLayout(stride = 0x24, genderOff = 0x12, eggGroupsOff = 0x16, abilitiesOff = 0x18, abilityU16 = true),
+    categorySuffix = "CAPTURE",
+    probeCategory = "Flytrap",
+    probeHeight = 10,
+    probeWeight = 70,
+    probeSpecies = 906,
+    evoLayout = EvoLayout(EvoScheme.EXPANSION, table = 0x0845877CL, perMon = 10),
+    levelUpLearnsets = 0x08473D9CL,
+    speciesCount = 1402,
+    nationalCount = 155,
+    regionalCount = 152,
+    regionName = "WORLD",
+    regionalOrder = 0x08437180L,
+    flags = DexFlags(DexFlagBlock.SAVE_BLOCK_1, seen = 0x3790, caught = 0x37A4, bytes = 20),
+    nationalMagicOff = 2,
+    nationalMagic = 0xDA,
+)
+
+val POKEDEX_MARIOMON_V1_5_2 = POKEDEX_MARIOMON_V1_5_1.copy(
+    entries = 0x087EA0DCL, frontPics = 0x084072C0L, palettes = 0x083F4508L, speciesInfo = 0x084394F0L,
+    speciesToNational = 0x08436B1EL, abilityNames = 0x0842D016L, regionalOrder = 0x08437610L,
+    evoLayout = EvoLayout(EvoScheme.EXPANSION, table = 0x08458C10L, perMon = 10), levelUpLearnsets = 0x08474230L,
+)
+
+/** v1.3 / v1.2.x: one species fewer (no TIPTRON: NUM_SPECIES 1401), 153 dex numbers, 151 in the WORLD list. */
+val POKEDEX_MARIOMON_V1_3 = POKEDEX_MARIOMON_V1_5_1.copy(
+    entries = 0x087CCE9CL, frontPics = 0x083F5B88L, palettes = 0x083E2E20L, speciesInfo = 0x08427A0CL,
+    speciesToNational = 0x08425090L, abilityNames = 0x0841B649L, regionalOrder = 0x08425B80L,
+    evoLayout = EvoLayout(EvoScheme.EXPANSION, table = 0x08446640L, perMon = 10), levelUpLearnsets = 0x08461C10L,
+    speciesCount = 1401, nationalCount = 153, regionalCount = 151,
+)
+
+val POKEDEX_MARIOMON_V1_2_2 = POKEDEX_MARIOMON_V1_3.copy(
+    entries = 0x087CCEB8L, frontPics = 0x083F5BC8L, palettes = 0x083E2E60L, speciesInfo = 0x08427A4CL,
+    speciesToNational = 0x084250D0L, abilityNames = 0x0841B689L, regionalOrder = 0x08425BC0L,
+    evoLayout = EvoLayout(EvoScheme.EXPANSION, table = 0x08446680L, perMon = 10), levelUpLearnsets = 0x08461C50L,
+)
+
+val POKEDEX_MARIOMON_V1_2_1 = POKEDEX_MARIOMON_V1_3.copy(
+    entries = 0x087CCED4L, frontPics = 0x083F5BE8L, palettes = 0x083E2E80L, speciesInfo = 0x08427A6CL,
+    speciesToNational = 0x084250F0L, abilityNames = 0x0841B6A9L, regionalOrder = 0x08425BE0L,
+    evoLayout = EvoLayout(EvoScheme.EXPANSION, table = 0x084466A0L, perMon = 10), levelUpLearnsets = 0x08461C70L,
+)
+
 /** Pokémon SoulGold v1.1.4: national 1-1025, 323 of them disabled (no species),
  * so its JOHTO dex is the other 702 in national order - a u32 list the game's own
  * national -> Johto lookup (0x081F0D84) scans: PIKACHU is its 023, CHIKORITA 133,
@@ -901,6 +1064,13 @@ val POKEDEX_SOULGOLD_V1_2B = POKEDEX_SOULGOLD_V1_2.copy(
     regionalOrder = 0x08F0EDDCL,
 )
 
+/** The third SoulGold v1.2 build (sha1 2be7c99a...): the same tables 0x18C / 0x190 later than the first. */
+val POKEDEX_SOULGOLD_V1_2C = POKEDEX_SOULGOLD_V1_2.copy(
+    speciesInfo = 0x087D5DC4L,
+    abilityNames = 0x08F0FDBCL,
+    regionalOrder = 0x08F0EF6CL,
+)
+
 /**
  * Whether the running ROM really has these tables where [t] says: entry 1 is
  * BULBASAUR's (SEED, 7 dm, 69 hg), species 1 is dex number 1 and its front
@@ -908,12 +1078,13 @@ val POKEDEX_SOULGOLD_V1_2B = POKEDEX_SOULGOLD_V1_2.copy(
  * retail configs, and must not get a dex built from someone else's tables.
  */
 fun pokedexMatchesRom(c: MemoryReader, t: PokedexTables): Boolean = runCatching {
-    val e = c.readCoreMemory(t.entries + t.entryStride, 0x10)
+    // Through the weight: 14-byte categories (R.O.W.E., Recharged Yellow) put it at +0x10.
+    val e = c.readCoreMemory(t.entries + t.entryStride, maxOf(0x10, t.entryHeightOff + 4))
     val category = if (t.entryCategoryPtr) Gen3Text.decode(c.readCoreMemory(u32le(e, 0), 13)) else Gen3Text.decode(e, 0, t.entryCategoryLen)
     category.equals(t.probeCategory, ignoreCase = true) &&
-        u16le(e, t.entryHeightOff) == 7 && u16le(e, t.entryHeightOff + 2) == 69 &&
-        u16le(c.readCoreMemory(t.speciesToNational, 2), 0) == 1 &&
-        u16le(c.readCoreMemory(t.frontPics + 8 + 6, 2), 0) == 1
+        u16le(e, t.entryHeightOff) == t.probeHeight && u16le(e, t.entryHeightOff + 2) == t.probeWeight &&
+        u16le(c.readCoreMemory(t.speciesToNational + 2L * (t.probeSpecies - 1), 2), 0) == 1 &&
+        u16le(c.readCoreMemory(t.frontPics + 8L * t.probeSpecies + 6, 2), 0) == t.probeSpecies
 }.getOrDefault(false)
 
 /** The save's dex progress, by national dex number (1-based). */
@@ -1181,6 +1352,18 @@ object PokedexSource {
         }.getOrNull()?.also { footprints[species] = it }
     }
 
+    private val abilityNames = ConcurrentHashMap<Pair<PokedexTables, Int>, String>()
+
+    /** Ability [id]'s name in the running game (battle INFO's FOE DETAILS); null = no table / unreadable. */
+    fun cachedAbilityName(t: PokedexTables, id: Int): String? = abilityNames[t to id]
+    fun abilityName(t: PokedexTables, id: Int): String? {
+        if (id <= 0 || t.abilityNames == 0L) return null
+        abilityNames[t to id]?.let { return it }
+        // The ROM's own casing, as the DEX shows it.
+        return runCatching { ability(t, id) }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+            ?.also { abilityNames[t to id] = it }
+    }
+
     private fun ability(t: PokedexTables, id: Int): String {
         val stride = if (t.abilityNameStride > 0) t.abilityNameStride else t.abilityNameLength
         return Gen3Text.decode(rd(t.abilityNames + id.toLong() * stride, t.abilityNameLength))
@@ -1355,6 +1538,30 @@ object Gen3Text {
         'F' to mapOf(0x57 to "BL", 0x58 to "O", 0x59 to "C", 0x2A to "º"),
         'I' to mapOf(0x5E to "PO", 0x5F to "Ké", 0x60 to "ME", 0x61 to "LL", 0x62 to "A", 0x63 to "E", 0x2A to "º"),
     )
+
+    // char -> the first byte drawing it, per table; ASCII ' is the game's ’ ("FARFETCH’D").
+    private fun reverse(t: CharArray): Map<Char, Int> = HashMap<Char, Int>().also { m ->
+        for (b in t.indices.reversed()) if (t[b] != UNKNOWN) m[t[b]] = b
+        m['\''] = 0xB4
+    }
+    private val westernRev by lazy { reverse(table) }
+    private val japaneseRev by lazy { reverse(japanese) }
+
+    /** [s] in the running game's bytes ([romLanguage]'s table), no terminator; null when a
+     * character has no byte of its own (the multi-letter glyphs aren't used). */
+    fun encode(s: String): ByteArray? {
+        val rev = if (romLanguage == 'J') japaneseRev else westernRev
+        return ByteArray(s.length) { i -> (rev[s[i]] ?: return null).toByte() }
+    }
+
+    /** Byte -> the byte of the same letter upper-cased (case-blind matching: FireRed's
+     * "BULBASAUR" is a hack table's "Bulbasaur"); Japanese has no case. */
+    fun foldTable(): IntArray {
+        val jp = romLanguage == 'J'
+        val chars = if (jp) japanese else table
+        val rev = if (jp) japaneseRev else westernRev
+        return IntArray(256) { b -> if (jp) b else rev[chars[b].uppercaseChar()] ?: b }
+    }
 
     /** Up to [max] bytes from [off], stopping at 0xFF; line breaks become
      * spaces, control codes (0xFC + args, e.g. a font change) and placeholders

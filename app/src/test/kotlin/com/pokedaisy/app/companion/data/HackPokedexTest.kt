@@ -69,11 +69,38 @@ class HackPokedexTest {
         assertFalse(dex.national)
     }
 
+    /** Recharged Yellow: FireRed's struct Pokedex with no anti-cheat copies - its POKéDEX said Seen 58 / Own 31,
+     * in every release (they all load the same save). */
+    @Test
+    fun `Recharged Yellow - seen 58, owned 31`() {
+        for ((key, cfg) in listOf(
+            "recharged_yellow_v180" to NATIVE_RECHARGED_YELLOW_V1_8_0, "recharged_yellow_v190" to NATIVE_RECHARGED_YELLOW_V1_9_0,
+            "recharged_yellow_v194" to NATIVE_RECHARGED_YELLOW_V1_9_4, "recharged_yellow" to NATIVE_RECHARGED_YELLOW_V1_9_7,
+        )) {
+            val dex = state(key, cfg)
+            assertEquals(key, 58 to 31, dex.seen.size to dex.caught.size)
+            assertTrue(dex.caught.containsAll(listOf(1, 8, 25, 27, 37))) // its party's
+            assertTrue(dex.seen.containsAll(dex.caught))
+            assertFalse(dex.national)
+        }
+    }
+
     /** Glazed: retail's flags (its own numbering, CHIMCHAR No.322); Imperium: SaveBlock1's, by national number. */
     @Test
     fun `Glazed and Imperium - the starter caught`() {
         assertEquals(setOf(322), state("glazed", NATIVE_GLAZED).caught)
         assertEquals(setOf(4), state("imperium", NATIVE_IMPERIUM).caught)
+    }
+
+    /** Super Mariomon: SaveBlock1 dexSeen / dexCaught by dex number - its TATTLEDEX said SEEN 2 / OWN 1. */
+    @Test
+    fun `Super Mariomon - PIRANHA P seen, BOB-OMB owned`() {
+        for ((key, cfg) in listOf("mariomon_v1_5_1" to NATIVE_MARIOMON_V1_5_1, "mariomon_v1_3" to NATIVE_MARIOMON_V1_3)) {
+            val dex = state(key, cfg)
+            assertEquals(setOf(1, 7), dex.seen)
+            assertEquals(setOf(7), dex.caught)
+            assertFalse(dex.national)
+        }
     }
 
     @Test
@@ -267,6 +294,15 @@ class HackPokedexTest {
     }
 
     @Test
+    fun `SoulGold v1_2 third build entries and the Johto order`() = roms("Soulgold (v1.2) (1).gba", GameKind.SOULGOLD, POKEDEX_SOULGOLD_V1_2C) { t ->
+        val pikachu = PokedexSource.entry(t, 25)!!
+        assertEquals(listOf("Static"), pikachu.abilities)
+        assertEquals("Lightning Rod", pikachu.hiddenAbility)
+        assertEquals("Fire Mouse", PokedexSource.entry(t, 155)!!.category)
+        assertEquals(136, PokedexSource.regionalOrder(t)!!.indexOf(155) + 1)
+    }
+
+    @Test
     fun `Seaglass entries`() = roms("Pokemon Emerald Seaglass (v3.0).gba", GameKind.EMERALD_SEAGLASS, POKEDEX_EMERALD_SEAGLASS) { t ->
         assertEquals(252, PokedexSource.speciesFor(t, 1)) // TREECKO
         assertEquals(1, PokedexSource.speciesFor(t, 141)) // BULBASAUR
@@ -324,6 +360,39 @@ class HackPokedexTest {
         assertEquals(listOf("BLAZE"), charmander.abilities)
     }
 
+    /** Recharged Yellow's entries: 14-byte categories, the game's own casing ("Seed", 2'04", 15.2 lbs. on its screen). */
+    @Test
+    fun `Recharged Yellow entries - every release`() {
+        for ((v, t) in listOf(
+            "1.8.0" to POKEDEX_RECHARGED_YELLOW_V1_8_0, "1.9.0" to POKEDEX_RECHARGED_YELLOW_V1_9_0,
+            "1.9.4" to POKEDEX_RECHARGED_YELLOW_V1_9_4, "1.9.7" to POKEDEX_RECHARGED_YELLOW_V1_9_7,
+        )) roms("Recharged Yellow v$v.gba", GameKind.RECHARGED_YELLOW, t) {
+            assertTrue(pokedexMatchesRom(PokedexSource.reader!!, t))
+            val bulbasaur = PokedexSource.entry(t, 1)!!
+            assertEquals("Seed" to (7 to 69), bulbasaur.category to (bulbasaur.heightDm to bulbasaur.weightHg))
+            assertTrue(bulbasaur.description.startsWith("It can go for days"))
+            assertEquals(listOf("Overgrow"), bulbasaur.abilities)
+            val pikachu = PokedexSource.entry(t, 25)!!
+            assertEquals(25 to "Mouse", pikachu.species to pikachu.category)
+        }
+    }
+
+    @Test
+    fun `Ultra Violet entries - FireRed rev 0's tables`() = roms("ultra-violet-v1.22.gba", GameKind.FIRERED, POKEDEX_ULTRA_VIOLET) { t ->
+        val charmander = PokedexSource.entry(t, 4)!!
+        assertEquals("LIZARD" to (6 to 85), charmander.category to (charmander.heightDm to charmander.weightHg))
+        assertEquals(listOf("BLAZE"), charmander.abilities)
+    }
+
+    @Test
+    fun `Sword and Shield entries - one national dex`() = roms("Sword and Shield Ultimate Plus (1.2.1.2).gba", GameKind.SWORD_SHIELD, POKEDEX_SWORD_SHIELD) { t ->
+        val scorbunny = PokedexSource.entry(t, 813)!!
+        assertEquals(1105 to "Rabbit", scorbunny.species to scorbunny.category)
+        assertEquals(3 to 45, scorbunny.heightDm to scorbunny.weightHg)
+        assertEquals(1105, PokedexSource.speciesFor(t, 813))
+        assertEquals("Seed", PokedexSource.entry(t, 1)!!.category)
+    }
+
     @Test
     fun `Imperium entries and the Hoenn order`() = roms("Emerald Imperium (v1.3.1).gba", GameKind.IMPERIUM, POKEDEX_IMPERIUM) { t ->
         assertEquals(252, PokedexSource.regionalOrder(t)!!.first())
@@ -337,6 +406,35 @@ class HackPokedexTest {
         val chimchar = PokedexSource.entry(t, 322)!!
         assertEquals(298 to "CHIMP", chimchar.species to chimchar.category)
         assertEquals(5 to 62, chimchar.heightDm to chimchar.weightHg)
+    }
+
+    /** Its TATTLEDEX: No.1 PIRANHA P. (species 906), BOB-OMB's page as the game prints it, the WORLD list's
+     * 152 (v1.5: ends at No.152 TIPTRON) / 151 (v1.3: No.151 SONIC). */
+    @Test
+    fun `Super Mariomon v1_5_1 entries and the WORLD list`() = roms("Super Mariomon v1.5.1-Anniversary.gba", GameKind.MARIOMON, POKEDEX_MARIOMON_V1_5_1) { t ->
+        mariomonV13 = false
+        assertTrue(pokedexMatchesRom(PokedexSource.reader, t))
+        assertEquals(906, PokedexSource.speciesFor(t, 1))
+        val bobomb = PokedexSource.entry(t, 7)!!
+        assertEquals(912 to "Explosive", bobomb.species to bobomb.category)
+        assertEquals(6 to 104, bobomb.heightDm to bobomb.weightHg)
+        assertTrue(bobomb.description.startsWith("A hot-tempered piece of munition."))
+        assertEquals(listOf(1, 2, 3), PokedexSource.regionalOrder(t)!!.take(3))
+        assertEquals(1060, PokedexSource.speciesFor(t, PokedexSource.regionalOrder(t)!!.last())) // TIPTRON
+    }
+
+    @Test
+    fun `Super Mariomon v1_3, v1_2_2, v1_2_1, v1_5_2 entries`() {
+        for ((file, t) in listOf("Super Mariomon v1.3.gba" to POKEDEX_MARIOMON_V1_3, "Super Mariomon v1.2.2.gba" to POKEDEX_MARIOMON_V1_2_2,
+                "Super Mariomon v1.2.1.gba" to POKEDEX_MARIOMON_V1_2_1, "Super Mariomon v1.5.2-Anniversary.gba" to POKEDEX_MARIOMON_V1_5_2)) {
+            mariomonV13 = t !== POKEDEX_MARIOMON_V1_5_2
+            roms(file, GameKind.MARIOMON, t) {
+                assertTrue(file, pokedexMatchesRom(PokedexSource.reader, t))
+                assertEquals("Explosive", PokedexSource.entry(t, 7)!!.category)
+                val last = PokedexSource.speciesFor(t, PokedexSource.regionalOrder(t)!!.last())
+                assertEquals(file, if (mariomonV13) "SONIC" else "TIPTRON", activeSpeciesNames[last])
+            }
+        }
     }
 
     /** Loads the user's ROM (or skips), checks [check], then that every entry

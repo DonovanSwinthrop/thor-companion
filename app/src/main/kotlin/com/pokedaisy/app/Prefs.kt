@@ -5,6 +5,7 @@ import com.pokedaisy.app.companion.FfMode
 import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.GridStrength
 import com.pokedaisy.app.companion.ScreenFilter
+import com.pokedaisy.app.companion.Smoothing
 import com.pokedaisy.app.companion.FfMusicMode
 
 /** Tiny SharedPreferences wrapper for app-level state. */
@@ -27,8 +28,16 @@ class Prefs(context: Context) {
 
     fun pushRecentRom(path: String) {
         val updated = (listOf(path) + recentRomPaths().filter { it != path }).take(RECENT_CAP)
-        p.edit().putString("recent_roms", updated.joinToString("\n")).apply()
+        p.edit().putString("recent_roms", updated.joinToString("\n")).putLong("played_$path", System.currentTimeMillis()).apply()
     }
+
+    /** When the ROM at [path] was last started (the library's LAST PLAYED order); 0 = never, or before this was kept. */
+    fun romLastPlayed(path: String): Long = p.getLong("played_$path", 0L)
+
+    /** The library's order: a [LibrarySort] id (NAME, LAST PLAYED, DATE ADDED). */
+    var librarySort: Int
+        get() = p.getInt("library_sort", 0)   // LibrarySort.NAME
+        set(v) = p.edit().putInt("library_sort", v).apply()
 
     /** 0 = list, 1 = grid — Library screen's view-mode toggle. */
     var libraryViewMode: Int
@@ -122,6 +131,12 @@ class Prefs(context: Context) {
         get() = p.getBoolean("show_foe_ivs", false)
         set(v) = p.edit().putBoolean("show_foe_ivs", v).apply()
 
+    /** Whether battle INFO opens with FOE DETAILS (the foe's side widened, GitHub #34) -
+     * its button's last state, kept across battles. */
+    var foeDetails: Boolean
+        get() = p.getBoolean("foe_details", false)
+        set(v) = p.edit().putBoolean("foe_details", v).apply()
+
     /** The CHEATS master switch (cheats/Cheats.kt): off, no cheat reaches the game,
      * whatever each one is set to. Off by default. */
     var cheatsEnabled: Boolean
@@ -179,6 +194,12 @@ class Prefs(context: Context) {
             ?: if (p.getBoolean("stretch_game", false)) GameAspect.STRETCH else GameAspect.ORIGINAL
         set(v) = p.edit().putString("game_aspect", v.name).remove("stretch_game").apply()
 
+    /** SCREEN > OVERLAY: the frame around the game, an [com.pokedaisy.app.overlay.OverlayChoice.key] - "" (none, the
+     * default), a built-in frame ("builtin:DAISY") or an imported overlay ("user:<its folder>"). */
+    var overlay: String
+        get() = p.getString("overlay", null) ?: ""
+        set(v) = p.edit().putString("overlay", v).apply()
+
     /** Whether the game's colours are shown as the GBA's own LCD showed them ([ScreenShaders.GBA_COLOR]). */
     var gbaColors: Boolean
         get() = p.getBoolean("gba_colors", false)
@@ -198,6 +219,11 @@ class Prefs(context: Context) {
     var gridStrength: GridStrength
         get() = GridStrength.entries.firstOrNull { it.name == p.getString("grid_strength", null) } ?: GridStrength.MEDIUM
         set(v) = p.edit().putString("grid_strength", v.name).apply()
+
+    /** SHADERS > SMOOTHING: xBRZ / xBR / ScaleFX over the game ([ScreenShaders.smoothingPasses]). */
+    var smoothing: Smoothing
+        get() = Smoothing.entries.firstOrNull { it.name == p.getString("smoothing", null) } ?: Smoothing.OFF
+        set(v) = p.edit().putString("smoothing", v.name).apply()
 
     /** Two screens: the game on the second display and the companion on the main one -
      * for a device whose main display is its bottom screen (see PokeDaisyActivity.syncPresentation). */
@@ -290,6 +316,26 @@ class Prefs(context: Context) {
     var hiddenRoms: Set<String>
         get() = p.getString("hidden_roms", null)?.split("\n")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
         set(v) = p.edit().putString("hidden_roms", v.joinToString("\n")).apply()
+
+    /** The player's favorite games (by path): first in the library whatever its order, a star on each. */
+    var favoriteRoms: Set<String>
+        get() = p.getString("favorite_roms", null)?.split("\n")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+        set(v) = p.edit().putString("favorite_roms", v.joinToString("\n")).apply()
+
+    /** Crash reports (CrashReports.kt): off until the player opts in. */
+    var crashReportsEnabled: Boolean
+        get() = p.getBoolean("crash_reports_enabled", false)
+        set(v) = p.edit().putBoolean("crash_reports_enabled", v).apply()
+
+    /** The one-time "send crash reports?" ask was shown (answered or not) - never again. */
+    var crashReportsAsked: Boolean
+        get() = p.getBoolean("crash_reports_asked", false)
+        set(v) = p.edit().putBoolean("crash_reports_asked", v).apply()
+
+    /** App opens (process starts) so far - the ask waits for the third. */
+    var appOpenCount: Int
+        get() = p.getInt("app_open_count", 0)
+        set(v) = p.edit().putInt("app_open_count", v).apply()
 
     /** First-time setup finished or skipped; it only shows while this is false and the library is empty. */
     /** The Library's one-time EXPAND introduction ([com.pokedaisy.app.companion.ui.ExpandIntro]) has been answered. */

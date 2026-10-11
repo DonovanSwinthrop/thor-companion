@@ -29,9 +29,14 @@ local.mk
 keystore.properties
 *.jks
 *.keystore
+<<<<<<< HEAD
 *.pem
 *.p12
 .env
+=======
+# Firebase config for crash reports (CrashReports.kt): kept out of this public repo,
+# put it in app/ locally; the release workflow writes it from a secret.
+>>>>>>> origin/feat/crashlytics-ci
 google-services.json
 
 # Gradle / Android build outputs
@@ -53,3 +58,6 @@ build/
 __pycache__/
 .DS_Store
 .claude/settings.local.json
+
+# make release-apk output
+/dist/

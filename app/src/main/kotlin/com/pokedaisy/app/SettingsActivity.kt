@@ -12,13 +12,19 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import com.pokedaisy.app.overlay.OverlayChoice
+import com.pokedaisy.app.overlay.OverlayStore
+import com.pokedaisy.app.overlay.overlayChoices
+import com.pokedaisy.app.overlay.overlayLabel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -114,7 +120,7 @@ import com.pokedaisy.app.companion.ui.drawPixelRoundRect
  */
 class SettingsActivity : ComponentActivity() {
 
-    private enum class Screen { HOME, HOTKEYS, CONTROLS, SHADERS, FOLDERS, COVER_ART, HIDDEN, ACHIEVEMENTS, CHEATS, CHEAT_ADD, LICENSES }
+    private enum class Screen { HOME, HOTKEYS, CONTROLS, SHADERS, OVERLAYS, FOLDERS, COVER_ART, HIDDEN, ACHIEVEMENTS, CHEATS, CHEAT_ADD, LICENSES }
 
     private lateinit var prefs: Prefs
     private var screen by mutableStateOf(Screen.HOME)
@@ -182,13 +188,43 @@ class SettingsActivity : ComponentActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (capturing == null && capturingCtrl == null) return super.onKeyDown(keyCode, event)
         if (keyCode == KeyEvent.KEYCODE_BACK) { cancelCapture(); return true }
-        if (keyCode !in captured) captured = captured + keyCode
-        stillHeld.add(keyCode)
+        captureDown(keyCode)
         return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         if (capturing == null && capturingCtrl == null) return super.onKeyUp(keyCode, event)
+        captureUp(keyCode)
+        return true
+    }
+
+    // Analog L2 / R2 (Retroid's triggers send no keys): captured as BUTTON_L2 / R2, the keys the game
+    // screen turns them into.
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if ((capturing == null && capturingCtrl == null) || !event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
+            return super.dispatchGenericMotionEvent(event)
+        }
+        captureTrigger(KeyEvent.KEYCODE_BUTTON_L2, maxOf(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE)))
+        captureTrigger(KeyEvent.KEYCODE_BUTTON_R2, maxOf(
+            event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS),
+            event.getAxisValue(MotionEvent.AXIS_THROTTLE),
+        ))
+        return true
+    }
+
+    private fun captureTrigger(keyCode: Int, value: Float) {
+        val down = value > 0.5f
+        if (down == (keyCode in stillHeld)) return
+        if (down) captureDown(keyCode) else captureUp(keyCode)
+    }
+
+    private fun captureDown(keyCode: Int) {
+        if (keyCode !in captured) captured = captured + keyCode
+        stillHeld.add(keyCode)
+    }
+
+    private fun captureUp(keyCode: Int) {
+        if (capturing == null && capturingCtrl == null) return
         stillHeld.remove(keyCode)
         if (stillHeld.isEmpty() && captured.isNotEmpty()) {
             capturing?.let { action ->
@@ -201,7 +237,6 @@ class SettingsActivity : ComponentActivity() {
             revision++
             cancelCapture()
         }
-        return true
     }
 
     private fun cancelCapture() {
@@ -229,6 +264,7 @@ class SettingsActivity : ComponentActivity() {
                         Screen.HOTKEYS -> tk("HOTKEYS")
                         Screen.CONTROLS -> tk("GAME BUTTONS")
                         Screen.SHADERS -> tk("SHADERS")
+                        Screen.OVERLAYS -> tk("OVERLAY")
                         Screen.FOLDERS -> tk("FOLDERS")
                         Screen.COVER_ART -> tk("COVER ART")
                         Screen.HIDDEN -> tk("HIDDEN GAMES")
@@ -249,6 +285,7 @@ class SettingsActivity : ComponentActivity() {
                     Screen.HOTKEYS -> HotkeysScreen(m, small)
                     Screen.CONTROLS -> ControlsScreen(m, small)
                     Screen.SHADERS -> ShadersScreen(m)
+                    Screen.OVERLAYS -> OverlaysScreen(m, small)
                     Screen.FOLDERS -> FoldersScreen(m, small)
                     Screen.COVER_ART -> CoverArtScreen(m, small)
                     Screen.HIDDEN -> HiddenScreen(m, small)
@@ -333,6 +370,55 @@ class SettingsActivity : ComponentActivity() {
                 OptionConfirm(title, message, tk("OK"), m, onConfirm = { cheatNotice = null }, onDismiss = { cheatNotice = null }, cancelLabel = null)
             }
 
+            overlayNotice?.let { (title, message) ->
+                OptionConfirm(title, message, tk("OK"), m, onConfirm = { overlayNotice = null }, onDismiss = { overlayNotice = null }, cancelLabel = null)
+            }
+
+            overlayNeeds?.let { need ->
+                OptionConfirm(
+                    title = tk("PICK THE IMAGE"),
+                    message = tr("{0} draws {1}, which wasn't picked with it. Pick {1} next: it's usually beside the .cfg or in a folder next to it.", need.cfg, need.image),
+                    confirmLabel = tk("PICK"),
+                    m = m,
+                    onDismiss = { overlayNeeds = null; overlayPending = null },
+                    onConfirm = { overlayNeeds = null; pickOverlayImage.launch(arrayOf("image/*")) },
+                )
+            }
+
+            if (removingAllOverlays) {
+                OptionConfirm(
+                    title = tk("REMOVE ALL OVERLAYS?"),
+                    message = tr("Every imported overlay ({0}) is deleted from this device. The built-in ones stay.", overlayStore.list().size),
+                    confirmLabel = tk("REMOVE ALL"),
+                    m = m,
+                    onDismiss = { removingAllOverlays = false },
+                    onConfirm = {
+                        removingAllOverlays = false
+                        overlayStore.deleteAll()
+                        if (OverlayChoice.of(prefs.overlay) is OverlayChoice.Imported) prefs.overlay = OverlayChoice.None.key
+                        overlayRemoveMode = false
+                        revision++
+                    },
+                )
+            }
+
+            removingOverlay?.let { (id, label) ->
+                OptionConfirm(
+                    title = tk("REMOVE OVERLAY?"),
+                    message = label,
+                    confirmLabel = tk("REMOVE"),
+                    m = m,
+                    onDismiss = { removingOverlay = null },
+                    onConfirm = {
+                        removingOverlay = null
+                        overlayStore.delete(id)
+                        if (prefs.overlay == OverlayChoice.Imported(id).key) prefs.overlay = OverlayChoice.None.key
+                        if (overlayStore.list().isEmpty()) overlayRemoveMode = false
+                        revision++
+                    },
+                )
+            }
+
             deletingFile?.let { f ->
                 OptionConfirm(
                     title = tk("DELETE FILE?"),
@@ -351,7 +437,7 @@ class SettingsActivity : ComponentActivity() {
         when {
             screen == Screen.CHEAT_ADD -> screen = Screen.CHEATS
             screen == Screen.HOME || (screen == Screen.CHEATS && cheatsOnly) || (screen == Screen.CONTROLS && controlsOnly) -> finish()
-            else -> { cheatRemoveMode = false; screen = Screen.HOME }
+            else -> { cheatRemoveMode = false; overlayRemoveMode = false; screen = Screen.HOME }
         }
     }
 
@@ -431,6 +517,8 @@ class SettingsActivity : ComponentActivity() {
             SettingRow(tk("ASPECT"), aspectLabel(prefs.gameAspect)) { aspectPicker = true },
             // FILTER (LCD / LCD PAPER / SCANLINES / CRT) and GBA COLORS, on their own page.
             SettingRow(tk("SHADERS"), prefs.screenFilter.label) { screen = Screen.SHADERS },
+            // A frame around the game: the built-in ones and imported RetroArch overlays, on their own page.
+            SettingRow(tk("OVERLAY"), overlayLabel(overlayChoices(overlayStore), prefs.overlay)) { screen = Screen.OVERLAYS },
             // One screen held upright: the companion along the bottom, or right under the game (the touch pad below it).
             SettingRow(tk("COMPANION"), portraitPlaceLabel(prefs.portraitCompanionUnderGame)) {
                 prefs.portraitCompanionUnderGame = !prefs.portraitCompanionUnderGame
@@ -487,6 +575,11 @@ class SettingsActivity : ComponentActivity() {
                     L10n.apply(prefs.appLanguage, null)
                 }
             },
+            // Opt-in crash reports (CrashReports.kt); only in builds that can send them.
+            SettingRow(tk("CRASH REPORTS"), onOff(prefs.crashReportsEnabled)) {
+                CrashReports.setEnabled(prefs, !prefs.crashReportsEnabled)
+                revision++
+            }.takeIf { CrashReports.available },
             // Tap: look for a newer release on GitHub now.
             SettingRow(tk("VERSION"), if (updates.checking) tk("CHECKING…") else BuildConfig.VERSION_NAME) { updates.check(manual = true) },
             // The GPL's notices and every bundled component's license.
@@ -523,6 +616,7 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     private fun ShadersScreen(m: GbaTextMetrics) {
         @Suppress("UNUSED_EXPRESSION") revision
+        val smoothingAvailable = remember { GlCaps.gles3(this) }
         val rows = listOf(
             // NONE / LCD grid / LCD PAPER / SCANLINES / CRT.
             // Each tap steps to the next filter, like the companion's.
@@ -534,6 +628,13 @@ class SettingsActivity : ComponentActivity() {
             SettingRow(tk("GRID"), prefs.gridStrength.label, enabled = prefs.screenFilter.hasGrid) {
                 if (prefs.screenFilter.hasGrid) {
                     prefs.gridStrength = prefs.gridStrength.next()
+                    revision++
+                }
+            },
+            // OFF / xBRZ / xBR / SCALEFX, cycling too: smooths the game's edges before FILTER (the game only).
+            SettingRow(tk("SMOOTHING"), if (smoothingAvailable) prefs.smoothing.label else tk("N/A"), enabled = smoothingAvailable) {
+                if (smoothingAvailable) {
+                    prefs.smoothing = prefs.smoothing.next()
                     revision++
                 }
             },
@@ -552,6 +653,139 @@ class SettingsActivity : ComponentActivity() {
             OptionListWindow(m, Modifier.fillMaxWidth().weight(1f, fill = false)) {
                 GroupedRows(rows, m, cursor = -1, onClick = { rows[it].onClick() })
             }
+        }
+    }
+
+    // ---- overlays -----------------------------------------------------------
+
+    /** SCREEN > OVERLAY's imports (overlay/Overlays.kt), beside the game's other files. */
+    private val overlayStore by lazy { OverlayStore(filesRoot) }
+    private var overlayRemoveMode by mutableStateOf(false)
+    /** An import's result to show (title, message). */
+    private var overlayNotice by mutableStateOf<Pair<String, String>?>(null)
+    /** A .cfg picked without its image: asks for it ([pickOverlayImage]); [overlayPending] holds what was picked. */
+    private var overlayNeeds by mutableStateOf<OverlayStore.Result.NeedsImage?>(null)
+    private var overlayPending: List<OverlayStore.Picked>? = null
+    /** The imported overlay (id, label) REMOVE asks about. */
+    private var removingOverlay by mutableStateOf<Pair<String, String>?>(null)
+    /** REMOVE ALL's confirm is up. */
+    private var removingAllOverlays by mutableStateOf(false)
+
+    private val importOverlayFiles = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) importOverlays(uris, emptyList())
+    }
+    private val pickOverlayImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val pending = overlayPending
+        overlayPending = null
+        if (uri != null && pending != null) importOverlays(listOf(uri), pending)
+    }
+
+    /**
+     * OVERLAY: NONE and the built-in frames, then the player's imports - tap one to use it (the game shows it at
+     * once from the companion's SETTINGS, or when it next opens from here). IMPORT FILE takes RetroArch overlays
+     * (.cfg + its PNG, a .zip of them) and PNGs; REMOVE turns the imports' taps into removes.
+     */
+    @Composable
+    private fun OverlaysScreen(m: GbaTextMetrics, small: GbaTextMetrics) {
+        @Suppress("UNUSED_EXPRESSION") revision
+        val choices = overlayChoices(overlayStore)
+        val current = choices.firstOrNull { it.first.key == prefs.overlay }?.first?.key ?: OverlayChoice.None.key
+        val imported = choices.filter { it.first is OverlayChoice.Imported }
+        fun pick(c: OverlayChoice): () -> Unit = { prefs.overlay = c.key; revision++ }
+        val rows = buildList {
+            add(groupTitle(tk("BUILT-IN")))
+            choices.filter { it.first !is OverlayChoice.Imported }.forEach { (c, label) ->
+                add(SettingRow(label, tk("ON").takeIf { c.key == current }, onClick = pick(c)))
+            }
+            add(groupTitle(tk("IMPORTED")))
+            if (imported.isEmpty()) add(SettingRow(tk("NONE YET: IMPORT FILE BELOW"), null, enabled = false) {})
+            imported.forEach { (c, label) ->
+                val id = (c as OverlayChoice.Imported).id
+                if (overlayRemoveMode) add(SettingRow(label, tk("REMOVE")) { removingOverlay = id to label })
+                else add(SettingRow(label, tk("ON").takeIf { c.key == current }, onClick = pick(c)))
+            }
+        }
+        Column(Modifier.fillMaxSize()) {
+            Hint(
+                tr(
+                    "A frame around the game. {0} and {1} are PokéDaisy's own. {2} adds yours: a RetroArch overlay (.cfg with its PNG), a .zip of them, or a PNG with a see-through screen.",
+                    tr("DAISY"), tr("BEZEL"), tr("IMPORT FILE"),
+                ),
+                m, small,
+            )
+            OptionListWindow(m, Modifier.fillMaxWidth().weight(1f)) {
+                GroupedRows(rows, m, cursor = -1, onClick = { rows[it].onClick() })
+            }
+            Spacer(Modifier.height(m.u * 4))
+            Row(horizontalArrangement = Arrangement.spacedBy(m.u * 4)) {
+                OptionButton(tk("IMPORT FILE"), m, emphasis = true, onClick = {
+                    overlayRemoveMode = false
+                    importOverlayFiles.launch(arrayOf("*/*"))
+                })
+                Spacer(Modifier.weight(1f))
+                if (imported.isNotEmpty()) {
+                    // REMOVE's mode: one tap per overlay, or all of them at once (asked first).
+                    if (overlayRemoveMode) OptionButton(tk("REMOVE ALL"), m, onClick = { removingAllOverlays = true })
+                    OptionButton(if (overlayRemoveMode) tk("DONE") else tk("REMOVE"), m, onClick = { overlayRemoveMode = !overlayRemoveMode })
+                }
+            }
+        }
+    }
+
+    /** Reads the picked files (plus [earlier] ones, waiting for their image) and imports them, off the UI thread. */
+    private fun importOverlays(uris: List<Uri>, earlier: List<OverlayStore.Picked>) {
+        Thread {
+            var tooBig = false
+            val picked = earlier + uris.mapNotNull { uri ->
+                val name = RomUris.displayName(this, uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: return@mapNotNull null
+                val bytes = runCatching { contentResolver.openInputStream(uri)?.use { readCapped(it, MAX_OVERLAY_FILE) } }.getOrNull()
+                if (bytes == null) { tooBig = true; return@mapNotNull null }
+                // A real path lets a .cfg's images be read from beside it (with All files access).
+                OverlayStore.Picked(name, bytes, RomUris.originalPath(this, uri)?.takeIf { it.startsWith("/") })
+            }
+            val result = when {
+                picked.isNotEmpty() -> overlayStore.import(picked)
+                tooBig -> OverlayStore.Result.Failed(OverlayStore.Reason.TOO_BIG)
+                else -> OverlayStore.Result.Failed(OverlayStore.Reason.NOTHING_USABLE)
+            }
+            runOnUiThread { onOverlaysImported(result, picked) }
+        }.start()
+    }
+
+    private fun onOverlaysImported(result: OverlayStore.Result, picked: List<OverlayStore.Picked>) {
+        when (result) {
+            is OverlayStore.Result.Imported -> {
+                val skipped = if (result.skipped > 0) " " + tr("{0} couldn't be used: an image missing, or not a PNG.", result.skipped) else ""
+                overlayNotice = if (result.ids.size == 1) {
+                    // One new overlay: used at once.
+                    val c = OverlayChoice.Imported(result.ids.first())
+                    prefs.overlay = c.key
+                    tk("OVERLAY ADDED") to tr("{0} is on. Games show it from now on.", overlayLabel(overlayChoices(overlayStore), c.key)) + skipped
+                } else {
+                    tk("OVERLAYS ADDED") to tr("{0} overlays added. Tap one to use it.", result.ids.size) + skipped
+                }
+            }
+            is OverlayStore.Result.NeedsImage -> {
+                overlayPending = picked
+                overlayNeeds = result
+            }
+            is OverlayStore.Result.Failed -> overlayNotice = tk("NOT AN OVERLAY") to when (result.reason) {
+                OverlayStore.Reason.TOO_BIG -> tr("That file is too big for an overlay.")
+                OverlayStore.Reason.NOTHING_USABLE -> tr("Pick a RetroArch overlay (.cfg with its image), a .zip of them, or a PNG with a see-through screen.")
+            }
+        }
+        revision++
+    }
+
+    /** All of [input], or null once it passes [limit] bytes. */
+    private fun readCapped(input: java.io.InputStream, limit: Long): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) return out.toByteArray()
+            out.write(buf, 0, n)
+            if (out.size() > limit) return null
         }
     }
 
@@ -1274,6 +1508,8 @@ class SettingsActivity : ComponentActivity() {
         const val SCREEN_CONTROLS = "CONTROLS"
         /** Cheat files are text; anything bigger isn't one. */
         const val MAX_CHEAT_FILE = 1 shl 20
+        /** One picked overlay file at most (read into memory; a pack of a few 4K borders is ~20 MB). */
+        const val MAX_OVERLAY_FILE = 64L * 1024 * 1024
 
         private val cheatCrcs = java.util.concurrent.ConcurrentHashMap<String, String>()
 

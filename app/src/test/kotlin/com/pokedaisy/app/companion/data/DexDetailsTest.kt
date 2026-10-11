@@ -67,6 +67,24 @@ class DexDetailsTest {
         assertEquals(emptyList<CatchSpot>(), DexDetails.catchSpots(g, 150)) // MEWTWO: a static encounter
     }
 
+    /** Recharged Yellow: FireRed's table plus a LINKING CORD way for each trade evolution (method 16 holds the
+     * trade item in the row's 4th u16); its own learnsets and wild Pokémon. */
+    @Test fun `Recharged Yellow - the Linking Cord, its learnsets and Route 1`() {
+        assumeTrue(load(NATIVE_RECHARGED_YELLOW_V1_9_7, GameKind.RECHARGED_YELLOW, "Recharged Yellow v1.9.7.gba"))
+        val t = POKEDEX_RECHARGED_YELLOW_V1_9_7
+        val g = GUIDE_TABLES_RECHARGED_YELLOW_V1_9_7
+        assertEquals(listOf(listOf(EvoReq.Trade), listOf(EvoReq.UseItem(61))), reqsTo(t, "KADABRA", "ALAKAZAM"))
+        assertEquals(
+            listOf(listOf(EvoReq.Trade, EvoReq.Hold(199)), listOf(EvoReq.UseItem(61), EvoReq.Hold(199))), // METAL COAT
+            reqsTo(t, "ONIX", "STEELIX"),
+        )
+        assertTrue(DexDetails.evolutions(t)!!.values.flatten().none { EvoReq.Special in it.reqs })
+        assertEquals(listOf(LevelMove(1, 33), LevelMove(4, 45), LevelMove(7, 73)), DexDetails.levelUp(t, g, 1)!!.take(3))
+        assertEquals(TeachMove("TM06", 92), DexDetails.teachable(t, g, 1)!!.first()) // FireRed's TM / HM tables
+        // PIDGEY on Route 1: two of its twelve grass slots, Lv 3.
+        assertTrue(CatchSpot(0x65, WildMethod.GRASS, 3, 3, 40, 0) in DexDetails.catchSpots(g, 16)!!)
+    }
+
     @Test fun `gMapGroups by shape when the config has none`() {
         assumeTrue(load(NATIVE_FIRERED_REV1, GameKind.FIRERED, "Pokemon - FireRed Version (USA, Europe) (Rev 1).gba"))
         val g = GUIDE_TABLES_FIRERED_REV1.copy(mapGroups = 0x08000000L) // wrong, as a port copying English's would be
@@ -164,6 +182,20 @@ class DexDetailsTest {
         assertTrue(links(t, "Venusaur").isEmpty())
         assertEquals(listOf(LevelMove(1, 33), LevelMove(1, 45)), DexDetails.levelUp(t, GUIDE_TABLES_UNBOUND, 1)!!.take(2))
         assertNull(DexDetails.teachable(t, GUIDE_TABLES_UNBOUND, 1))
+    }
+
+    /** Super Mariomon: an old expansion's 10-row evolution table and {move, level} learnsets (its TATTLEDEX's EVO
+     * page: BOB-OMB LvlUp to 14, then 36; its moves on the save are its first four). */
+    @Test fun `Super Mariomon - evolutions and learnsets`() {
+        assumeTrue(load(NATIVE_MARIOMON_V1_5_1, GameKind.MARIOMON, "Super Mariomon v1.5.1-Anniversary.gba"))
+        mariomonV13 = false
+        val t = POKEDEX_MARIOMON_V1_5_1
+        assertEquals(listOf(EvoLink(912, 913, listOf(EvoReq.Level(14))), EvoLink(913, 914, listOf(EvoReq.Level(36)))), DexDetails.family(t, 913))
+        assertEquals(listOf(LevelMove(1, 33), LevelMove(3, 268), LevelMove(5, 120), LevelMove(6, 52)),
+            DexDetails.levelUp(t, GUIDE_TABLES_MARIOMON_V1_5_1, 912)!!.take(4))
+        // GOOMBA in WORLD 1-1's grass (0x65), Lv 2-4 - where a wild one was met headlessly.
+        val goomba = DexDetails.catchSpots(GUIDE_TABLES_MARIOMON_V1_5_1, 915)!!
+        assertTrue(goomba.any { it.mapsec == 0x65 && it.method == WildMethod.GRASS && it.minLevel == 2 && it.maxLevel == 4 })
     }
 
     @Test fun `Quetzal and ROWE - word learnsets from their own tables`() {

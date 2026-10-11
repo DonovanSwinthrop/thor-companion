@@ -42,6 +42,8 @@ object CompanionSupport {
             // Retail only, and only the revisions detect() has addresses for.
             return size <= 0x1000000L && TelemetrySampler.otherRetailConfig(code, RomIdentity.revision(rom) ?: -1) != null
         }
+        // A hack under a game code of its own (Ultra Violet's PUVV): only the build detect() knows.
+        if (code in TelemetrySampler.HACK_GAME_CODES) return RomIdentity.sha1(rom) in TelemetrySampler.SUPPORTED_HACK_SHA1S
         if (code != "BPRE" && code != "BPEE") return false
         if (size <= 0x1000000L) return true
         return RomIdentity.sha1(rom) in TelemetrySampler.SUPPORTED_HACK_SHA1S

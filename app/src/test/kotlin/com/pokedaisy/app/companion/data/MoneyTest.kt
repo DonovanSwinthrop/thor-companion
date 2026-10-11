@@ -36,6 +36,16 @@ class MoneyTest {
         assertEquals(1_048_458L, money("quetzal_es", NATIVE_QUETZAL_ES))
         assertEquals(1748L, money("unbound_fr", NATIVE_UNBOUND_FR))
         assertEquals(2000L, money("orange_islands", NATIVE_ORANGE_ISLANDS))
+        assertEquals(3080L, money("ultra_violet", NATIVE_ULTRA_VIOLET))
+        assertEquals(5000L, money("sword_shield_up", NATIVE_SWORD_SHIELD))
+        // Recharged Yellow keeps no key: SaveBlock1+0x29C plain, every release (its trainer card says P4804).
+        assertEquals(4804L, money("recharged_yellow_v180", NATIVE_RECHARGED_YELLOW_V1_8_0))
+        assertEquals(4804L, money("recharged_yellow", NATIVE_RECHARGED_YELLOW_V1_9_7))
+        // Super Mariomon: vanilla's offsets in every release (its card says P3100).
+        for ((key, cfg) in listOf("mariomon_v1_5_2" to NATIVE_MARIOMON_V1_5_2, "mariomon_v1_5_1" to NATIVE_MARIOMON_V1_5_1,
+                "mariomon_v1_3" to NATIVE_MARIOMON_V1_3, "mariomon_v1_2_2" to NATIVE_MARIOMON_V1_2_2, "mariomon_v1_2_1" to NATIVE_MARIOMON_V1_2_1)) {
+            assertEquals(key, 3100L, money(key, cfg))
+        }
     }
 
     @Test

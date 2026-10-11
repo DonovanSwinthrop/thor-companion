@@ -124,6 +124,12 @@ def opcode_sizes():
 
 
 SIZES = opcode_sizes()
+# Commands a hack added past pokefirered's (op=size in bytes, hex op): their sizes read off
+# each handler's ScriptReadByte / Halfword / Word calls in the ROM (Recharged Yellow's 0xD5..0xE7).
+if "--ops" in sys.argv:
+    for kv in sys.argv[sys.argv.index("--ops") + 1].split(","):
+        k, v = kv.split("=")
+        SIZES[int(k, 16)] = int(v)
 # trainerbattle: type, trainer, local id, then 1-4 pointers by type (event.inc).
 TB_PTRS = {0: 2, 1: 3, 2: 3, 3: 1, 4: 3, 5: 2, 6: 4, 7: 3, 8: 4, 9: 2}
 END, RETURN, CALL, GOTO, GOTO_IF, CALL_IF, GOTOSTD, CALLSTD = 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09
@@ -131,6 +137,12 @@ SETFLAG, GOTO_IF_SET_CHECK, SETORCOPYVAR, GIVEMON, GIVEEGG, TRAINERBATTLE = 0x29
 ADDITEM = 0x44  # giveitem_msg's first half
 MAX_ITEM = 2000  # bigger is something else (hidden coins carry item 0)
 MAX_GIFTS_PER_SCRIPT = 5
+# Species ids past the game's own (`--max-species N`): a givemon / giveegg read from a path that
+# a command of unknown shape knocked off its alignment (Recharged Yellow's variable-length 0xE3).
+MAX_SPECIES = int(sys.argv[sys.argv.index("--max-species") + 1], 0) if "--max-species" in sys.argv else 0x4000
+# FLAG_HIDDEN_ITEMS_START (FireRed's 1000); `--no-hidden-flags` writes none (flag 0: never marked found) for a
+# game whose base isn't known - Recharged Yellow moved its flags, and 1000 + n reads set for islands its save never saw.
+HIDDEN_FLAGS_START = 0 if "--no-hidden-flags" in sys.argv else 1000
 OBJ_EVENT_GFX_ITEM_BALL = 92
 
 
@@ -235,7 +247,21 @@ POCKET_KEY_ITEMS = 2  # FireRed's pocket ids (item.h): 1 ITEMS, 2 KEY ITEMS, 3 P
 def key_items():
     """Item ids whose gItems record says POCKET_KEY_ITEMS. gItems is found by
     MASTER BALL in slot 1 (struct Item: name[14], itemId @14, pocket @0x1A,
-    44 bytes); hacks renumber items, so each record's own itemId is used."""
+    44 bytes); hacks renumber items, so each record's own itemId is used.
+    `--items ADDR,STRIDE,POCKET_OFF,KEY_POCKET` names a table of another shape
+    (Recharged Yellow's 48-byte records with no itemId: the slot is the id)."""
+    if "--items" in sys.argv:
+        base, stride, pocket_off, key = (int(x, 0) for x in sys.argv[sys.argv.index("--items") + 1].split(","))
+        out = set()
+        for slot in range(1, 2000):
+            rec = base + stride * slot
+            if not isrom(rec + stride) or u8(rec + pocket_off) > 8:
+                break  # past the table (no such pocket)
+            if u8(rec + pocket_off) == key:
+                out.add(slot)
+        print("gItems at %#x (--items), %d key items" % (base, len(out)), file=sys.stderr)
+        return out
+
     def enc(t):
         return bytes(next(k for k, v in CH.items() if v == c) for c in t)
     for name in ("MASTER BALL", "Master Ball"):
@@ -331,7 +357,7 @@ def main():
             if kind == 7:
                 item, flag, qty = data & 0xFFFF, (data >> 16) & 0xFF, (data >> 24) & 0x7F
                 if 0 < item < MAX_ITEM:
-                    rows.add((sec, "HIDDEN", item, 1000 + flag, max(qty, 1), 0, where))
+                    rows.add((sec, "HIDDEN", item, HIDDEN_FLAGS_START + flag if HIDDEN_FLAGS_START else 0, max(qty, 1), 0, where))
             elif isrom(data):
                 scripts.append((decode(data), False))
         for cmds, ball in scripts:
@@ -354,7 +380,7 @@ def main():
                     rows.add((sec, kind, pair[0], flag_near(cmds, i), pair[1], 0, where))
                 elif op in (GIVEMON, GIVEEGG):
                     species = struct.unpack_from("<H", raw, 1)[0]
-                    if 0 < species < 0x4000:
+                    if 0 < species < MAX_SPECIES:
                         rows.add((sec, "MON" if op == GIVEMON else "EGG", species, flag_near(cmds, i), 1, 0, where))
             # One script handing out many different things is a shop, a menu or a
             # debug list (Radical Red has thousands), not gifts: drop them all.

@@ -26,6 +26,16 @@ class RegionMapWatchTest {
         }
     }
 
+    /** Recharged Yellow's gcc pools: sRegionMap two words before the offset. Headless, with the Town Map used from
+     * the bag: 0 on the field, a pointer while it's open, 0 again back in the bag - the word right before the offset
+     * (0x0203779C in v1.8.0) went 0 -> 1 and stayed 1. */
+    @Test fun rechargedYellowWatchesItsOwnSRegionMap() {
+        assertEquals(listOf(RegionMapWatch.Watch(0x02039ABCL)), find(rom("Recharged Yellow v1.8.0.gba")))
+        for (v in listOf("1.9.0", "1.9.4", "1.9.7")) {
+            assertEquals(v, listOf(RegionMapWatch.Watch(0x02039AC4L)), find(rom("Recharged Yellow v$v.gba")))
+        }
+    }
+
     @Test fun emeraldWatchesTownFlyAndPokenavMaps() {
         for (path in listOf(RomFileReader.EMERALD_PATH, rom("emerald-qol.gba"))) {
             assertEquals(

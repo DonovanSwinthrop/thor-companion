@@ -193,6 +193,8 @@ class LaunchActivity : Activity() {
                 .putExtra(LibraryActivity.EXTRA_ROM, rom.absolutePath)
                 .putExtra(PokeDaisyActivity.EXTRA_FROM_FRONTEND, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            // A frontend on the bottom screen: the game still goes to the top one.
+            Screens.mainDisplayLaunch(this),
         )
     }
 

@@ -5,5 +5,7 @@ mGBA's bundled libraries do: `third_party/mgba`, `third_party/rcheevos`). `app/b
 - `Apache-2.0.txt`: AndroidX, Jetpack Compose, Kotlin and kotlinx.coroutines, Apache Commons Compress and what it
   pulls in (Commons IO, Codec, Lang); `Apache-Commons-NOTICE.txt` is their NOTICE files, as Apache 2.0 §4(d) asks.
 - `mGBA-shaders-MIT.txt`: the MIT notice of mGBA's LCD and Scanlines shaders, which ScreenShaders.kt ports.
+- `libretro-shaders.txt`: the notices of the xBR, xBRZ and ScaleFX shaders in `app/src/main/assets/shaders/`
+  (SHADERS > SMOOTHING; xBRZ's own part is GPL 3.0, like the app).
 - `PokeAPI-BSD-3-Clause.txt`: PokeAPI's data (the National Dex species list).
 - `XZ-Java-0BSD.txt`: XZ for Java (.7z archives).

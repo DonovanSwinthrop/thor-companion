@@ -113,7 +113,7 @@ fun MapScreen(snapshot: SnapshotView, modifier: Modifier = Modifier) {
                     RegionMap(
                         bitmap = bitmap,
                         style = style,
-                        head = regionMapBitmap(style.headAsset(snapshot.playerGender)),
+                        head = regionMapBitmap(style.headAsset(snapshot.playerGender, snapshot.game)),
                         headTile = playerTile,
                         cursor = sel?.tiles ?: if (playerRegion == shown) model.tilesOf(snapshot.regionMapSectionId) else emptyList(),
                         label = gameCase(name),
@@ -177,9 +177,10 @@ private enum class MapLabelStyle(val width: Int, val height: Int) {
     val cursorColor: Color get() = if (this == GEN1) Color(0xFF181818) else Color.White
 
     /** The player's 16x16 head on the map (regionmap/player_*.png, from the ROM by RomArt). */
-    fun headAsset(gender: Int): String = when (this) {
+    fun headAsset(gender: Int, game: GameKind? = null): String = when (this) {
         FIRERED -> if (gender == 1) "player_leaf" else "player_red"
-        EMERALD -> if (gender == 1) "player_may" else "player_brendan"
+        // Super Mariomon drew MARIO in Brendan's slot.
+        EMERALD -> if (gender == 1) "player_may" else if (game == GameKind.MARIOMON) "player_mario" else "player_brendan"
         GEN1 -> "player_yellow"   // Red's standing sprite, from the ROM (Gen1Art)
     }
 
@@ -187,7 +188,7 @@ private enum class MapLabelStyle(val width: Int, val height: Int) {
         private val EMERALD_FAMILY = setOf(
             GameKind.EMERALD, GameKind.EMERALD_SEAGLASS, GameKind.TMT2, GameKind.ROWE,
             GameKind.EMERALD_ROGUE, GameKind.HEART_AND_SOUL, GameKind.LAZARUS, GameKind.SOULGOLD,
-            GameKind.GLAZED, GameKind.IMPERIUM,
+            GameKind.GLAZED, GameKind.IMPERIUM, GameKind.MARIOMON,
         )
 
         fun of(game: GameKind?) = when (game) {

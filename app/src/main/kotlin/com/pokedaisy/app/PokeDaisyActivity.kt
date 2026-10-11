@@ -39,6 +39,9 @@ import com.pokedaisy.app.companion.FfMode
 import com.pokedaisy.app.companion.GameAspect
 import com.pokedaisy.app.companion.GridStrength
 import com.pokedaisy.app.companion.ScreenFilter
+import com.pokedaisy.app.companion.Smoothing
+import com.pokedaisy.app.overlay.OverlayChoice
+import com.pokedaisy.app.overlay.OverlayStore
 import com.pokedaisy.app.companion.FfMusicMode
 import com.pokedaisy.app.companion.data.FfMenuWatch
 import com.pokedaisy.app.companion.TelemetryStore
@@ -72,6 +75,8 @@ class PokeDaisyActivity : Activity() {
     private var hotkeysOn = true
     private lateinit var engine: EmulatorEngine
     private lateinit var view: EmulatorView
+    /** SCREEN > OVERLAY's imports (Settings > OVERLAY on the top screen adds them). */
+    private val overlayStore by lazy { OverlayStore(getExternalFilesDir(null) ?: filesDir) }
     private lateinit var hud: TextView
     private lateinit var touchControls: TouchControlsView
     private lateinit var statusBar: ComposeView
@@ -201,8 +206,8 @@ class PokeDaisyActivity : Activity() {
         else -> null
     }
 
-    /** NOT SUPPORTED's TRY BEST EFFORT: the sampler tries it on its next pass (the emulator thread). */
-    private val tryBestEffort: () -> Unit = { telemetry.requestBestEffort() }
+    /** WHICH GAME IS THIS?: the player's answers, taken by the sampler on its next pass (the emulator thread). */
+    private val gamePick get() = telemetry.gamePick
 
     /** The match notice's SHARE - the player's yes to sending exactly what it listed. */
     private val shareBestEffort: (com.pokedaisy.app.companion.data.BestEffortReport) -> Unit = { r ->
@@ -261,6 +266,9 @@ class PokeDaisyActivity : Activity() {
         // Orange Islands is retail FireRed rev 0's RAM and party menu, edited in place.
         game == com.pokedaisy.app.companion.data.GameKind.ORANGE_ISLANDS ->
             BattleInputController.SwitchAddrs(partyMenu = 0x0203B0A0L, party = 0x02024284L)
+        // So is Ultra Violet (FireRed 1.0 under its own game code, NATIVE_ULTRA_VIOLET).
+        game == com.pokedaisy.app.companion.data.GameKind.FIRERED && romCode == com.pokedaisy.app.companion.data.TelemetrySampler.ULTRA_VIOLET_CODE ->
+            BattleInputController.SwitchAddrs(partyMenu = 0x0203B0A0L, party = 0x02024284L)
         game == com.pokedaisy.app.companion.data.GameKind.TMT2 ->
             BattleInputController.SwitchAddrs(partyMenu = 0x0203242CL, party = 0x02032C94L)
         game == com.pokedaisy.app.companion.data.GameKind.AMETHYST ->
@@ -278,6 +286,14 @@ class PokeDaisyActivity : Activity() {
             BattleInputController.SwitchAddrs(partyMenu = 0x0201B67CL, party = 0x0201B960L, grid = true)
         game == com.pokedaisy.app.companion.data.GameKind.EMERALD_SEAGLASS ->
             BattleInputController.SwitchAddrs(partyMenu = 0x02019964L, party = 0x02019C20L)
+        // Recharged Yellow: FireRed's one-column party menu (DOWN steps gPartyMenu.slotId 0, 1, 2 in battle),
+        // at each release's own address - its config carries it.
+        game == com.pokedaisy.app.companion.data.GameKind.RECHARGED_YELLOW ->
+            telemetry.knownPartyMenu()?.let { (menu, party) -> BattleInputController.SwitchAddrs(partyMenu = menu, party = party) }
+        // Super Mariomon: two RAM layouts across its releases (NATIVE_MARIOMON_*); a 2-column grid
+        // (DOWN walks 0 -> 2 -> 4 -> 5 -> CANCEL, headless).
+        game == com.pokedaisy.app.companion.data.GameKind.MARIOMON ->
+            telemetry.knownPartyMenu()?.let { (menu, party) -> BattleInputController.SwitchAddrs(partyMenu = menu, party = party, grid = true) }
         game == com.pokedaisy.app.companion.data.GameKind.SOULGOLD ->
             // Two releases at different addresses: their configs carry them.
             telemetry.knownPartyMenu()?.let { (menu, party) ->
@@ -409,6 +425,12 @@ class PokeDaisyActivity : Activity() {
             expandOfferUp.value = false
             if (turnOn) setGameAspect(com.pokedaisy.app.companion.GameAspect.WIDE)
         }
+        override val overlayChoices get() = com.pokedaisy.app.overlay.overlayChoices(overlayStore).map { (c, label) -> c.key to label }
+        override val overlay get() = Prefs(this@PokeDaisyActivity).overlay
+        override fun setOverlay(key: String) {
+            Prefs(this@PokeDaisyActivity).overlay = key
+            runOnUiThread { syncGameScreen() }
+        }
         override val gbaColors get() = Prefs(this@PokeDaisyActivity).gbaColors
         override fun setGbaColors(on: Boolean) {
             Prefs(this@PokeDaisyActivity).gbaColors = on
@@ -424,6 +446,12 @@ class PokeDaisyActivity : Activity() {
             Prefs(this@PokeDaisyActivity).gridStrength = strength
             runOnUiThread { syncGameScreen() }
         }
+        override val smoothing get() = Prefs(this@PokeDaisyActivity).smoothing
+        override fun setSmoothing(mode: Smoothing) {
+            Prefs(this@PokeDaisyActivity).smoothing = mode
+            runOnUiThread { syncGameScreen() }
+        }
+        override val smoothingAvailable get() = GlCaps.gles3(this@PokeDaisyActivity)
         override val companionShaders get() = Prefs(this@PokeDaisyActivity).companionShaders
         override fun setCompanionShaders(on: Boolean) {
             Prefs(this@PokeDaisyActivity).companionShaders = on
@@ -461,6 +489,8 @@ class PokeDaisyActivity : Activity() {
         override fun setShowFoeIvs(on: Boolean) {
             Prefs(this@PokeDaisyActivity).showFoeIvs = on
         }
+        override val foeDetails get() = Prefs(this@PokeDaisyActivity).foeDetails
+        override fun setFoeDetails(on: Boolean) { Prefs(this@PokeDaisyActivity).foeDetails = on }
         override val cheats get() = cheatStore()?.load().orEmpty()
         override val cheatsEnabled get() = Prefs(this@PokeDaisyActivity).cheatsEnabled
         override fun setCheatsEnabled(on: Boolean) {
@@ -601,11 +631,11 @@ class PokeDaisyActivity : Activity() {
         root.setViewTreeViewModelStoreOwner(owner)
         sidePanel = SidePanel(root, view, touchControls, Prefs(this), panelBack, playClick) {
             val snap by telemetry.snapshot.collectAsState()
-            CompanionScreen(snap, stateSlots, companionSettings, battleInput, back = panelBack, clickSound = playClick, achievements = RetroAchievements, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, tryBestEffort = tryBestEffort, shareBestEffort = shareBestEffort)
+            CompanionScreen(snap, stateSlots, companionSettings, battleInput, back = panelBack, clickSound = playClick, achievements = RetroAchievements, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, gamePick = gamePick, shareBestEffort = shareBestEffort)
         }
         portraitPanel = PortraitPanel(root, view, touchControls, Prefs(this), portraitBack, playClick) {
             val snap by telemetry.snapshot.collectAsState()
-            CompanionScreen(snap, stateSlots, companionSettings, battleInput, back = portraitBack, clickSound = playClick, achievements = RetroAchievements, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, tryBestEffort = tryBestEffort, shareBestEffort = shareBestEffort)
+            CompanionScreen(snap, stateSlots, companionSettings, battleInput, back = portraitBack, clickSound = playClick, achievements = RetroAchievements, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, gamePick = gamePick, shareBestEffort = shareBestEffort)
         }
         // Two screens: the game stays on the landscape top one. One screen (a phone): it turns
         // with the device (the user's rotation setting), the companion under the game upright.
@@ -697,6 +727,7 @@ class PokeDaisyActivity : Activity() {
         com.pokedaisy.app.companion.i18n.L10n.apply(Prefs(this).appLanguage, gameCode)
         romRev = header?.let { it[0x10].toInt() and 0xFF } ?: -1
         FfMenuWatch.load(gameCode, menuField, menuBattle)
+        com.pokedaisy.app.companion.data.ShopWatch.load()
         val appContext = applicationContext
         FfMenuWatch.onLearned = { field, battle -> Prefs(appContext).setFfMenuCallbacks(crc, field, battle) }
 
@@ -987,7 +1018,7 @@ class PokeDaisyActivity : Activity() {
                 if (swap) stage
                 else DualScreenPresentation.companionView(
                     ctx, telemetry, stateSlots, companionSettings, battleInput, companionBack, playClick, RetroAchievements,
-                    initialTab = companionStartTab, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, tryBestEffort = tryBestEffort, shareBestEffort = shareBestEffort,
+                    initialTab = companionStartTab, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, gamePick = gamePick, shareBestEffort = shareBestEffort,
                 )
             }.also { it.show() }
         }.onFailure { Log.w("pokedaisy", "presentation failed", it) }.getOrNull()
@@ -1007,6 +1038,8 @@ class PokeDaisyActivity : Activity() {
         if (portrait) sidePanel.setEnabled(false) else portraitPanel.setEnabled(false)
         sidePanel.setEnabled(on && !portrait)
         portraitPanel.setEnabled(on && portrait)
+        // Upright, the game drops its overlay (and gets it back sideways).
+        syncGameScreen()
     }
 
     /** Locked to landscape with a second screen (the Thor's top one); else the device's rotation decides. */
@@ -1041,7 +1074,7 @@ class PokeDaisyActivity : Activity() {
         val owner = ComposeHostOwner().apply { create(); resume() }
         val view = DualScreenPresentation.companionView(
             this, telemetry, stateSlots, companionSettings, battleInput, companionBack, playClick, RetroAchievements,
-            initialTab = companionStartTab, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, tryBestEffort = tryBestEffort, shareBestEffort = shareBestEffort,
+            initialTab = companionStartTab, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, gamePick = gamePick, shareBestEffort = shareBestEffort,
         ).apply {
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)
@@ -1061,12 +1094,21 @@ class PokeDaisyActivity : Activity() {
         statusBar.visibility = if (prefs.statusBar && !prefs.statusBarOnCompanion) View.VISIBLE else View.GONE
         performance.visibility = if (prefs.showPerformance) View.VISIBLE else View.GONE
         com.pokedaisy.app.companion.ui.CompanionStatusBar.shown = prefs.statusBar && prefs.statusBarOnCompanion
+        val stageLayout = statusBar.parent as? GameStageLayout
         // WIDE on a game it doesn't know is ORIGINAL; otherwise the game takes the whole area and
         // the core draws the overworld into the room beside it.
         val aspect = prefs.gameAspect.let { if (it == GameAspect.WIDE && wideGame == WideScreen.OFF) GameAspect.ORIGINAL else it }
-        (statusBar.parent as? GameStageLayout)?.stretch = aspect != GameAspect.ORIGINAL
+        // SCREEN > OVERLAY: not on a phone held upright, where the game is its own shape across the top, nor with
+        // EXPAND, whose map fills the screen.
+        view.overlay = if (stageLayout?.topAligned == true || aspect == GameAspect.WIDE) null else when (val c = OverlayChoice.of(prefs.overlay)) {
+            OverlayChoice.None -> null
+            is OverlayChoice.BuiltIn -> EmulatorView.OverlaySource.BuiltIn(c.style)
+            is OverlayChoice.Imported -> overlayStore.get(c.id)?.let { EmulatorView.OverlaySource.Imported(it) }
+        }
+        // With an overlay the view takes all the room and places the game in it itself.
+        stageLayout?.stretch = aspect != GameAspect.ORIGINAL || view.overlay != null
         // A phone upright: WIDE fills everything above the companion, the map going on above and below the game.
-        (statusBar.parent as? GameStageLayout)?.expand = aspect == GameAspect.WIDE
+        stageLayout?.expand = aspect == GameAspect.WIDE
         if (::portraitPanel.isInitialized) portraitPanel.expand = aspect == GameAspect.WIDE
         view.stretch = aspect == GameAspect.STRETCH
         view.wide = aspect == GameAspect.WIDE
@@ -1079,6 +1121,7 @@ class PokeDaisyActivity : Activity() {
         )
         view.screenEffect = ScreenShaders.effectFor(prefs.screenFilter)
         view.screenGrid = ScreenShaders.gridFor(prefs.screenFilter, prefs.gridStrength)
+        view.smoothing = prefs.smoothing
     }
 
     /**
@@ -1199,10 +1242,7 @@ class PokeDaisyActivity : Activity() {
             return super.dispatchKeyEvent(event)
         }
         val down = event.action == KeyEvent.ACTION_DOWN
-        if (::hotkeys.isInitialized && hotkeysOn) {
-            for (e in hotkeys.onKey(event.keyCode, down)) handleHotkey(e)
-            if (hotkeys.consumes(event.keyCode)) return true   // key is completing a chord
-        }
+        if (hotkeyTakes(event.keyCode, down)) return true
         if (input.onKey(event.keyCode, down)) {
             if (down && !physicalPadUsed && event.device?.isVirtual == false) {
                 physicalPadUsed = true
@@ -1252,8 +1292,17 @@ class PokeDaisyActivity : Activity() {
         } else if (!sidePanel.onBack() && !portraitPanel.onBack()) { companionBack.back(); mirrorBack.back() }
     }
 
-    // Many Android handhelds report L2/R2 as analog axes, not BUTTON_L2/R2 keys.
-    // RetroArch-style: right trigger = hold fast-forward, left trigger = hold slow-mo.
+    /** Feeds a key change to the hotkeys (only while they're on); true when it's completing a chord,
+     *  so the game mustn't see it. */
+    private fun hotkeyTakes(keyCode: Int, down: Boolean): Boolean {
+        if (!::hotkeys.isInitialized || !hotkeysOn) return false
+        for (e in hotkeys.onKey(keyCode, down)) handleHotkey(e)
+        return hotkeys.consumes(keyCode)
+    }
+
+    // Many Android handhelds (Retroid's) report L2/R2 as analog axes, not BUTTON_L2/R2 keys: a trigger
+    // crossing half way is that key, through the hotkeys (their switch and bindings, issue #54) and
+    // then the game's controls. Hard-wired to FF / slow-mo holds, they used to ignore both.
     private var rtDown = false
     private var ltDown = false
 
@@ -1275,8 +1324,8 @@ class PokeDaisyActivity : Activity() {
                 event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
                 event.getAxisValue(MotionEvent.AXIS_BRAKE),
             )
-            if ((rt > 0.5f) != rtDown) { rtDown = rt > 0.5f; engine.setFastForwardHeld(rtDown) }
-            if ((lt > 0.5f) != ltDown) { ltDown = lt > 0.5f; engine.setSlowmoHeld(ltDown) }
+            if ((rt > 0.5f) != rtDown) { rtDown = rt > 0.5f; triggerKey(KeyEvent.KEYCODE_BUTTON_R2, rtDown) }
+            if ((lt > 0.5f) != ltDown) { ltDown = lt > 0.5f; triggerKey(KeyEvent.KEYCODE_BUTTON_L2, ltDown) }
         }
         if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
             // The right stick: WIDE's look-around (WideCamera). Most pads report it as Z / RZ, some as RX / RY.
@@ -1286,6 +1335,12 @@ class PokeDaisyActivity : Activity() {
         }
         if (input.onMotion(event)) return true
         return super.onGenericMotionEvent(event)
+    }
+
+    /** An analog trigger as its key. A pad that also sends the key itself is harmless: the hotkeys
+     *  fire a chord once while it's held, and the game's button is just set twice. */
+    private fun triggerKey(keyCode: Int, down: Boolean) {
+        if (!hotkeyTakes(keyCode, down)) input.onKey(keyCode, down)
     }
 
     /** Turns the hotkeys on/off from the companion. Off lets go of any held one (FF / slow-mo
@@ -1471,7 +1526,7 @@ class PokeDaisyActivity : Activity() {
         return ComposeView(this).apply {
             setContent {
                 val snap by telemetry.snapshot.collectAsState()
-                CompanionScreen(snap, stateSlots, companionSettings, battleInput, back = mirrorBack, clickSound = playClick, achievements = RetroAchievements, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, tryBestEffort = tryBestEffort, shareBestEffort = shareBestEffort)
+                CompanionScreen(snap, stateSlots, companionSettings, battleInput, back = mirrorBack, clickSound = playClick, achievements = RetroAchievements, statusBar = companionStatusBar, itemUse = itemUse, askForSupport = askForSupport, gamePick = gamePick, shareBestEffort = shareBestEffort)
             }
         }
     }

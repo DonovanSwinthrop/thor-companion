@@ -56,6 +56,7 @@ class RomItemTextTest {
         // v1.2's TM75 is Agility, with its own text.
         Case("Soulgold (v1.2).gba", GameKind.SOULGOLD, NATIVE_SOULGOLD_V1_2, mapOf(28 to "by 20 points", SOULGOLD_V12_TM75 to "Speed")),
         Case("Pokemon-SoulGold-v1.2.gba", GameKind.SOULGOLD, NATIVE_SOULGOLD_V1_2B, mapOf(SOULGOLD_V12_TM75 to "Speed")),
+        Case("Soulgold (v1.2) (1).gba", GameKind.SOULGOLD, NATIVE_SOULGOLD_V1_2C, mapOf(28 to "by 20 points", SOULGOLD_V12_TM75 to "Speed")),
         // Rogue's own items (827+) are in a second table.
         Case("Pokemon Emerald Rogue (v2.2.1-EX).gba", GameKind.EMERALD_ROGUE, NATIVE_EMERALD_ROGUE,
             mapOf(39 to "by 20 points", 827 to "species of Pokémon evolve")),
@@ -67,7 +68,20 @@ class RomItemTextTest {
         Case("QuetzalDaisy/PokemonQuetzalSpanishAlpha9v0.gba", GameKind.QUETZAL, NATIVE_QUETZAL_ES, mapOf(28 to "Restaura 20 PS")),
         Case("Pokémon Unbound v2.1.1.1 FR.gba", GameKind.UNBOUND, NATIVE_UNBOUND_FR, mapOf(13 to "Rend 20 PV")),
         Case("Pokemon Orange Islands.gba", GameKind.ORANGE_ISLANDS, NATIVE_ORANGE_ISLANDS, mapOf(13 to "20 points")),
+        Case("ultra-violet-v1.22.gba", GameKind.FIRERED, NATIVE_ULTRA_VIOLET, mapOf(13 to "20 points")),
+        Case("Sword and Shield Ultimate Plus (1.2.1.2).gba", GameKind.SWORD_SHIELD, NATIVE_SWORD_SHIELD, mapOf(13 to "by 20 points")),
+        // Recharged Yellow: 48-byte records, the text at +0x18; its own items past FireRed's (the LINKING CORD, 61).
+        Case("Recharged Yellow v1.8.0.gba", GameKind.RECHARGED_YELLOW, NATIVE_RECHARGED_YELLOW_V1_8_0, mapOf(13 to "by 20 points", 61 to "sense of connection", 407 to "categorized by encounter type")),
+        Case("Recharged Yellow v1.9.0.gba", GameKind.RECHARGED_YELLOW, NATIVE_RECHARGED_YELLOW_V1_9_0, mapOf(13 to "by 20 points")),
+        Case("Recharged Yellow v1.9.4.gba", GameKind.RECHARGED_YELLOW, NATIVE_RECHARGED_YELLOW_V1_9_4, mapOf(13 to "by 20 points")),
+        Case("Recharged Yellow v1.9.7.gba", GameKind.RECHARGED_YELLOW, NATIVE_RECHARGED_YELLOW_V1_9_7, mapOf(13 to "by 20 points")),
         Case("Pokémon R.O.W.E. (v2.1.9.1 Experimental).gba", GameKind.ROWE, NATIVE_ROWE, mapOf(28 to "by 20 points")),
+        // Its MUSHROOM (POTION) and PLUMBER CAP (POKé BALL); v1.5 added the VS. RECORDER (823).
+        Case("Super Mariomon v1.5.2-Anniversary.gba", GameKind.MARIOMON, NATIVE_MARIOMON_V1_5_2, mapOf(28 to "fun fungus", 1 to "Gadd Science")),
+        Case("Super Mariomon v1.5.1-Anniversary.gba", GameKind.MARIOMON, NATIVE_MARIOMON_V1_5_1, mapOf(28 to "by 20 points", 802 to "wooden")),
+        Case("Super Mariomon v1.3.gba", GameKind.MARIOMON, NATIVE_MARIOMON_V1_3, mapOf(28 to "by 20 points", 802 to "wooden")),
+        Case("Super Mariomon v1.2.2.gba", GameKind.MARIOMON, NATIVE_MARIOMON_V1_2_2, mapOf(28 to "by 20 points")),
+        Case("Super Mariomon v1.2.1.gba", GameKind.MARIOMON, NATIVE_MARIOMON_V1_2_1, mapOf(28 to "by 20 points")),
     )
 
     /** What the Poller does on detecting [cfg]'s game: its table, or the vanilla one found by shape. */

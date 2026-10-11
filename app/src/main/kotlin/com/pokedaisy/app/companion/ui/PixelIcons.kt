@@ -106,6 +106,36 @@ object PixelIcons {
         "00100",
     )
 
+    /** A "full screen" switch's corners, pointing out (battle INFO's FOE DETAILS: show more). */
+    val expand = listOf(
+        "1111...1111",
+        "1.........1",
+        "1.........1",
+        "1.........1",
+        "...........",
+        "...........",
+        "...........",
+        "1.........1",
+        "1.........1",
+        "1.........1",
+        "1111...1111",
+    )
+
+    /** [expand]'s corners turned in: show less. */
+    val shrink = listOf(
+        "...1...1...",
+        "...1...1...",
+        "...1...1...",
+        "1111...1111",
+        "...........",
+        "...........",
+        "...........",
+        "1111...1111",
+        "...1...1...",
+        "...1...1...",
+        "...1...1...",
+    )
+
     /** A funnel: a list's filter (ACHIEVEMENTS' ALL / LOCKED / UNLOCKED). Cap-height of the pixel font. */
     val filter = listOf(
         "111111111",

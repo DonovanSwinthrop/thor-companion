@@ -84,11 +84,15 @@ object RegionMapWatch {
             ((rom[i + 2].toLong() and 0xFF) shl 16) or ((rom[i + 3].toLong() and 0xFF) shl 24)
         val end = minOf(rom.size, SCAN_END) - 8
         return when (String(rom, 0xAC, 4, Charsets.US_ASCII)) {
-            // the other-language FireRed / LeafGreen too: the pattern finds their own pointer
-            "BPRE", "BPGE", "BPRD", "BPRF", "BPRI", "BPRS", "BPGF", "BPGI", "BPGS" -> {
+            // the other-language FireRed / LeafGreen too: the pattern finds their own pointer (and
+            // Ultra Violet's, FireRed 1.0 under its own code)
+            "BPRE", "BPGE", "BPRD", "BPRF", "BPRI", "BPRS", "BPGF", "BPGI", "BPGS", "PUVV" -> {
+                // Recharged Yellow is a gcc rebuild: its pools put another global between sRegionMap and the
+                // offset - that one reads 1 from the first Town Map on, which would hold SMART FF at 1x for good.
+                val gap = if (isRechargedYellowRom(rom)) 8 else 4
                 val seen = HashMap<Long, Int>()
-                for (i in 0..end step 4) {
-                    val a = u32(i)
+                for (i in gap..end step 4) {
+                    val a = u32(i - gap + 4)
                     if (a in EWRAM && u32(i + 4) == FR_REGION_MAP_OFFSET.toLong()) seen[a] = (seen[a] ?: 0) + 1
                 }
                 // sRegionMap is loaded that way 3 times; another pointer twice.

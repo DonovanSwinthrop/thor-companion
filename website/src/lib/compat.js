@@ -44,14 +44,17 @@ export function verdict(data, { platform, code, rev, size, sha1 }) {
     return { status: 'supported', title: data.titles[sha1] ?? retail.title };
   }
 
-  const base = data.baseCodes[code];
+  // A hack may carry a game code of its own (Ultra Violet's PUVV): its base game's title. Only
+  // the builds the app knows play with the companion (CompanionSupport.isSupported).
+  const ownCode = data.hackCodes?.[code];
+  const base = data.baseCodes[code] ?? ownCode;
   if (!base) return { status: 'unsupported', reason: 'other-game' };
   const hack = data.hacks.find((h) => h.sha1 === sha1);
   if (hack) return { status: 'supported', title: hack.title, version: hack.version, base };
   // Detected by the app, but its companion isn't ready yet: the game plays, the companion doesn't read it.
   const soon = (data.inProgress ?? []).find((h) => h.sha1 === sha1);
   if (soon) return { status: 'unsupported', reason: 'in-progress', title: soon.title, version: soon.version, base };
-  if (size > data.maxBaseSize) return { status: 'unsupported', reason: 'unknown-hack', base };
+  if (ownCode || size > data.maxBaseSize) return { status: 'unsupported', reason: 'unknown-hack', base };
   const title = data.titles[sha1];
   return title ? { status: 'supported', title } : { status: 'likely', base };
 }

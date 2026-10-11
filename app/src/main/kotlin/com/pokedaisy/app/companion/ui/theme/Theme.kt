@@ -1,5 +1,8 @@
 package com.pokedaisy.app.companion.ui.theme
 
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -200,12 +203,10 @@ object QolColors {
     val hpMid = Color(0xFFF8C838)
     val hpLow = Color(0xFFF04838)
 
-    // D-pad / keyboard focus ring. Deliberately NOT slotSelected (orange) — that
-    // color already means "this is the active/chosen item" (PLAYING row, checked
-    // setting, party lead); reusing it for focus made "where's my cursor" and
-    // "what's already picked" indistinguishable. Bright cyan reads clearly on
-    // both the teal and cream backgrounds and matches nothing else in the app.
-    val focusRing = Color(0xFF2EE6FF)
+    // D-pad / keyboard focus ring: a bright orange (the user's call - it was cyan), a
+    // lighter, yellower one than slotSelected's so the cursor and "what's already
+    // picked" stay apart; the screens' chosen items now mostly use the white cursor row.
+    val focusRing = Color(0xFFFFB238)
 
     val statusSlp = Color(0xFF8A8A8A)
     val statusPsn = Color(0xFFA259D9)
@@ -391,10 +392,15 @@ private fun backdropColors(game: GameKind): IntArray? = when (game) {
     // Imperium's party grid: grey / near-black rows.
     GameKind.IMPERIUM -> intArrayOf(0xFF424242.toInt(), 0xFF101821.toInt(), 0xFF101821.toInt())
     GameKind.ROWE -> IntArray(3) { 0xFF292929.toInt() }
+    // Super Mariomon's party menu: flat brown behind its wood-plank slots.
+    GameKind.MARIOMON -> IntArray(3) { 0xFF845A4A.toInt() }
     // SoulGold's party list: light-blue stripes, a deeper blue edge.
     GameKind.SOULGOLD -> intArrayOf(0xFF84CEEF.toInt(), 0xFF7BC6EF.toInt(), 0xFF429CD6.toInt())
     // Orange Islands' party menu: FireRed's layout in cream stripes (sampled headless).
     GameKind.ORANGE_ISLANDS -> intArrayOf(0xFFFFF7CE.toInt(), 0xFFEFEFB5.toInt(), 0xFFE7DE9C.toInt())
+    // Sword and Shield Ultimate Plus' party grid until its own cell (RomArt.SWSH_BACKDROP) is there:
+    // red, its darker red accents (its grid lines left out).
+    GameKind.SWORD_SHIELD -> intArrayOf(0xFFCE3131.toInt(), 0xFFCE3131.toInt(), 0xFF9C2121.toInt())
     else -> null
 }
 
@@ -440,6 +446,10 @@ private fun buildGameBackground(context: android.content.Context, game: GameKind
     if (game == GameKind.YELLOW) {
         return GameBackground(android.graphics.Bitmap.createBitmap(intArrayOf(-1), 1, 1, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap(), false)
     }
+    // Sword and Shield Ultimate Plus: CFRU's grid in its own red, one 32px cell tiled (RomArt).
+    if (game == GameKind.SWORD_SHIELD) {
+        GameArt.get(context, com.pokedaisy.app.companion.data.RomArt.SWSH_BACKDROP)?.let { return GameBackground(it.asImageBitmap(), true) }
+    }
     backdropColors(game)?.let { to ->
         return GameBackground(recolorBackdrop(GameArt.get(context, "partybg/firered.png"), to).asImageBitmap(), false)
     }
@@ -457,18 +467,38 @@ private fun buildGameBackground(context: android.content.Context, game: GameKind
 }
 
 /**
- * A thick, high-contrast [QolColors.focusRing] border drawn outside whatever
- * shape the element already uses — the shared D-pad/keyboard "here's your
- * cursor" indicator. Apply first in a modifier chain, before any background.
- * No-op (zero-width transparent border, so layout doesn't jump) when not
- * focused.
+ * A thick, high-contrast [QolColors.focusRing] ring drawn just inside whatever
+ * shape the element already uses (over its own edge) — the shared D-pad/keyboard
+ * "here's your cursor" indicator. [shape] is the element's own outline (its frame's
+ * corner radius): the ring's outer edge is that outline, so none of the frame peeks out
+ * at the corners. Drawing only: the element keeps its size and place as the cursor moves
+ * (a border + padding used to shrink the focused one by 3 dp a side).
  */
-fun Modifier.gbaFocusRing(focused: Boolean, shape: androidx.compose.ui.graphics.Shape): Modifier = this
-    .border(if (focused) 4.dp else 0.dp, if (focused) QolColors.focusRing else Color.Transparent, shape)
-    .padding(if (focused) 3.dp else 0.dp)
+fun Modifier.gbaFocusRing(focused: Boolean, shape: androidx.compose.ui.graphics.Shape): Modifier =
+    if (!focused) this else drawWithContent {
+        drawContent()
+        val width = 4.dp.toPx()
+        // The element's outline, minus the same shape [width] smaller: a ring flush with its edge.
+        val outer = shape.createOutline(size, layoutDirection, this).asPath()
+        val inner = shape.createOutline(
+            androidx.compose.ui.geometry.Size((size.width - 2 * width).coerceAtLeast(0f), (size.height - 2 * width).coerceAtLeast(0f)),
+            layoutDirection, this,
+        ).asPath().apply { translate(androidx.compose.ui.geometry.Offset(width, width)) }
+        val ring = androidx.compose.ui.graphics.Path().apply {
+            op(outer, inner, androidx.compose.ui.graphics.PathOperation.Difference)
+        }
+        drawPath(ring, QolColors.focusRing)
+    }
+
+/** An [androidx.compose.ui.graphics.Outline] as a path. */
+private fun androidx.compose.ui.graphics.Outline.asPath(): androidx.compose.ui.graphics.Path = when (this) {
+    is androidx.compose.ui.graphics.Outline.Generic -> androidx.compose.ui.graphics.Path().apply { addPath(path) }
+    is androidx.compose.ui.graphics.Outline.Rounded -> androidx.compose.ui.graphics.Path().apply { addRoundRect(roundRect) }
+    is androidx.compose.ui.graphics.Outline.Rectangle -> androidx.compose.ui.graphics.Path().apply { addRect(rect) }
+}
 
 /**
- * Translucent cyan wash over an item's own fill when it has D-pad/keyboard
+ * Translucent orange wash over an item's own fill when it has D-pad/keyboard
  * focus — paired with [gbaFocusRing] so focus reads as a highlighted
  * background too, not just an outline. Apply last, right before `.clickable`,
  * over the item's innermost (already-drawn) fill color.
@@ -501,7 +531,7 @@ fun GbaWindow(
  * FR/LG "menu button": a cream key with the blue double-frame, pressable. Used
  * everywhere in place of Material `Button`/`OutlinedButton`, which vanish on the
  * teal backdrop. [selected] gives it the blue "highlighted option" fill; keyboard
- * / D-pad focus draws a thick cyan [QolColors.focusRing] ring around the whole
+ * / D-pad focus draws a thick orange [QolColors.focusRing] ring around the whole
  * key, kept a different color from "selected" so the two are never ambiguous.
  * [danger] tints it red for destructive actions (e.g. the confirm button on a
  * delete dialog).

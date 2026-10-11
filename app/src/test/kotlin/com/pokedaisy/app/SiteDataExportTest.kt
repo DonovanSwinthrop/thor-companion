@@ -32,10 +32,14 @@ class SiteDataExportTest {
         "BPEJ" to "ポケットモンスター エメラルド",
     )
 
+    /** The base game of each hack that has a game code of its own ([TelemetrySampler.HACK_GAME_CODES]). */
+    private val hackCodeBases = mapOf(TelemetrySampler.ULTRA_VIOLET_CODE to "BPRE")
+
     /** `LAZARUS_V2_0_SHA1` -> v2.0, `EMERALD_ROGUE_V2_2_1_EX_SHA1` -> v2.2.1-EX, `SOULGOLD_V1_2B_SHA1` -> v1.2b,
-     * `QUETZAL_V9_0_ALPHA_ES_SHA1` -> v9.0-ALPHA-ES; a build with no version of its own is `*_UNVERSIONED_SHA1` -> "". */
+     * `QUETZAL_V9_0_ALPHA_ES_SHA1` -> v9.0-ALPHA-ES, `MARIOMON_V1_5_2_Anniversary_SHA1` -> v1.5.2-Anniversary (a tag
+     * keeps its own case); a build with no version of its own is `*_UNVERSIONED_SHA1` -> "". */
     private val hackVersions: Map<String, String> by lazy {
-        val name = Regex("""_V(\d+(?:_\d+)*)([A-Z]?)((?:_[A-Z]+)*)_SHA1$""")
+        val name = Regex("""_V(\d+(?:_\d+)*)([A-Z]?)((?:_[A-Z][A-Za-z]*)*)_SHA1$""")
         TelemetrySampler::class.java.declaredFields
             .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
             .mapNotNull { f ->
@@ -86,6 +90,8 @@ class SiteDataExportTest {
             append("  \"_generated\": ${q("by app/src/test/kotlin/com/pokedaisy/app/SiteDataExportTest.kt - don't edit by hand")},\n")
             append("  \"maxBaseSize\": 16777216,\n")
             append("  \"baseCodes\": {${listOf("BPRE", "BPEE").joinToString(", ") { "${q(it)}: ${q(codeTitles.getValue(it))}" }}},\n")
+            // Hacks under a game code of their own (Ultra Violet's PUVV): their base game's title.
+            append("  \"hackCodes\": {${TelemetrySampler.HACK_GAME_CODES.sorted().joinToString(", ") { "${q(it)}: ${q(codeTitles.getValue(hackCodeBases.getValue(it)))}" }}},\n")
             append("  \"retail\": [\n")
             append(retail.joinToString(",\n") { (code, revs, title) ->
                 "    {\"code\": ${q(code)}, \"revs\": [${revs.joinToString(", ")}], \"title\": ${q(title)}}"
@@ -131,6 +137,11 @@ class SiteDataExportTest {
         assertTrue("no *_V<version>_SHA1 constant for $missing", missing.isEmpty())
         assertEquals("v2.2.1-EX", hackVersions[TelemetrySampler.EMERALD_ROGUE_V2_2_1_EX_SHA1])
         assertEquals("v1.2b", hackVersions[TelemetrySampler.SOULGOLD_V1_2B_SHA1])
+    }
+
+    @Test
+    fun `every hack game code has a base game`() {
+        assertEquals(TelemetrySampler.HACK_GAME_CODES, hackCodeBases.keys)
     }
 
     @Test

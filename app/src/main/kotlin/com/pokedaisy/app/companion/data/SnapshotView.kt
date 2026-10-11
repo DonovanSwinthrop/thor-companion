@@ -3,7 +3,7 @@ package com.pokedaisy.app.companion.data
 import com.pokedaisy.app.companion.i18n.tr
 
 data class MoveVsFoe(val vsName: String, val label: String, val pct: Int)
-data class MoveView(val name: String, val type: String, val pp: Int, val power: Int, val vs: List<MoveVsFoe> = emptyList())
+data class MoveView(val name: String, val type: String, val pp: Int, val power: Int, val vs: List<MoveVsFoe> = emptyList(), val id: Int = 0)
 
 /**
  * Doubles as the party-mon detail view: Types/Moves/Weaknesses/Resistances/
@@ -35,6 +35,16 @@ data class MonView(
     val personality: Long = 0,
     /** IVs / EVs / nature (native reads only); null = unknown. */
     val stats: MonStats? = null,
+    /** Battlers (native reads): the ability's id in the game's table; 0 = unknown. Its name is
+     * read from the ROM where it's shown ([PokedexSource.abilityName]) unless [abilityName] has it. */
+    val abilityId: Int = 0,
+    val abilityName: String? = null,
+    /** Battlers: the held item's name ("" = none); null = unknown. */
+    val heldItem: String? = null,
+    /** Battlers: Attack, Defense, Speed, Sp. Atk, Sp. Def as the battle has them; null = unknown. */
+    val battleStats: List<Int>? = null,
+    /** Battlers: the stages on [battleStats], then accuracy, evasion (-6..+6); null = unknown. */
+    val statStages: List<Int>? = null,
 )
 
 /** [total] EXP; this level starts at [levelStart], the next at [nextLevel] (== levelStart at Lv100). */
@@ -49,10 +59,15 @@ fun expProgress(species: Int, level: Int, exp: Long?): ExpProgress? {
     if (exp == null || level !in 1..100) return null
     // Gen 1's growth rates and curves are Gen 3's for the first 151 (Yellow's species are Dex numbers here).
     if (activeGame != GameKind.FIRERED && activeGame != GameKind.EMERALD && activeGame != GameKind.YELLOW &&
-        activeGame != GameKind.ORANGE_ISLANDS) return null
+        activeGame != GameKind.ORANGE_ISLANDS && activeGame != GameKind.RECHARGED_YELLOW &&
+        activeGame != GameKind.MARIOMON) return null
+    // Recharged Yellow kept FireRed's growth rates and gExperienceTables (both checked byte for byte).
     // Orange Islands kept FireRed's growth rates but for its CRYSTAL ONIX slots.
     if (activeGame == GameKind.ORANGE_ISLANDS && species >= 409) return null
-    val rate = gen3GrowthRates.getOrNull(species)?.toInt() ?: return null
+    // Super Mariomon keeps vanilla's curves; its species' rates come from its own gBaseStats.
+    val rate = if (activeGame == GameKind.MARIOMON) (if (mariomonV13) growthRatesMariomonV13 else growthRatesMariomon).getOrNull(species)
+        else gen3GrowthRates.getOrNull(species)?.toInt()
+    if (rate == null) return null
     val table = gen3ExperienceTables.getOrNull(rate) ?: return null
     val start = table[level].toLong()
     val next = if (level < 100) table[level + 1].toLong() else start
@@ -77,11 +92,37 @@ data class LocationView(
     val highlightH: Int,
 )
 
-/** A BEST EFFORT match: read as [title]; [full] = every part held, else [off] are switched off; [fresh] = matched just now
- * ([report]: what sharing it would send, when the ROM's hash is known). */
+/**
+ * A BEST EFFORT match: read as [title] ([id]); [full] = every part held, else [off] are switched off;
+ * [fresh] = matched just now, by best effort itself - worth a notice ([report]: what sharing it would
+ * send, when the ROM's hash is known). [picked]: the player chose it. [guess]: no party to check it
+ * by yet, only the ROM's names. [doubt]: once a party read, it didn't hold - the player picks again
+ * or keeps it ([suggest]: the game it reads as instead, if one is sure).
+ */
 data class BestEffortView(
     val title: String, val full: Boolean, val off: Set<BestEffort.Part>, val fresh: Boolean,
     val report: BestEffortReport? = null,
+    val id: String = "",
+    val picked: Boolean = false,
+    val guess: Boolean = false,
+    val doubt: Boolean = false,
+    val suggest: String? = null,
+)
+
+/** One game in WHICH GAME IS THIS?: [likely] = the ROM's names are its own, [readsParty] = the party reads through it. */
+data class GameOption(val id: String, val title: String, val likely: Boolean, val readsParty: Boolean)
+
+/**
+ * WHICH GAME IS THIS? for a ROM the app doesn't know (a Gen 3 base game): the games it could be,
+ * best first ([GameOption]s of its base game), the one in use ([current]), and why none was
+ * chosen by itself ([miss]: no party yet / none reads). [declined]: the player said NONE OF THESE -
+ * NOT SUPPORTED stays, with a button back here.
+ */
+data class GamePickerView(
+    val options: List<GameOption>,
+    val current: String? = null,
+    val miss: BestEffort.Miss? = null,
+    val declined: Boolean = false,
 )
 
 data class SnapshotView(
@@ -91,9 +132,8 @@ data class SnapshotView(
     val unsupported: Boolean = false,
     /** Read through BEST EFFORT ([BestEffort]): what as, and how well; null = a ROM the app knows. */
     val bestEffort: BestEffortView? = null,
-    /** NOT SUPPORTED offers TRY BEST EFFORT (a Gen 3 base game); [bestEffortMiss] = why the last try found nothing. */
-    val canTryBestEffort: Boolean = false,
-    val bestEffortMiss: BestEffort.Miss? = null,
+    /** WHICH GAME IS THIS? - set for every ROM the app doesn't know that's a Gen 3 base game. */
+    val gamePicker: GamePickerView? = null,
     val frameCounter: Long = 0,
     val inBattle: Boolean = false,
     val isDoubleBattle: Boolean = false,
@@ -156,15 +196,23 @@ val SnapshotView.hasData: Boolean
 
 /** This battler's moves with their effectiveness against [foe] instead of the
  * foe that's out (BATTLE INFO showing another of the trainer's Pokémon). */
-fun MonView.withMovesVs(foe: MonView): MonView {
-    val t = foe.types.map(::typeIdOf)
-    val t1 = t.getOrElse(0) { TYPE_NONE }
-    val t2 = t.getOrElse(1) { TYPE_NONE }
-    return copy(moves = moves.map { mv ->
-        val atk = typeIdOf(mv.type)
+fun MonView.withMovesVs(foe: MonView): MonView = withMovesVs(listOf(foe))
+
+/** [withMovesVs] against every one of [targets] (a double battle's two). */
+fun MonView.withMovesVs(targets: List<MonView>): MonView = copy(moves = moves.map { mv ->
+    val atk = typeIdOf(mv.type)
+    mv.copy(vs = targets.map { foe ->
+        val t = foe.types.map(::typeIdOf)
+        val t1 = t.getOrElse(0) { TYPE_NONE }
+        val t2 = t.getOrElse(1) { TYPE_NONE }
         val pct = if (atk != TYPE_NONE && t1 != TYPE_NONE) typeMultiplierPct(atk, t1, t2) else 100
-        mv.copy(vs = listOf(MoveVsFoe(foe.name, formatMultiplier(pct), pct)))
+        MoveVsFoe(foe.name, formatMultiplier(pct), pct)
     })
+})
+
+/** A moveset's views: [ids] with their [pp], empty slots (0) dropped. */
+private fun moveViews(ids: IntArray, pp: IntArray): List<MoveView> = ids.toList().mapIndexedNotNull { idx, moveId ->
+    if (moveId == 0) null else lookupMove(moveId).let { MoveView(it.name, typeName(it.type), pp.getOrElse(idx) { 0 }, it.power, id = moveId) }
 }
 
 private const val REGION_MAP_TILE_SIZE = 8
@@ -177,7 +225,8 @@ private val gamesWithoutRegionData = setOf(GameKind.ODYSSEY)
 fun lookupLocation(regionMapSectionId: Int): LocationView {
     // A FireRed-engine hack's own map, read from its ROM, over the bundled
     // tables; FireRed itself keeps those (they carry its title-cased names).
-    val rom = if (activeGame == GameKind.FIRERED || activeGame == GameKind.YELLOW) null else RomRegionMap.current
+    val rom = if (activeGame == GameKind.FIRERED || activeGame == GameKind.YELLOW || activeGame == GameKind.RECHARGED_YELLOW) null
+        else RomRegionMap.current
     if (rom == null && activeGame in gamesWithoutRegionData) return LocationView("", null, 0, 0, 0, 0)
     val images = rom?.images ?: activeRegionMapImages
     val info = (rom?.sections ?: activeMapSecData)[regionMapSectionId]
@@ -221,7 +270,7 @@ fun buildSnapshotView(t: Telemetry): SnapshotView {
             if (moveId == 0) null
             else {
                 val info = lookupMove(moveId)
-                MoveView(info.name, typeName(info.type), m.pp[idx], info.power)
+                MoveView(info.name, typeName(info.type), m.pp[idx], info.power, id = moveId)
             }
         }
         val isEgg = m.isEgg || isVanillaEgg(m.species)
@@ -277,7 +326,7 @@ fun buildSnapshotView(t: Telemetry): SnapshotView {
                         val pct = if (info.type != TYPE_NONE) typeMultiplierPct(info.type, foe.type1, foe.type2) else 100
                         MoveVsFoe(speciesName(foe.species), formatMultiplier(pct), pct)
                     }
-                    MoveView(info.name, typeName(info.type), b.pp[idx], info.power, vs)
+                    MoveView(info.name, typeName(info.type), b.pp[idx], info.power, vs, id = moveId)
                 }
             }
             return MonView(
@@ -298,6 +347,13 @@ fun buildSnapshotView(t: Telemetry): SnapshotView {
                 hp = b.hp, maxHp = b.maxHp, status = statusLabel(b.status1),
                 types = monTypes(b.type1, b.type2),
                 iconAsset = spriteAsset("pokemon", b.species),
+                // The foe's moveset (battle INFO's FOE MOVES); verdicts against
+                // the player's battlers are worked out where they're shown.
+                moves = moveViews(b.moves, b.pp),
+                abilityId = b.ability,
+                heldItem = if (b.stats == null) null else if (b.item == 0) "" else itemName(b.item),
+                battleStats = b.stats?.toList(),
+                statStages = b.statStages?.map { it - 6 },
                 weaknesses = matchups.weaknesses,
                 resistances = matchups.resistances,
                 immunities = matchups.immunities,
@@ -359,6 +415,7 @@ fun buildSnapshotView(t: Telemetry): SnapshotView {
                 hp = m.hp, maxHp = m.maxHp, status = statusLabel(m.status),
                 types = monTypes(type1, type2),
                 iconAsset = spriteAsset("pokemon", m.species),
+                moves = moveViews(m.moves, m.pp),
                 weaknesses = matchups.weaknesses,
                 resistances = matchups.resistances,
                 immunities = matchups.immunities,
@@ -392,7 +449,8 @@ const val SPECIES_EGG_VANILLA = 412
 fun isVanillaEgg(species: Int): Boolean =
     species == SPECIES_EGG_VANILLA && when (activeGame) {
         GameKind.FIRERED, GameKind.EMERALD,
-        GameKind.UNBOUND, GameKind.RADICAL_RED, GameKind.ODYSSEY, GameKind.AMETHYST, GameKind.ORANGE_ISLANDS -> true
+        GameKind.UNBOUND, GameKind.RADICAL_RED, GameKind.ODYSSEY, GameKind.AMETHYST, GameKind.ORANGE_ISLANDS,
+        GameKind.SWORD_SHIELD, GameKind.RECHARGED_YELLOW -> true
         else -> false
     }
 
