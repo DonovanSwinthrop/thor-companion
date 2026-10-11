@@ -426,6 +426,13 @@ only while presses play or a closed loop steers (`exclusiveLocked`), never durin
 pending-move watches: those once held the lock through the whole turn, so a level-up or "learn a move?" message
 waiting on A left the player stuck. Watches expire after 300 frames; a 1200-frame watchdog cancels any lockout.
 `BattleInputControllerTest`simulates the party menu.
+**GAME SPEED / RTC (GitHub #50)**: the companion's FAST-FORWARD group has GAME SPEED (0.25x ... 4x, a pick-list): it sets
+`EmulatorEngine`'s speed step, saved per ROM like SPEED CYCLE's (`Prefs.speedIndexFor`). `SPEED_STEPS` appends 0.5x / 0.25x
+after the old five (saved indexes keep their meaning); SPEED CYCLE only cycles the first `CYCLE_STEPS` and goes from a slow step
+back to 1x. Below 1x the timer paces frames and audio is muted (as SLOWMO HOLD's 0.5x always was); FF, when on, wins. FF SPEED
+gained 1.5x on both screens. The RTC needs no code of ours: mGBA's GBA reset applies its overrides - RTC for AXVE / AXPE /
+BPEE by code, and for any Pokémon ROM it doesn't know by CRC (the hacks) - reading the device's time(0); saves and states keep it
+(`SAVESTATE_RTC`). Verified headless: retail Emerald's `sErrorStatus` (0x03000DB8) is 0 and `sRtc` holds the real date / time.
 **FF MODE** (SETTINGS,`FfMode`: SMART default / NORMAL). NORMAL = fast everywhere. SMART = 1x while a
 menu screen or the region map is up, FF (still on) resuming when it closes. **A battle stays fast** (the user's
 rule): in battle the game's own battle input state decides (`smartSlows`, `SmartFf.kt`, fed by

@@ -118,8 +118,11 @@ Settings screen. Pokémon, move and item names and the GUIDE pages stay as the g
 <details>
 <summary><strong>The player (top screen)</strong></summary>
 
-- **Fast-forward** with a speed cap, plus slow motion. **Smart** fast-forward
-  drops to normal speed in menus and on the map, and keeps battles fast.
+- **Fast-forward** with a speed cap (1.5× to 10×, or no cap), plus slow motion. **Smart** fast-forward
+  drops to normal speed in menus and on the map, and keeps battles fast. **Game speed** (on the bottom
+  screen's Settings) sets a pace that stays, per game: 0.25×, 0.5×, 1×, 1.5×, 2×, 3× or 4×.
+- **Real-time clock** for the games that use one (Ruby, Sapphire, Emerald and the Pokémon hacks):
+  day and night, berries, tides and daily events follow the device's clock, and saves keep it.
 - **Fast-forward music** (alpha) that keeps playing the song at its normal speed, instead of chipmunk sound.
 - **Save states** on hotkeys, with undo.
 - **Status bar** (optional): game, location, money, clock and battery above the game.

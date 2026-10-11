@@ -311,6 +311,13 @@ class PokeDaisyActivity : Activity() {
             Prefs(this@PokeDaisyActivity).ffMaxSpeed = v
             if (::engine.isInitialized) engine.ffMaxSpeed = v
         }
+        override val gameSpeed get() = if (::engine.isInitialized) engine.gameSpeed else 1f
+        override val gameSpeeds get() = if (::engine.isInitialized) engine.gameSpeeds else super.gameSpeeds
+        override fun setGameSpeed(v: Float) {
+            if (!::engine.isInitialized) return
+            engine.setGameSpeed(v)
+            Prefs(this@PokeDaisyActivity).setSpeedIndexFor(romKey, engine.speedIndex)
+        }
         override val ffToggled get() = if (::engine.isInitialized) engine.fastForwardToggled else false
         override fun setFfToggled(on: Boolean) {
             if (::engine.isInitialized) engine.setFastForwardToggled(on)

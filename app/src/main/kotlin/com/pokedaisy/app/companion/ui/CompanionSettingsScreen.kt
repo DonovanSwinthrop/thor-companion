@@ -40,7 +40,7 @@ import com.pokedaisy.app.companion.next
 import com.pokedaisy.app.companion.FfMusicMode
 import com.pokedaisy.app.companion.MAX_BAR_TABS
 
-private val FF_RATES = floatArrayOf(0f, 2f, 3f, 4f, 5f, 6f, 8f, 10f)
+private val FF_RATES = floatArrayOf(0f, 1.5f, 2f, 3f, 4f, 5f, 6f, 8f, 10f)
 private val TOUCH_NAMES = listOf(tk("AUTO"), tk("ALWAYS"), tk("NEVER"))
 
 /** SETTINGS > STATUS BAR's choices: off, over the game, over the companion's tabs. */
@@ -349,6 +349,12 @@ private fun homeRows(
         SettingRow(tk("FF SPEED"), rateLabel(s.ffMaxSpeed)) {
             select(Selector(tk("FF SPEED"), rateLabels, rateLabel(s.ffMaxSpeed)) { s.setFfMaxSpeed(FF_RATES[rateLabels.indexOf(it)]) })
         },
+        // The game's own pace, kept per game: slow-motion that stays (0.5x, 0.25x) up to 4x. FF, when on, wins.
+        SettingRow(tk("GAME SPEED"), speedLabel(s.gameSpeed)) {
+            val speeds = s.gameSpeeds
+            val labels = speeds.map(::speedLabel)
+            select(Selector(tk("GAME SPEED"), labels, speedLabel(s.gameSpeed)) { l -> s.setGameSpeed(speeds[labels.indexOf(l)]) })
+        },
         // SMART: menus (party, bag, ... in battle too) and the region map at 1x; NORMAL: fast everywhere.
         SettingRow(tk("FF MODE"), s.ffMode.label) {
             val modes = FfMode.entries
@@ -487,7 +493,10 @@ private fun shaderRows(s: CompanionSettings, changed: () -> Unit): List<SettingR
 
 private fun alphaBadge(mode: FfMusicMode) = if (mode.alpha) tk("ALPHA") else null
 
-private fun rateLabel(v: Float) = if (v <= 0f) tk("INFINITE") else "${v.toInt()}×"
+private fun rateLabel(v: Float) = if (v <= 0f) tk("INFINITE") else speedLabel(v)
+
+/** 2×, 1.5×, 0.25× (Pixel Operator has no ½ / ¼). */
+internal fun speedLabel(v: Float) = (if (v % 1f == 0f) "${v.toInt()}" else "$v") + "×"
 
 private fun keyLabel(name: String) = name.replace("BUTTON_", "").replace('_', ' ')
 

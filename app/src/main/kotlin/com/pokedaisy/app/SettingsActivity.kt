@@ -1498,7 +1498,7 @@ class SettingsActivity : ComponentActivity() {
     }
 
     companion object {
-        val RATES = floatArrayOf(0f, 2f, 3f, 4f, 5f, 6f, 8f, 10f)
+        val RATES = floatArrayOf(0f, 1.5f, 2f, 3f, 4f, 5f, 6f, 8f, 10f)
         val TOUCH_NAMES = listOf(tk("AUTO"), tk("ALWAYS"), tk("NEVER"))
         const val REPO_URL = "https://github.com/lidor30/pokedaisy"
         /** A ROM path: open straight on that game's CHEATS (its library menu). */
@@ -1534,7 +1534,7 @@ class SettingsActivity : ComponentActivity() {
         }
         const val COFFEE_URL = "https://buymeacoffee.com/lidor30g"
 
-        fun rateLabel(v: Float) = if (v <= 0f) tk("INFINITE") else "${v.toInt()}×"
+        fun rateLabel(v: Float) = if (v <= 0f) tk("INFINITE") else if (v % 1f == 0f) "${v.toInt()}×" else "$v×"
 
         fun keyLabel(name: String) = name.replace("BUTTON_", "").replace('_', ' ')
 

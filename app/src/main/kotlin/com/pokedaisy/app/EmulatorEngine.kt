@@ -217,8 +217,9 @@ class EmulatorEngine(
         announceSpeed()
     }
 
+    /** SPEED CYCLE: 1x, 1.5x ... 4x and round; from a slow step (GAME SPEED's 0.5x / 0.25x), back to 1x. */
     fun cycleSpeed() {
-        speedIdx = (speedIdx + 1) % SPEED_STEPS.size
+        speedIdx = if (speedIdx >= CYCLE_STEPS) 0 else (speedIdx + 1) % CYCLE_STEPS
         announceSpeed()
     }
 
@@ -227,6 +228,19 @@ class EmulatorEngine(
 
     /** Restore a persisted speed index without flashing the HUD. */
     fun restoreSpeedIndex(i: Int) { speedIdx = i.coerceIn(0, SPEED_STEPS.size - 1) }
+
+    /** The game speeds the companion's GAME SPEED offers ([speedIndex] picks one), slowest first. */
+    val gameSpeeds: List<Float> get() = SPEED_STEPS.sorted()
+
+    /** The speed step running now (1x unless SPEED CYCLE / GAME SPEED picked another). */
+    val gameSpeed: Float get() = SPEED_STEPS[speedIdx]
+
+    /** GAME SPEED: run at [speed] (one of [gameSpeeds]) until another is picked; the HUD says so. */
+    fun setGameSpeed(speed: Float) {
+        val i = SPEED_STEPS.indexOfFirst { it == speed }.takeIf { it >= 0 } ?: return
+        speedIdx = i
+        announceSpeed()
+    }
 
     /** Emu thread: the game's region map / a menu screen is up ([RegionMapWatch], [FfMenuWatch]). */
     private var mapOpen = false
@@ -860,7 +874,10 @@ class EmulatorEngine(
         const val GBA_FPS = 16777216.0 / 280896.0
         /** Dynamic rate control's most the audio is stretched or squeezed (RetroArch's default). */
         const val DRC_MAX = 0.005
-        /** SPEED_CYCLE steps. Index 0 (1×) is the normal, audio-on state. */
-        val SPEED_STEPS = floatArrayOf(1f, 1.5f, 2f, 3f, 4f)
+        /** Speed steps, by the index saved per ROM. Index 0 (1×) is the normal, audio-on state; SPEED CYCLE
+         * goes through the first [CYCLE_STEPS], GAME SPEED adds the slow ones (muted, like SLOWMO HOLD) -
+         * appended, so the indexes saved before keep their meaning. */
+        val SPEED_STEPS = floatArrayOf(1f, 1.5f, 2f, 3f, 4f, 0.5f, 0.25f)
+        const val CYCLE_STEPS = 5
     }
 }

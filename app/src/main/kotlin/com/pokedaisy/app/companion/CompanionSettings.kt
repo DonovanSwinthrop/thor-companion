@@ -23,6 +23,11 @@ interface CompanionSettings {
     val ffMaxSpeed: Float
     fun setFfMaxSpeed(v: Float)
 
+    /** GAME SPEED: the running game's speed step (1x normal; slower or faster until changed), kept per game. */
+    val gameSpeed: Float get() = 1f
+    val gameSpeeds: List<Float> get() = listOf(0.25f, 0.5f, 1f, 1.5f, 2f, 3f, 4f)
+    fun setGameSpeed(v: Float) {}
+
     /** Whether fast-forward is currently toggled on (independent of the hold trigger). */
     val ffToggled: Boolean
     fun setFfToggled(on: Boolean)
