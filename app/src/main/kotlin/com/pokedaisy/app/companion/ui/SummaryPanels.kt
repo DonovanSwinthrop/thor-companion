@@ -51,7 +51,7 @@ internal fun SectionBand(
                 drawPixelRoundRect(BandShade, radius = 2 * px, step = px)
                 drawPixelRoundRect(OptionColors.hintBar, size = Size(size.width, size.height - px), radius = 2 * px, step = px)
             }
-            .padding(start = u * 5, end = u * 5, top = u * 2, bottom = u * 3),
+            .padding(start = u * 5, end = u * 5, top = u * 1, bottom = u * 2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         GbaText(title, OptionColors.hintText, OptionColors.hintShadow, m, modifier = Modifier.weight(1f, fill = false))
@@ -67,7 +67,7 @@ internal fun SummaryPanel(
     m: GbaTextMetrics,
     modifier: Modifier = Modifier,
     fill: Color = OptionColors.listFill,
-    padding: Dp = m.u * 4,
+    padding: Dp = m.u * 3,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val u = m.u
@@ -106,6 +106,9 @@ internal fun DashedRule(m: GbaTextMetrics, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(m.u * 2).drawBehind { drawRowDivider(OptionColors.divider, m.u.toPx(), 0f) })
 }
 
+/** The left column's share: a little over half, so a matchup line holds one more chip (the moves have room to spare). */
+private const val LEFT_SHARE = 0.54f
+
 /** The page's two columns in [look]: inside one white window, or side by side as windows of their own. */
 @Composable
 internal fun SummaryColumns(
@@ -117,14 +120,14 @@ internal fun SummaryColumns(
 ) {
     if (look == SummaryLook.WINDOWS) {
         Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            left(Modifier.weight(1f).fillMaxHeight())
-            right(Modifier.weight(1f).fillMaxHeight())
+            left(Modifier.weight(LEFT_SHARE).fillMaxHeight())
+            right(Modifier.weight(1f - LEFT_SHARE).fillMaxHeight())
         }
     } else {
         OptionListWindow(m, modifier.fillMaxSize(), fill = OptionColors.titleFill) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(m.u * 6)) {
-                left(Modifier.weight(1f).fillMaxHeight())
-                right(Modifier.weight(1f).fillMaxHeight())
+                left(Modifier.weight(LEFT_SHARE).fillMaxHeight())
+                right(Modifier.weight(1f - LEFT_SHARE).fillMaxHeight())
             }
         }
     }
@@ -154,7 +157,7 @@ internal fun SummaryBlock(
         SummaryLook.BANDS -> Column(modifier) {
             if (title != null) {
                 SectionBand(title, titleMetrics, trailing = titleTrailing)
-                Spacer(Modifier.height(u * 4))
+                Spacer(Modifier.height(u * 3))
             }
             Column(body.padding(horizontal = u * 3), content = content)
         }
@@ -171,7 +174,7 @@ internal fun SummaryBlock(
         else -> OptionListWindow(m, modifier, fill = OptionColors.titleFill) {
             Column(body) {
                 if (title != null) {
-                    Row(Modifier.padding(bottom = u * 3), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(bottom = u * 2), verticalAlignment = Alignment.CenterVertically) {
                         BlockTitle(title, titleMetrics)
                         titleTrailing()
                     }

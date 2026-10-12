@@ -691,9 +691,6 @@ fun main(args: Array<String>) {
         listOf(
             Shot("$g-party-detail-look-$l", bw, bh, bd, at(companion("PARTY", mon = 0))),
             Shot("$g-party-detail-look-$l-mon2", bw, bh, bd, at(companion("PARTY", mon = 1))),
-            Shot("$g-party-detail-look-$l-stats", bw, bh, bd, at(companion("PARTY", mon = 0))) {
-                onNodeWithText("STATS").performClick()
-            },
         )
     } + listOf(
         // In the game's home town, which its own region map shows (Emerald has no Pallet Town rect).

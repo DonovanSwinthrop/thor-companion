@@ -287,15 +287,21 @@ private fun SummaryLeftColumn(mon: MonView, m: GbaTextMetrics, small: GbaTextMet
 @Composable
 private fun SummaryInfoBlocks(look: SummaryLook, mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier) {
     val u = m.u
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(if (look == SummaryLook.WINDOWS) 8.dp else u * 5)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(if (look == SummaryLook.WINDOWS) 8.dp else u * 4)) {
         if (look == SummaryLook.BANDS) {
             SummaryBlock(look, mon.name, m, Modifier.fillMaxWidth(), titleTrailing = {
                 GenderMark(mon.genderSymbol, m, Modifier.padding(start = u * 3), tint = OptionColors.hintText)
-            }) { InfoSection(mon, m, small, Modifier.fillMaxWidth(), nameRow = false) }
+            }) { InfoSection(mon, m, small, Modifier.fillMaxWidth(), typesBesideIcon = true, nameRow = false) }
         } else {
-            SummaryBlock(look, null, m, Modifier.fillMaxWidth()) { InfoSection(mon, m, small, Modifier.fillMaxWidth()) }
+            // PANELS: the panel is the icon well's grey, so the well turns white.
+            val well = if (look == SummaryLook.PANELS) OptionColors.titleFill else OptionColors.listFill
+            SummaryBlock(look, null, m, Modifier.fillMaxWidth()) {
+                InfoSection(mon, m, small, Modifier.fillMaxWidth(), typesBesideIcon = true, iconWell = well)
+            }
         }
-        SummaryBlock(look, tr("MATCHUPS"), m, Modifier.fillMaxWidth().weight(1f), titleMetrics = small, fill = true) {
+        // (PANELS / WINDOWS: the container is the block and WEAK TO says what's in it - its frame costs the title's row.)
+        val title = if (look == SummaryLook.BANDS) tr("MATCHUPS") else null
+        SummaryBlock(look, title, m, Modifier.fillMaxWidth().weight(1f), titleMetrics = small, fill = true) {
             MatchupSection(mon, small, Modifier.fillMaxWidth().weight(1f))
         }
     }
@@ -307,7 +313,7 @@ private fun SummaryInfoBlocks(look: SummaryLook, mon: MonView, m: GbaTextMetrics
 @Composable
 internal fun InfoSection(
     mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier,
-    typesBesideIcon: Boolean = false, nameRow: Boolean = true,
+    typesBesideIcon: Boolean = false, nameRow: Boolean = true, iconWell: Color = OptionColors.listFill,
 ) {
     val u = m.u
     Box(modifier) {
@@ -322,7 +328,7 @@ internal fun InfoSection(
                     Modifier
                         .size(u * 36)
                         .clip(PixelRoundedShape(u * 4))
-                        .background(OptionColors.listFill),
+                        .background(iconWell),
                     contentAlignment = Alignment.Center,
                 ) { SpeciesIcon(mon.iconAsset, size = u * 32) }
                 Spacer(Modifier.width(u * 5))
@@ -331,8 +337,12 @@ internal fun InfoSection(
                         Row(verticalAlignment = Alignment.Bottom) {
                             GbaText(tr("Lv"), OptionColors.label, OptionColors.labelShadow, small)
                             GbaText("${mon.level}", OptionColors.value, OptionColors.valueShadow, m, modifier = Modifier.padding(start = u * 2))
+                            // Beside the types, the status rides on the level's line: one row less.
+                            if (typesBesideIcon && mon.status.isNotEmpty()) {
+                                StatusBadge(mon.status, Modifier.padding(start = u * 4).align(Alignment.CenterVertically))
+                            }
                         }
-                        if (mon.status.isNotEmpty()) StatusBadge(mon.status)
+                        if (!typesBesideIcon && mon.status.isNotEmpty()) StatusBadge(mon.status)
                         if (typesBesideIcon) Types(mon)
                     }
                 }
@@ -467,7 +477,7 @@ private fun MovesSection(
             if (cards) {
                 val fill = if (look == SummaryLook.BANDS) OptionColors.titleFill else OptionColors.listFill
                 SummaryPanel(m, Modifier.weight(1f).fillMaxWidth(), fill = fill, padding = m.u * 2) {
-                    MoveRow(mv, m, small, Modifier.fillMaxSize().padding(end = m.u * 3), forget = tagged)
+                    MoveRow(mv, m, small, Modifier.fillMaxSize().padding(end = m.u * 3), forget = tagged, padded = false)
                 }
             } else {
                 if (i > 0) {
@@ -481,7 +491,11 @@ private fun MovesSection(
 
 /** One move: a type-colored stripe, then name, type badge, power and PP; [forget] tags it FORGET (LEARN's pick). */
 @Composable
-private fun MoveRow(mv: MoveView?, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, forget: Boolean = false) {
+private fun MoveRow(
+    mv: MoveView?, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, forget: Boolean = false,
+    /** false: no room above / below the lines (a card already has its own). */
+    padded: Boolean = true,
+) {
     val u = m.u
     val edge = mv?.let { QolColors.typeColors[it.type] } ?: OptionColors.muted
     Box(
@@ -490,10 +504,11 @@ private fun MoveRow(mv: MoveView?, m: GbaTextMetrics, small: GbaTextMetrics, mod
                 val px = u.toPx()
                 if (mv != null) {
                     // The type stripe down the left.
-                    drawPixelRoundRect(edge, Offset(0f, 4 * px), Size(3 * px, size.height - 8 * px), radius = px, step = px)
+                    val inset = if (padded) 4 * px else 2 * px
+                    drawPixelRoundRect(edge, Offset(0f, inset), Size(3 * px, size.height - 2 * inset), radius = px, step = px)
                 }
             }
-            .padding(start = u * 8, top = u * 3, bottom = u * 3),
+            .padding(start = u * 8, top = if (padded) u * 3 else 0.dp, bottom = if (padded) u * 3 else 0.dp),
     ) {
         if (mv == null) {
             GbaText("—", OptionColors.muted, OptionColors.mutedShadow, m, modifier = Modifier.align(Alignment.CenterStart))
