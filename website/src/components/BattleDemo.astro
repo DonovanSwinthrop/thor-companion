@@ -1,7 +1,7 @@
 ---
 // The BATTLE tab as the app draws it (BattleControlsScreen / BattleInfoScreen / SuggestionsScreen),
 // playing itself: FIGHT, a move, INFO, SUGGESTIONS and back. Invented creatures and moves only (never a real
-// name), a type's emblem for each one's icon and a daisy orb for the party - no game art.
+// name), drawn from creatures.js, and a daisy orb for the party - no game art.
 import AppScreen from './AppScreen.astro';
 import Pixel from './Pixel.astro';
 import { TYPE } from '../lib/types.js';
@@ -50,7 +50,7 @@ const resists = [['WATER', '1/2x'], ['ELECTRIC', '1/2x'], ['FIGHTING', '1/2x'], 
       <div class="win f-appWin">
         <div class="sides">
           <div class="side">
-            <div class="side-l"><span class="red t24">YOU</span><span class="icon-box f-iconBox"><Pixel name="flame" scale={1.334} /></span></div>
+            <div class="side-l"><span class="red t24">YOU</span><span class="icon-box f-iconBox"><Pixel name="emberpup" scale={1} /></span></div>
             <div class="side-r">
               <span class="t32 nm">EMBERPUP<Pixel name="male" scale={1} /></span>
               <span class="row"><span class="pill" style={`--c:${TYPE.FIRE}`}>FIRE</span><span class="t24">Lv <b class="red">12</b></span></span>
@@ -59,7 +59,7 @@ const resists = [['WATER', '1/2x'], ['ELECTRIC', '1/2x'], ['FIGHTING', '1/2x'], 
           </div>
           <span class="sep-v"></span>
           <div class="side">
-            <div class="side-l"><span class="red t24">FOE</span><span class="icon-box f-iconBox"><Pixel name="leaf" scale={1.5} /></span></div>
+            <div class="side-l"><span class="red t24">FOE</span><span class="icon-box f-iconBox"><Pixel name="thornlet" scale={1} /></span></div>
             <div class="side-r">
               <span class="t32 nm">THORNLET<Pixel name="female" scale={1} /></span>
               <span class="row"><span class="pill" style={`--c:${TYPE.GRASS}`}>GRASS</span><span class="pill" style={`--c:${TYPE.POISON}`}>POISON</span><span class="t24">Lv <b class="red">10</b></span></span>
@@ -96,7 +96,7 @@ const resists = [['WATER', '1/2x'], ['ELECTRIC', '1/2x'], ['FIGHTING', '1/2x'], 
       <div class="win f-appWin">
         <div class="vs">
           <span class="red t32">VS</span>
-          <span class="icon-box small f-iconBox"><Pixel name="leaf" scale={1} /></span>
+          <span class="icon-box small f-iconBox"><Pixel name="thornlet" scale={0.75} /></span>
           <span class="t32">THORNLET</span><Pixel name="female" scale={1} />
           <span class="t24">Lv <b class="red">10</b></span>
           <span class="pill" style={`--c:${TYPE.GRASS}`}>GRASS</span><span class="pill" style={`--c:${TYPE.POISON}`}>POISON</span>
@@ -104,14 +104,14 @@ const resists = [['WATER', '1/2x'], ['ELECTRIC', '1/2x'], ['FIGHTING', '1/2x'], 
         </div>
         <div class="sep-h"></div>
         {[
-          { rank: '1ST', icon: 'flame', name: 'EMBERPUP', g: 'male', out: true, types: ['FIRE'], lv: 12, hp: ['86%', '30/35', ''], move: 'CINDER SPIT', mtype: 'FIRE', pwr: 40, pp: 25 },
-          { rank: '2ND', icon: 'feather', name: 'GALEFINCH', g: 'female', psn: true, types: ['NORMAL', 'FLYING'], lv: 9, hp: ['19%', '5/26', 'low'], move: 'BREEZE CUT', mtype: 'FLYING', pwr: 40, pp: 35 },
+          { rank: '1ST', icon: 'emberpup', name: 'EMBERPUP', g: 'male', out: true, types: ['FIRE'], lv: 12, hp: ['86%', '30/35', ''], move: 'CINDER SPIT', mtype: 'FIRE', pwr: 40, pp: 25 },
+          { rank: '2ND', icon: 'galefinch', name: 'GALEFINCH', g: 'female', psn: true, types: ['NORMAL', 'FLYING'], lv: 9, hp: ['19%', '5/26', 'low'], move: 'BREEZE CUT', mtype: 'FLYING', pwr: 40, pp: 35 },
         ].map((s, i) => (
           <>
             {i > 0 && <div class="sep-h"></div>}
             <div class="pick">
               <div class="side">
-                <div class="side-l"><span class="red t24">{s.rank}</span><span class="icon-box f-iconBox"><Pixel name={s.icon} scale={s.icon === 'feather' ? 1.334 : 1.334} /></span></div>
+                <div class="side-l"><span class="red t24">{s.rank}</span><span class="icon-box f-iconBox"><Pixel name={s.icon} scale={1} /></span></div>
                 <div class="side-r">
                   <span class="t32 nm">{s.name}<Pixel name={s.g} scale={1} />{s.out && <span class="pill" style="--c:#8c8c94">OUT</span>}{s.psn && <span class="pill" style="--c:#a259d9">PSN</span>}</span>
                   <span class="row">{s.types.map((t) => <span class="pill" style={`--c:${TYPE[t]}`}>{t}</span>)}<span class="t24">Lv <b class="red">{s.lv}</b></span></span>

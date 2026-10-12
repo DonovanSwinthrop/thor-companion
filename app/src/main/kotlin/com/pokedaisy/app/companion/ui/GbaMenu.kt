@@ -166,6 +166,28 @@ object OptionColors {
     val imageWell get() = c(0xFF20242C, 0xFF0C0E12)
     /** Over everything a dark mode backdrop draws (a game's party art): how much black. 0 in light mode. */
     val backdropScrim get() = if (dark) 0.55f else 0f
+
+    // The docs reader (DocsScreen.kt): a page of reading text in Atkinson Hyperlegible, dark on white
+    // (light on slate in dark mode; Gen 1's ink on its paper).
+    val readingPaper get() = if (gen1) G1_PAPER else c(0xFFFFFFFF, 0xFF262B34)
+    val readingText get() = if (gen1) G1_INK else c(0xFF26262E, 0xFFE3E6EC)
+    val readingMuted get() = if (gen1) c(0xFF505050, 0xFFB0B0B0) else c(0xFF5E5D6B, 0xFFA9AFBC)
+    val readingLink get() = if (gen1) G1_INK else c(0xFF2F5FD0, 0xFF8AB4FF)
+    /** Behind a `code` span: a button or setting name, set in the pixel font. */
+    val readingCode get() = if (gen1) c(0xFFE4E4E4, 0xFF303030) else c(0xFFF0EFF5, 0xFF353C49)
+    /** A search hit's matched words. */
+    val readingMark get() = c(0xFFFFE58A, 0xFF6B5A1E)
+    /** A callout's bar and tint: [kind] is tip / note / warning. */
+    fun noteBar(kind: String) = when (kind) {
+        "tip" -> c(0xFF2C9A44, 0xFF4CC266)
+        "warning" -> c(0xFFE83028, 0xFFFF6A5C)
+        else -> c(0xFFF8D030, 0xFFE0B830)
+    }
+    fun noteFill(kind: String) = if (gen1) G1_PAPER else when (kind) {
+        "tip" -> c(0xFFEFFAF1, 0xFF1F3326)
+        "warning" -> c(0xFFFFF1EF, 0xFF3A2422)
+        else -> c(0xFFFFFAF0, 0xFF37321F)
+    }
 }
 
 /** A dashed row divider along the bottom edge, from [start] px in - the bag

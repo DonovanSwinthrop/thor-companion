@@ -70,3 +70,24 @@ private fun buildPixelFamily(context: Context): FontFamily {
         FontFamily(androidx.compose.ui.text.font.Typeface(typeface))
     }.getOrElse { plain() }
 }
+
+/**
+ * The docs reader's text font: Atkinson Hyperlegible (regular, bold, italic). Long reading in Pixel Operator
+ * is tiring, so the manual's paragraphs use this; its headings and the app's own labels stay pixel art.
+ * Built once per process, like [pixelFontFamily].
+ */
+fun readingFontFamily(context: Context): FontFamily {
+    readingFamily?.let { return it }
+    return synchronized(fontLock) {
+        readingFamily ?: run {
+            val assets = context.applicationContext.assets
+            FontFamily(
+                ComposeFont("fonts/AtkinsonHyperlegible-Regular.ttf", assets),
+                ComposeFont("fonts/AtkinsonHyperlegible-Bold.ttf", assets, androidx.compose.ui.text.font.FontWeight.Bold),
+                ComposeFont("fonts/AtkinsonHyperlegible-Italic.ttf", assets, style = androidx.compose.ui.text.font.FontStyle.Italic),
+            ).also { readingFamily = it }
+        }
+    }
+}
+
+@Volatile private var readingFamily: FontFamily? = null

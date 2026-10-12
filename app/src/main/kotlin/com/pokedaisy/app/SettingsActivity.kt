@@ -120,7 +120,7 @@ import com.pokedaisy.app.companion.ui.drawPixelRoundRect
  */
 class SettingsActivity : ComponentActivity() {
 
-    private enum class Screen { HOME, HOTKEYS, CONTROLS, SHADERS, OVERLAYS, FOLDERS, COVER_ART, HIDDEN, ACHIEVEMENTS, CHEATS, CHEAT_ADD, LICENSES }
+    private enum class Screen { HOME, HOTKEYS, CONTROLS, SHADERS, OVERLAYS, FOLDERS, COVER_ART, HIDDEN, ACHIEVEMENTS, CHEATS, CHEAT_ADD, LICENSES, HELP }
 
     private lateinit var prefs: Prefs
     private var screen by mutableStateOf(Screen.HOME)
@@ -152,6 +152,12 @@ class SettingsActivity : ComponentActivity() {
 
     private val updates by lazy { AppUpdateFlow(this) }
 
+    /** HELP: the manual (DocsScreen.kt), its place kept while Settings is open. */
+    private val docsUi = com.pokedaisy.app.companion.ui.DocsUiState()
+    private val docsSource by lazy { com.pokedaisy.app.companion.ui.DocsSources.of(this) }
+    /** Opened straight on HELP (the library's ? button): BACK from its contents leaves. */
+    private var helpOnly = false
+
     /** Opened from a game's library menu (CHEATS): BACK from its cheats leaves, not to the hub. */
     private var cheatsOnly = false
     /** HOME's search box; kept while a sub-page it led to is open. */
@@ -173,6 +179,10 @@ class SettingsActivity : ComponentActivity() {
         if (intent?.getStringExtra(EXTRA_SCREEN) == SCREEN_CONTROLS) {
             controlsOnly = true
             screen = Screen.CONTROLS
+        }
+        if (intent?.getStringExtra(EXTRA_SCREEN) == SCREEN_HELP) {
+            helpOnly = true
+            screen = Screen.HELP
         }
         setContent { QolTheme { Root() } }
     }
@@ -272,6 +282,7 @@ class SettingsActivity : ComponentActivity() {
                         Screen.CHEATS -> tk("CHEATS")
                         Screen.CHEAT_ADD -> tk("ADD CODE")
                         Screen.LICENSES -> tk("LICENSES")
+                        Screen.HELP -> tk("HELP")
                     },
                     m = m,
                     onBack = {
@@ -293,6 +304,7 @@ class SettingsActivity : ComponentActivity() {
                     Screen.CHEATS -> CheatsScreen(m, small)
                     Screen.CHEAT_ADD -> CheatAddScreen(m, small)
                     Screen.LICENSES -> LicensesScreen(m, small)
+                    Screen.HELP -> com.pokedaisy.app.companion.ui.DocsReader(docsUi, m, docsSource, onOpenUrl = ::openUrl)
                 }
             }
 
@@ -436,6 +448,8 @@ class SettingsActivity : ComponentActivity() {
     private fun goBack() {
         when {
             screen == Screen.CHEAT_ADD -> screen = Screen.CHEATS
+            screen == Screen.HELP && docsUi.back() -> {}
+            screen == Screen.HELP && helpOnly -> finish()
             screen == Screen.HOME || (screen == Screen.CHEATS && cheatsOnly) || (screen == Screen.CONTROLS && controlsOnly) -> finish()
             else -> { cheatRemoveMode = false; overlayRemoveMode = false; screen = Screen.HOME }
         }
@@ -567,6 +581,8 @@ class SettingsActivity : ComponentActivity() {
                 labelIcon = { GoldTrophy() },
             ) { screen = Screen.ACHIEVEMENTS },
             groupTitle(tk("APP")),
+            // The manual (docs/manual, served by the website), readable offline once fetched.
+            SettingRow(tk("HELP"), null, subtitle = "The manual: how every screen and setting works") { screen = Screen.HELP },
             // AUTO: the ROM's language in game, the device's here. Applies at once, both screens.
             SettingRow("LANGUAGE", L10n.settingLabel(prefs.appLanguage)) {
                 val opts = L10n.options
@@ -1503,9 +1519,10 @@ class SettingsActivity : ComponentActivity() {
         const val REPO_URL = "https://github.com/lidor30/pokedaisy"
         /** A ROM path: open straight on that game's CHEATS (its library menu). */
         const val EXTRA_CHEATS_ROM = "cheats_rom"
-        /** Opens one page alone ([SCREEN_CONTROLS]: GAME BUTTONS, for setup); BACK finishes. */
+        /** Opens one page alone ([SCREEN_CONTROLS]: GAME BUTTONS, for setup; [SCREEN_HELP]: the manual); BACK finishes. */
         const val EXTRA_SCREEN = "screen"
         const val SCREEN_CONTROLS = "CONTROLS"
+        const val SCREEN_HELP = "HELP"
         /** Cheat files are text; anything bigger isn't one. */
         const val MAX_CHEAT_FILE = 1 shl 20
         /** One picked overlay file at most (read into memory; a pack of a few 4K borders is ~20 MB). */

@@ -59,6 +59,7 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
@@ -295,6 +296,8 @@ class LibraryActivity : ComponentActivity() {
         rescanRomsFolder()
         identifyGames()
         updates.onResume()
+        // The manual (Settings > HELP), fetched in the background so it's there offline later.
+        if (com.pokedaisy.app.companion.ui.DocsSources.override == null) DocsStore.prefetch(this)
         bump()   // refresh list / PLAYING marker after returning
     }
 
@@ -330,6 +333,10 @@ class LibraryActivity : ComponentActivity() {
                     }
                     HeaderIcon(Icons.Filled.Add, tr("Import ROM"), m) { importRom.launch(arrayOf("*/*")) }
                     HeaderIcon(Icons.Filled.Refresh, tr("Refresh"), m) { refreshLibrary() }
+                    // The manual (Settings > HELP), on its own.
+                    HeaderIcon(Icons.AutoMirrored.Filled.HelpOutline, tr("Help"), m) {
+                        startActivity(Intent(this@LibraryActivity, SettingsActivity::class.java).putExtra(SettingsActivity.EXTRA_SCREEN, SettingsActivity.SCREEN_HELP))
+                    }
                     HeaderIcon(Icons.Filled.Settings, tr("Settings"), m) {
                         startActivity(Intent(this@LibraryActivity, SettingsActivity::class.java))
                     }

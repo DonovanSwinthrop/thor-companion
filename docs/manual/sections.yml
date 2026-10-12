@@ -1,0 +1,9 @@
+# The manual's sections, in reading order. Every page names one of these ids in its front matter.
+- id: start
+  title: Getting started
+- id: companion
+  title: The companion
+- id: player
+  title: Playing
+- id: help
+  title: Help and reference

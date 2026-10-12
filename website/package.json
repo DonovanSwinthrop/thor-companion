@@ -3,13 +3,21 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/sync-docs.mjs",
     "dev": "astro dev",
+    "prebuild": "node scripts/sync-docs.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "test": "node --test test/*.test.js",
-    "cover": "astro build && node scripts/cover.mjs"
+    "cover": "astro build && node scripts/cover.mjs",
+    "docs-art": "node scripts/docs-art.mjs"
   },
   "dependencies": {
-    "astro": "^7.3.7"
+    "astro": "^7.3.7",
+    "github-slugger": "^2.0.0",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "yaml": "^2.9.1"
   }
 }

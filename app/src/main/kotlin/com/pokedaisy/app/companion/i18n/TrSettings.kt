@@ -2,6 +2,18 @@ package com.pokedaisy.app.companion.i18n
 
 /** Both Settings screens: the top-screen SettingsActivity and the companion's SETTINGS tab. */
 internal val trSettings: Map<String, Tr> = mapOf(
+    // HELP: the manual (DocsScreen.kt)
+    "HELP" to Tr(ja = "ヘルプ", fr = "AIDE", de = "HILFE", it = "AIUTO", es = "AYUDA"),
+    "Help" to Tr(ja = "ヘルプ", fr = "Aide", de = "Hilfe", it = "Aiuto", es = "Ayuda"),
+    "The manual: how every screen and setting works" to Tr(ja = "せつめいしょ: がめんと せっていの つかいかた", fr = "Le manuel : comment marchent chaque écran et réglage", de = "Das Handbuch: wie jeder Bildschirm und jede Einstellung funktioniert", it = "Il manuale: come funzionano schermate e impostazioni", es = "El manual: cómo funciona cada pantalla y ajuste"),
+    "LOADING THE MANUAL…" to Tr(ja = "せつめいしょを よみこみちゅう…", fr = "CHARGEMENT DU MANUEL…", de = "HANDBUCH WIRD GELADEN…", it = "CARICAMENTO MANUALE…", es = "CARGANDO EL MANUAL…"),
+    "The manual comes from pokedaisy.web.app and is kept for reading offline. Connect to the internet once to get it." to Tr(ja = "せつめいしょは pokedaisy.web.app から とどき オフラインでも よめるように ほぞんされます。 いちど インターネットに つないでください。", fr = "Le manuel vient de pokedaisy.web.app et reste lisible hors ligne. Connectez-vous une fois à Internet pour l'obtenir.", de = "Das Handbuch kommt von pokedaisy.web.app und bleibt offline lesbar. Einmal mit dem Internet verbinden, um es zu laden.", it = "Il manuale arriva da pokedaisy.web.app e resta leggibile offline. Collegati a Internet una volta per scaricarlo.", es = "El manual viene de pokedaisy.web.app y se guarda para leerlo sin conexión. Conéctate a Internet una vez para descargarlo."),
+    "RETRY" to Tr(ja = "もういちど", fr = "RÉESSAYER", de = "ERNEUT", it = "RIPROVA", es = "REINTENTAR"),
+    "SEARCH THE MANUAL (e.g. FAST-FORWARD)" to Tr(ja = "せつめいしょを さがす (れい: はやおくり)", fr = "CHERCHER (ex. AVANCE RAPIDE)", de = "SUCHEN (z. B. VORSPULEN)", it = "CERCA (es. AVANTI VELOCE)", es = "BUSCAR (p. ej. AVANCE RÁPIDO)"),
+    "PREVIOUS" to Tr(ja = "まえへ", fr = "PRÉCÉDENT", de = "ZURÜCK", it = "PRECEDENTE", es = "ANTERIOR"),
+    "TIP" to Tr(ja = "ヒント", fr = "ASTUCE", de = "TIPP", it = "CONSIGLIO", es = "CONSEJO"),
+    "NOTE" to Tr(ja = "メモ", fr = "À NOTER", de = "HINWEIS", it = "NOTA", es = "NOTA"),
+    "HEADS UP" to Tr(ja = "ちゅうい", fr = "ATTENTION", de = "ACHTUNG", it = "ATTENZIONE", es = "ATENCIÓN"),
     // Page titles
     "Which game this ROM is read as" to Tr(ja = "この ROMを どの ゲームとして よむか", fr = "Le jeu sous lequel cette ROM est lue", de = "Als welches Spiel diese ROM gelesen wird", it = "Come quale gioco viene letta questa ROM", es = "Como qué juego se lee esta ROM"),
     "Key bindings: which button presses A, B, START..." to Tr(ja = "キーせってい: どのボタンが A B START…", fr = "Touches : quel bouton fait A, B, START...", de = "Tastenbelegung: welche Taste A, B, START drückt...", it = "Tasti: quale pulsante preme A, B, START...", es = "Teclas: qué botón pulsa A, B, START..."),

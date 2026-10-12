@@ -3,6 +3,8 @@
 // block at any whole scale. The Poké Ball, coffee cup, GitHub mark and cursors are the app's own
 // bitmaps; the rest are drawn in the same style.
 
+import { CREATURES } from './creatures.js';
+
 const INK = '#202020';
 
 export const SPRITES = {
@@ -696,6 +698,9 @@ function daisyBall(size) {
 SPRITES.logo = daisyBall(32);
 
 /** A sprite as a CSS url() - for tiled backgrounds. */
+// The invented creatures (creatures.js) draw by their id: <Pixel name="emberpup" />.
+for (const [id, c] of Object.entries(CREATURES)) SPRITES[id] = { pal: c.pal, rows: c.rows };
+
 export function spriteUrl(name) {
   return `url("data:image/svg+xml,${encodeURIComponent(spriteSvg(name).svg)}")`;
 }

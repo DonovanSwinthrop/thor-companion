@@ -1,0 +1,94 @@
+{
+  "_comment": "Search cases both engines must rank alike: website/src/lib/docsearch.js (docsearch.test.js) and the app's DocsSearch.kt (DocsSearchTest). 'docs' is a tiny manual in the API's shape; 'top' is the first hit (page or page#anchor), null for no hits. 'manual' lists [query, page] pairs the real manual must answer in its top 3 (website only).",
+  "docs": {
+    "version": 1,
+    "rev": "test",
+    "site": "https://pokedaisy.web.app",
+    "synonyms": { "ff": ["fast", "forward"], "turbo": ["fast", "forward"], "savestate": ["state"] },
+    "sections": [{ "id": "player", "title": "Playing", "pages": ["fast-forward", "saves", "screen", "cheats"] }],
+    "pages": [
+      {
+        "slug": "fast-forward", "title": "Fast-forward and game speed", "section": "player",
+        "summary": "Speed up the slow parts and keep the game at normal speed when it matters.",
+        "keywords": ["skip"],
+        "blocks": [
+          { "t": "p", "c": [{ "text": "Fast-forward runs the game faster than normal." }] },
+          { "t": "h2", "id": "smart-mode", "text": "Smart mode" },
+          { "t": "p", "c": [{ "text": "SMART drops to normal speed in menus and keeps battles fast." }] },
+          { "t": "h2", "id": "game-speed", "text": "Game speed" },
+          { "t": "p", "c": [{ "text": "Pick a steady pace from 0.25x to 4x, saved for each game." }] }
+        ]
+      },
+      {
+        "slug": "saves", "title": "Saves, backups and save states", "section": "player",
+        "summary": "Where your progress lives and how to get it back.",
+        "keywords": [],
+        "blocks": [
+          { "t": "p", "c": [{ "text": "Your save file is never overwritten without a backup." }] },
+          { "t": "h2", "id": "save-states", "text": "Save states" },
+          { "t": "p", "c": [{ "text": "Ten slots, each with a screenshot of the moment you saved." }] },
+          { "t": "h2", "id": "backups", "text": "Backups" },
+          { "t": "ul", "items": [[{ "t": "p", "c": [{ "text": "The newest ten copies are kept in a folder beside your saves." }] }]] }
+        ]
+      },
+      {
+        "slug": "screen", "title": "Screen, aspect and shaders", "section": "player",
+        "summary": "Change how the game looks on the top screen.",
+        "keywords": ["graphics"],
+        "blocks": [
+          { "t": "h2", "id": "shaders", "text": "Shaders" },
+          { "t": "p", "c": [{ "text": "Draw the game through an LCD grid, scanlines or a CRT." }] },
+          { "t": "table", "head": [[{ "text": "Filter" }], [{ "text": "Look" }]], "rows": [[[{ "text": "CRT", "code": true }], [{ "text": "Soft glowing beams like an old television." }]]] }
+        ]
+      },
+      {
+        "slug": "cheats", "title": "Cheats", "section": "player",
+        "summary": "Use GameShark and Action Replay codes.",
+        "keywords": ["gameshark", "codebreaker"],
+        "blocks": [
+          { "t": "note", "kind": "warning", "c": [{ "t": "p", "c": [{ "text": "Achievements pause while a cheat is on." }] }] }
+        ]
+      }
+    ]
+  },
+  "cases": [
+    { "q": "fast forward", "top": "fast-forward" },
+    { "q": "ff", "top": "fast-forward" },
+    { "q": "turbo", "top": "fast-forward" },
+    { "q": "fast", "top": "fast-forward" },
+    { "q": "smart", "top": "fast-forward#smart-mode" },
+    { "q": "game speed", "top": "fast-forward#game-speed" },
+    { "q": "savestate", "top": "saves#save-states" },
+    { "q": "save states", "top": "saves#save-states" },
+    { "q": "backup folder", "top": "saves#backups" },
+    { "q": "shdaers", "top": "screen#shaders" },
+    { "q": "crt", "top": "screen#shaders" },
+    { "q": "television", "top": "screen#shaders" },
+    { "q": "graphics", "top": "screen" },
+    { "q": "gameshark", "top": "cheats" },
+    { "q": "achievements pause", "top": "cheats" },
+    { "q": "how do i", "top": null },
+    { "q": "zzzz", "top": null }
+  ],
+  "manual": [
+    ["fast forward", "fast-forward"],
+    ["ff speed", "fast-forward"],
+    ["save state", "saves"],
+    ["backup", "saves"],
+    ["shaders", "screen"],
+    ["crt filter", "screen"],
+    ["cheats", "cheats"],
+    ["gameshark", "cheats"],
+    ["rebind buttons", "controls"],
+    ["hotkeys", "controls"],
+    ["retroachievements", "achievements"],
+    ["suggestions", "battle"],
+    ["ivs evs", "party"],
+    ["region map", "map"],
+    ["next boss", "guide"],
+    ["install", "install"],
+    ["roms folder", "library"],
+    ["not supported", "supported-games"],
+    ["phone", "devices"]
+  ]
+}

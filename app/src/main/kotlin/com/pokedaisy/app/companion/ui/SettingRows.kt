@@ -59,6 +59,7 @@ fun filterRows(rows: List<SettingRow>, query: String): List<SettingRow> {
  * itself is matched in the language on screen too.
  */
 val SETTING_KEYWORDS: Map<String, String> = mapOf(
+    "HELP" to "manual docs documentation guide how to faq instructions",
     "FF" to "fast forward turbo speed up",
     "FF SPEED" to "fast forward speed rate cap multiplier turbo",
     "FF MODE" to "smart fast forward menus battles normal",

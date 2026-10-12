@@ -65,7 +65,7 @@ private val PICKABLE_KEYS = listOf(
     "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
 )
 
-internal enum class Page(val title: String) { HOME(tk("SETTINGS")), TABS(tk("TAB BAR")), BUTTONS(tk("GAME BUTTONS")), HOTKEYS(tk("HOTKEYS")), SHADERS(tk("SHADERS")), CHEATS(tk("CHEATS")), TWEAKS(tk("TWEAKS")) }
+internal enum class Page(val title: String) { HOME(tk("SETTINGS")), TABS(tk("TAB BAR")), BUTTONS(tk("GAME BUTTONS")), HOTKEYS(tk("HOTKEYS")), SHADERS(tk("SHADERS")), CHEATS(tk("CHEATS")), TWEAKS(tk("TWEAKS")), HELP(tk("HELP")) }
 
 /**
  * The bottom-screen SETTINGS tab, laid out like FireRed's OPTION screen over
@@ -133,7 +133,7 @@ fun CompanionSettingsScreen(
             if (!(statusBarShown && page == Page.HOME)) {
                 // A sub-page's arrow (and BACK, through it) returns to the options.
                 val titleM = rememberGbaTextMetrics()
-                OptionTitleWindow(page.title, titleM, trailing = trailing, onBack = if (page != Page.HOME) ({ page = Page.HOME }) else null) {
+                OptionTitleWindow(page.title, titleM, trailing = trailing, onBack = if (page != Page.HOME) ({ if (page != Page.HELP || !ui.docs.back()) page = Page.HOME }) else null) {
                     if (!statusBarShown) {
                         Spacer(Modifier.width(titleM.u * 8))
                         BatteryIndicator(titleM)
@@ -201,9 +201,15 @@ fun CompanionSettingsScreen(
                             tick++
                         }
                     } + SettingRow(tk("CANCEL"), null) { page = Page.HOME }
+                    Page.HELP -> emptyList()
                 }
             }
-            OptionListWindow(m, Modifier.fillMaxWidth().weight(1f)) {
+            // HELP: the manual, read from the docs API (no search box: the bottom screen can't host a keyboard).
+            if (page == Page.HELP) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val source = remember { DocsSources.of(context) }
+                DocsReader(ui.docs, m, source, Modifier.fillMaxWidth().weight(1f), searchable = false)
+            } else OptionListWindow(m, Modifier.fillMaxWidth().weight(1f)) {
                 // Rows share out the window's height (big touch targets) down
                 // to a floor, past which the list scrolls instead.
                 // SHADERS too: OptionRows shares the window out, so its 4 rows came out taller than SETTINGS'.
@@ -311,6 +317,8 @@ class SettingsUiState(initialPage: String? = null) {
     // HOME starts with a group title, so its first row is index 1.
     internal var homeCursor by mutableStateOf(1)
     internal val homeScroll = androidx.compose.foundation.ScrollState(0)
+    /** HELP's page and place in the manual. */
+    internal val docs = DocsUiState()
 }
 
 /** How many chips the player's pick puts in this game's tab bar. */
@@ -403,6 +411,8 @@ private fun homeRows(
         SettingRow(tk("CLICK SOUND"), onOff(s.clickSound)) { s.setClickSound(!s.clickSound); changed() },
         // Small on / off preferences: the icons' bounce, the map cursor's blink, tab slides, the battle jump.
         SettingRow(tk("TWEAKS"), null) { navigate(Page.TWEAKS) },
+        // The manual: every tab and setting explained (served by the website, kept for offline reading).
+        SettingRow(tk("HELP"), null, subtitle = "The manual: how every screen and setting works") { navigate(Page.HELP) },
         groupTitle(tk("SCREEN")),
         // Game, location, money, clock and battery: OFF, over the game, or over these tabs.
         SettingRow(tk("STATUS BAR"), statusBarLabel(s.statusBar, s.statusBarOnCompanion)) {

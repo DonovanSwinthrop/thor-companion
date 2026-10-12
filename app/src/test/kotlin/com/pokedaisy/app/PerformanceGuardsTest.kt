@@ -23,10 +23,11 @@ class PerformanceGuardsTest {
         val offenders = kotlinFiles().filter { it.name != "PixelTypeface.kt" }.flatMap { f ->
             f.readLines().withIndex().filter { (_, line) -> builders.any { it in line } }.map { (i, _) -> "${f.name}:${i + 1}" }
         }.toList()
-        assertTrue("build fonts through pixelFontFamily / gameFontFamily (PixelTypeface.kt), not at $offenders", offenders.isEmpty())
+        assertTrue("build fonts through pixelFontFamily / gameFontFamily / readingFontFamily (PixelTypeface.kt), not at $offenders", offenders.isEmpty())
         val typeface = read("PixelTypeface.kt")
         assertTrue("pixelFontFamily must return its cached family", "pixelFamily?.let { return it }" in typeface)
         assertTrue("gameFontFamily must reuse a family it already built", "gameFamilies[stamp]?.let { return it }" in typeface)
+        assertTrue("readingFontFamily must return its cached family", "readingFamily?.let { return it }" in typeface)
     }
 
     @Test

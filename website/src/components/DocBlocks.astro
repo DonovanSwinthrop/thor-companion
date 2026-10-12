@@ -1,0 +1,48 @@
+---
+// Draws the docs' blocks (src/lib/docs.js) as HTML. The app draws the same blocks (DocsBlocks.kt), so a
+// block type added here needs drawing there too.
+import DocInline from './DocInline.astro';
+
+interface Props { blocks: any[]; site?: string }
+const { blocks } = Astro.props;
+const NOTE = { tip: 'TIP', note: 'NOTE', warning: 'HEADS UP' };
+---
+{blocks.map((b) => {
+  switch (b.t) {
+    case 'h2':
+      return <h2 id={b.id} class="d-h2"><a href={`#${b.id}`} class="d-anchor" aria-hidden="true">#</a>{b.text}</h2>;
+    case 'h3':
+      return <h3 id={b.id} class="d-h3">{b.text}</h3>;
+    case 'p':
+      return <p class="d-p"><DocInline spans={b.c} /></p>;
+    case 'ul':
+      return <ul class="d-list">{b.items.map((it) => <li><Astro.self blocks={it} /></li>)}</ul>;
+    case 'ol':
+      return <ol class="d-list" start={b.start}>{b.items.map((it) => <li><Astro.self blocks={it} /></li>)}</ol>;
+    case 'img':
+      return (
+        <figure class="d-shot">
+          <img src={b.src} alt={b.alt} width={b.w} height={b.h} loading="lazy" decoding="async" />
+          {b.caption && <figcaption>{b.caption}</figcaption>}
+        </figure>
+      );
+    case 'note':
+      return (
+        <aside class={`d-note d-${b.kind}`}>
+          <span class="d-note-tag">{NOTE[b.kind]}</span>
+          <Astro.self blocks={b.c} />
+        </aside>
+      );
+    case 'table':
+      return (
+        <div class="d-table-wrap">
+          <table class="d-table">
+            <thead><tr>{b.head.map((c) => <th><DocInline spans={c} /></th>)}</tr></thead>
+            <tbody>{b.rows.map((r) => <tr>{r.map((c) => <td><DocInline spans={c} /></td>)}</tr>)}</tbody>
+          </table>
+        </div>
+      );
+    case 'hr':
+      return <hr class="d-hr" />;
+  }
+})}

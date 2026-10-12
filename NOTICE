@@ -47,6 +47,9 @@ The app shows every license below in full under Settings > LICENSES.
   (third_party/licenses/libretro-shaders.txt).
 - Pixel Operator font (app/src/main/assets/fonts), by Jayvee Enaguas,
   CC0 1.0 (public domain dedication).
+- Atkinson Hyperlegible (app/src/main/assets/fonts, website/public/fonts: the manual's
+  reading text), Copyright 2020 Braille Institute of America, Inc., SIL Open Font
+  License 1.1 (app/src/main/assets/fonts/LICENSE-AtkinsonHyperlegible.txt).
 - PixelMplus10 (app/src/main/assets/fonts/PixelMplusJP.ttf), by itouhiro,
   M+ FONT LICENSE (app/src/main/assets/fonts/LICENSE-PixelMplus.txt); cut to
   Japanese and rescaled by scripts/gen_jp_font.py.

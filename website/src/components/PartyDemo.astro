@@ -2,7 +2,7 @@
 // The PARTY tab as the app draws it for a game without slot art of its own (PartyScreen.kt's
 // FireRedPartyPalette slot), then a Pokémon's summary (MonDetailScreen.kt's SummaryFrame),
 // playing itself: the cursor walks the party, opens the first, steps DOWN to the next, goes back. Invented
-// creatures and moves only (never a real name), a type's emblem for each icon, a daisy orb for the ball.
+// creatures and moves only (never a real name or art: creatures.js draws them), a daisy orb for the ball.
 import AppScreen from './AppScreen.astro';
 import Pixel from './Pixel.astro';
 import { TYPE } from '../lib/types.js';
@@ -11,11 +11,11 @@ interface Props { compact?: boolean }
 const { compact = false } = Astro.props;
 
 const party = [
-  { name: 'EMBERPUP', icon: 'flame', g: 'maleParty', lv: 12, hp: [30, 35] },
-  { name: 'GALEFINCH', icon: 'feather', g: 'femaleParty', lv: 9, hp: [5, 26], status: 'PSN' },
-  { name: 'VOLTMOUSE', icon: 'battle', g: 'femaleParty', lv: 10, hp: [24, 28] },
-  { name: 'PEBBLON', icon: 'rock', g: 'maleParty', lv: 11, hp: [0, 30], status: 'FNT' },
-  { name: 'SPROUTLING', icon: 'leaf', g: 'maleParty', lv: 10, hp: [12, 31] },
+  { name: 'EMBERPUP', icon: 'emberpup', g: 'maleParty', lv: 12, hp: [30, 35] },
+  { name: 'GALEFINCH', icon: 'galefinch', g: 'femaleParty', lv: 9, hp: [5, 26], status: 'PSN' },
+  { name: 'VOLTMOUSE', icon: 'voltmouse', g: 'femaleParty', lv: 10, hp: [24, 28] },
+  { name: 'PEBBLON', icon: 'pebblon', g: 'maleParty', lv: 11, hp: [0, 30], status: 'FNT' },
+  { name: 'SPROUTLING', icon: 'sproutling', g: 'maleParty', lv: 10, hp: [12, 31] },
   { name: 'EGG', icon: 'egg', egg: true },
 ];
 const hpClass = (hp: number[]) => {
@@ -24,12 +24,12 @@ const hpClass = (hp: number[]) => {
 };
 const summaries = [
   {
-    key: 'first', name: 'EMBERPUP', g: 'male', icon: 'flame', lv: 12, types: ['FIRE'], hp: ['86%', '30/35', ''], exp: ['34%', 'NEXT 161'],
+    key: 'first', name: 'EMBERPUP', g: 'male', icon: 'emberpup', lv: 12, types: ['FIRE'], hp: ['86%', '30/35', ''], exp: ['34%', 'NEXT 161'],
     weak: [['WATER', '2x'], ['GROUND', '2x'], ['ROCK', '2x']], resists: [['FIRE', '1/2x'], ['GRASS', '1/2x'], ['ICE', '1/2x'], ['BUG', '1/2x']],
     moves: [['PAW SWIPE', 'NORMAL', '40', '35'], ['WARY GLARE', 'NORMAL', '-', '40'], ['CINDER SPIT', 'FIRE', '40', '25'], ['IRON NIP', 'STEEL', '50', '35']],
   },
   {
-    key: 'second', name: 'GALEFINCH', g: 'female', icon: 'feather', lv: 9, types: ['NORMAL', 'FLYING'], status: 'PSN', hp: ['19%', '5/26', 'low'], exp: ['72%', 'NEXT 48'],
+    key: 'second', name: 'GALEFINCH', g: 'female', icon: 'galefinch', lv: 9, types: ['NORMAL', 'FLYING'], status: 'PSN', hp: ['19%', '5/26', 'low'], exp: ['72%', 'NEXT 48'],
     weak: [['ELECTRIC', '2x'], ['ICE', '2x'], ['ROCK', '2x']], resists: [['GRASS', '1/2x'], ['BUG', '1/2x']], immune: [['GROUND', '0x'], ['GHOST', '0x']],
     moves: [['WING BUMP', 'NORMAL', '35', '35'], ['DUST FLICK', 'GROUND', '-', '15'], ['BREEZE CUT', 'FLYING', '40', '35'], ['SWIFT DART', 'NORMAL', '40', '30']],
   },
@@ -42,7 +42,7 @@ const summaries = [
         <div class:list={['slot', i === 0 && 'sel', m.status === 'FNT' && 'fnt']} data-slot={i}
           style={`left:${i % 2 ? 288 : 16}px;top:${24 + Math.floor(i / 2) * 138}px`}>
           <span class="slot-ball"><Pixel name="partyOrb" scale={1} /></span>
-          <span class="slot-icon"><Pixel name={m.icon} scale={1.5} /></span>
+          <span class="slot-icon"><Pixel name={m.icon} scale={m.egg ? 1.5 : 1} /></span>
           <span class="slot-name t24">{m.name}</span>
           {!m.egg && (
             <>
@@ -64,7 +64,7 @@ const summaries = [
         <div class="win f-appWin sum">
           <div class="sum-l">
             <span class="t32 nm">{s.name}<Pixel name={s.g} scale={1} />{s.status && <span class="pill" style="--c:#a259d9">{s.status}</span>}</span>
-            <span class="row"><span class="icon-box f-iconBox"><Pixel name={s.icon} scale={1.334} /></span><span class="t32">Lv <b class="red t48">{s.lv}</b></span></span>
+            <span class="row"><span class="icon-box f-iconBox"><Pixel name={s.icon} scale={1} /></span><span class="t32">Lv <b class="red t48">{s.lv}</b></span></span>
             <span class="row">{s.types.map((t) => <span class="pill big" style={`--c:${TYPE[t]}`}>{t}</span>)}</span>
             <span class="hp"><span class="red">HP</span><span class:list={['hpbar', s.hp[2]]} style={`--v:${s.hp[0]}`}><i></i></span><span>{s.hp[1]}</span></span>
             <span class="hp"><span class="red">EXP</span><span class="hpbar exp" style={`--v:${s.exp[0]}`}><i></i></span><span>{s.exp[1]}</span></span>
@@ -90,8 +90,8 @@ const summaries = [
         <div class="pb pb-mon f-pbMon" style="left:14px;top:378px;width:68px;height:56px"><Pixel name="arrowUp" scale={1.334} /></div>
         <div class="pb pb-mon f-pbMon" style="left:94px;top:378px;width:68px;height:56px" data-b={`down${si}`}><Pixel name="arrowDown" scale={1.334} /></div>
         <div class="strip">
-          {['flame', 'feather', 'battle', 'rock', 'leaf', 'egg'].slice(0, 3).map((icon, i) => (
-            <span class:list={['strip-icon', i === si && 'f-iconBoxOn on']}><Pixel name={icon} scale={1.334} /></span>
+          {['emberpup', 'galefinch', 'voltmouse'].map((icon, i) => (
+            <span class:list={['strip-icon', i === si && 'f-iconBoxOn on']}><Pixel name={icon} scale={1} /></span>
           ))}
         </div>
         <div class="pb pb-run f-pbRun" style="left:474px;top:378px;width:72px;height:56px" data-b={`back${si}`}><Pixel name="back" scale={1.334} /></div>

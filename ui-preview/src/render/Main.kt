@@ -213,8 +213,9 @@ class FakeSettings(showHintsInitially: Boolean = true, initialTabs: List<String>
     override fun acceptGuideNotice(game: String) {}
 }
 
-/** `-PmonIcons` icon sheets, relative to the app's assets dir (the render working dir); null when unset. */
-fun monIcon(species: Int): String? =
+/** `-PmonIcons` icon sheets, relative to the app's assets dir (the render working dir); null when unset.
+ * The docs render (DocsShots.kt) draws invented creatures instead. */
+fun monIcon(species: Int): String? = if (docsMode) creatureIcon(species) else
     System.getProperty("monIcons").orEmpty().takeIf { it.isNotBlank() }?.let { "$it/$species.png" }
 
 fun snapshot() = SnapshotView(
@@ -489,7 +490,12 @@ class FakeCoverSource(private val known: Boolean, private val boxArt: Boolean = 
             if (i < 3) "Favourite" else "Someone$i",
         )
     }
-    override fun thumbBytes(url: String) = File(url).takeIf { it.isFile }?.readBytes()
+    override fun thumbBytes(url: String) = File(url).takeIf { it.isFile }?.let { f ->
+        // The docs' creature sheets have two frames: show the first, like a cover would.
+        if (!docsMode) f.readBytes() else ImageIO.read(f).let { img ->
+            java.io.ByteArrayOutputStream().also { ImageIO.write(img.getSubimage(0, 0, img.width, minOf(img.width, img.height)), "png", it) }.toByteArray()
+        }
+    }
 }
 
 /** [make] with a SteamGridDB key saved ([activity] clears it first - the prefs shim is shared by every shot). */
@@ -651,7 +657,8 @@ fun homeMapsec(game: GameKind) = when (game) {
 }
 
 fun main(args: Array<String>) {
-    romArt()
+    // The docs' shots (gradle docsShots) never show a game's art: no ROM art, only the invented map.
+    if (docsMode) installDocsArt() else romArt()
     // A FireRed-engine hack's own region map (Unbound, Odyssey, ...) from -Prom.
     System.getProperty("rom").orEmpty().takeIf { it.isNotBlank() }?.let { path ->
         val f = File(path)
@@ -677,7 +684,7 @@ fun main(args: Array<String>) {
     val bw = panelW ?: 1240
     val bd = if (panelW != null) com.pokedaisy.app.companion.ui.sidePanelDensity(bw, bh) else 2.625f
     val tw = 1920; val th = 1080; val td = 2.5f
-    val shots = listOf(
+    val all = listOf(
         Shot("$g-party", bw, bh, bd, companion("PARTY")),
         Shot("$g-expand-offer", bw, bh, bd, companion("PARTY", expandOffer = true)),
         Shot("$g-party-detail", bw, bh, bd, companion("PARTY", mon = 0)),
@@ -1260,6 +1267,7 @@ fun main(args: Array<String>) {
             onNodeWithText("REPLACE").performClick()
         },
     )
+    val shots = if (docsMode) docsShots(all, bw, bh, bd, tw, th, td) else all
     var failed = 0
     for (shot in shots) {
         if (only.isNotEmpty() && only.none { shot.name.contains(it) }) continue

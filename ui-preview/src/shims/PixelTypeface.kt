@@ -21,3 +21,12 @@ fun gameFontFamily(context: android.content.Context, file: java.io.File): FontFa
         Font("fonts/PixelOperator.ttf", context.assets),
     )
 }.getOrNull()
+
+/** Desktop stand-in for the app's readingFontFamily: Atkinson Hyperlegible, one per process. */
+fun readingFontFamily(context: android.content.Context): FontFamily = reading ?: FontFamily(
+    Font("fonts/AtkinsonHyperlegible-Regular.ttf", context.assets),
+    Font("fonts/AtkinsonHyperlegible-Bold.ttf", context.assets, androidx.compose.ui.text.font.FontWeight.Bold),
+    Font("fonts/AtkinsonHyperlegible-Italic.ttf", context.assets, style = androidx.compose.ui.text.font.FontStyle.Italic),
+).also { reading = it }
+
+@Volatile private var reading: FontFamily? = null

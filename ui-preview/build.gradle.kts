@@ -10,7 +10,7 @@ plugins {
 val app = rootDir.resolve("../app/src/main/kotlin/com/pokedaisy/app")
 val appIncludes = listOf(
     "companion/ui/**", "SettingsActivity.kt", "LibraryActivity.kt", "SavesLocation.kt",
-    "CoverArtSync.kt", "CoverSync.kt", "RomFolder.kt", "StorageAccess.kt", "SetupScreen.kt", "AppUpdater.kt", "AppUpdate.kt", "GameSaves.kt", "SaveBackups.kt", "GameInfo.kt", "LibraryOrder.kt", "RomSupportRequest.kt", "RomIntake.kt", "BestEffortShare.kt", "SaveStates.kt", "RomIdentity.kt", "RomArchive.kt", "CompanionSupport.kt", "CoverPicker.kt", "SteamGridDbGames.kt", "SteamGridDbClient.kt", "GameTitles.kt",
+    "CoverArtSync.kt", "CoverSync.kt", "DocsApi.kt", "DocsSearch.kt", "RomFolder.kt", "StorageAccess.kt", "SetupScreen.kt", "AppUpdater.kt", "AppUpdate.kt", "GameSaves.kt", "SaveBackups.kt", "GameInfo.kt", "LibraryOrder.kt", "RomSupportRequest.kt", "RomIntake.kt", "BestEffortShare.kt", "SaveStates.kt", "RomIdentity.kt", "RomArchive.kt", "CompanionSupport.kt", "CoverPicker.kt", "SteamGridDbGames.kt", "SteamGridDbClient.kt", "GameTitles.kt",
     "achievements/**", "overlay/Overlays.kt", "overlay/OverlayLabels.kt",
 )
 
@@ -73,6 +73,41 @@ tasks.register<JavaExec>("render") {
     val monIcons = (project.findProperty("monIcons") as String?) ?: System.getenv("MON_ICONS").orEmpty()
     systemProperty("monIcons", if (monIcons.isBlank()) "" else workingDir.toPath().relativize(file(monIcons).toPath()).toString())
     systemProperty("scratch", layout.buildDirectory.dir("scratch").get().asFile.absolutePath)
+}
+
+// The docs' screenshots (DocsShots.kt): invented creatures and names, no ROM art, written into
+// docs/manual/shots. Run `npm run docs-art` (creature icons, the map) and `npm run build` (the HELP
+// shots read the docs API it builds) in website/ first. -Ponly=a,b renders just those.
+tasks.register<JavaExec>("docsShots") {
+    description = "Renders the docs' screenshots into ../docs/manual/shots (see DocsShots.kt)."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("render.MainKt")
+    val manual = rootDir.resolve("../docs/manual")
+    args = listOf(manual.resolve("shots").absolutePath, (project.findProperty("only") as String?) ?: "")
+    workingDir = rootDir.resolve("../app/src/main/assets")
+    systemProperty("java.awt.headless", "true")
+    systemProperty("docs", "true")
+    systemProperty("game", "FIRERED")
+    systemProperty("lang", "")
+    systemProperty("dark", (project.findProperty("dark") as String?) ?: "")
+    systemProperty("companionW", "")
+    systemProperty("companionH", "")
+    systemProperty("rom", "")
+    systemProperty("artRoms", "")
+    systemProperty("decomps", "")
+    systemProperty("monIcons", workingDir.toPath().relativize(manual.resolve("art/creatures").toPath()).toString())
+    systemProperty("docsDir", manual.absolutePath)
+    systemProperty("docsApi", rootDir.resolve("../website/dist/api/docs/v1/docs.json").absolutePath)
+    // A device-like folder: the library shows each ROM's path, and a screenshot mustn't show the render
+    // machine's home folder.
+    systemProperty("scratch", "/tmp/storage/emulated/0/Android/data/com.pokedaisy.app")
+}
+
+// The app's docs search against the website's cases (DocsSearchCheck.kt), where the app's unit tests can't run.
+tasks.register<JavaExec>("docsSearchCheck") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("render.DocsSearchCheckKt")
+    args = listOf(rootDir.resolve("../website/test/docsearch-cases.json").absolutePath)
 }
 
 tasks.register<JavaExec>("stress") {

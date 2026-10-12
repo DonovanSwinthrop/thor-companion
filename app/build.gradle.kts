@@ -138,6 +138,7 @@ val licensesAsset by tasks.registering {
         "LCD and Scanlines shaders - MIT" to "third_party/licenses/mGBA-shaders-MIT.txt",
         "xBR, xBRZ and ScaleFX shaders (libretro glsl-shaders) - MIT, xBRZ also GNU GPL 3.0" to "third_party/licenses/libretro-shaders.txt",
         "PixelMplus - M+ FONT LICENSE" to "app/src/main/assets/fonts/LICENSE-PixelMplus.txt",
+        "Atkinson Hyperlegible - SIL Open Font License 1.1" to "app/src/main/assets/fonts/LICENSE-AtkinsonHyperlegible.txt",
         "PokeAPI data - BSD 3-Clause" to "third_party/licenses/PokeAPI-BSD-3-Clause.txt",
         "AndroidX, Jetpack Compose, Kotlin, Apache Commons Compress / IO / Codec / Lang, Firebase Crashlytics - Apache License 2.0" to "third_party/licenses/Apache-2.0.txt",
         "Apache Commons - NOTICE" to "third_party/licenses/Apache-Commons-NOTICE.txt",
@@ -197,4 +198,6 @@ dependencies {
     // Decode-logic regression tests (app/src/test) - see scripts/capture_fixture.sh
     // for how the fixtures they read (app/src/test/resources/fixtures/) get made.
     testImplementation("junit:junit:4.13.2")
+    // The real org.json for tests that parse JSON (DocsSearchTest): android.jar only has stubs of it.
+    testImplementation("org.json:json:20240303")
 }

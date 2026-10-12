@@ -2,8 +2,8 @@
 // A dual-screen handheld in pixels, laid out like the AYN Thor: a wide 16:9 top screen in a thin
 // bezel, a two-piece hinge, and below it the small screen between the controls - left stick over the
 // d-pad, ABXY over the right stick, the small menu buttons under the screen, speaker grilles. The top
-// screen is an overworld of our own (no game art) under the app's STATUS BAR; the bottom one plays the
-// companion's PARTY tab.
+// screen is an overworld of our own (no game art, invented creatures from creatures.js) under the app's
+// STATUS BAR; the bottom one plays the companion's PARTY tab.
 import Pixel from './Pixel.astro';
 import PartyDemo from './PartyDemo.astro';
 import { spriteUrl } from '../lib/pixel.js';
@@ -35,7 +35,8 @@ const daisies = [[4, 66], [24, 69], [60, 64], [74, 72], [90, 66], [40, 90], [56,
         <span class="tree t2"><Pixel name="tree" scale={1.334} /></span>
         <span class="tree t3"><Pixel name="tree" scale={1} /></span>
         {daisies.map(([x, y], i) => <span class="flower" style={`left:${x}%;top:${y}%;animation-delay:-${(i % 3) * 0.4}s`}><Pixel name="daisy" scale={0.667} /></span>)}
-        <span class="walker"><span class="walker-bob"><Pixel name="walker" scale={1} /></span></span>
+        <span class="peek"><Pixel name="sproutling" scale={0.5} /></span>
+        <span class="walker"><span class="buddy"><Pixel name="emberpup" scale={0.5} /></span><span class="walker-bob"><Pixel name="walker" scale={1} /></span></span>
         <div class="statusbar">
           <span>DAISY QUEST</span><span class="sb-place"><Pixel name="pin" scale={0.667} />MEADOW PATH</span><span class="sb-right">12:45 · 96%<Pixel name="battery" scale={0.667} /></span>
         </div>
@@ -100,6 +101,11 @@ const daisies = [[4, 66], [24, 69], [60, 64], [74, 72], [90, 66], [40, 90], [56,
   @keyframes sway { 50% { transform: rotate(-12deg); } }
   .device .walker { position: absolute; top: 70%; left: 0; animation: walk 14s steps(56) infinite alternate; }
   .device .walker-bob { display: block; animation: step 0.3s steps(1) infinite; }
+  /* An invented creature (creatures.js) trotting beside the trainer, another peeking out of the tall grass. */
+  .device .walker { display: flex; align-items: flex-end; gap: calc(var(--px) * 2); }
+  .device .buddy { display: block; animation: step 0.3s steps(1) infinite reverse; }
+  .device .peek { position: absolute; left: 44%; top: 62%; animation: peek 5s steps(1) infinite; }
+  @keyframes peek { 0%, 55%, 100% { transform: translateY(calc(var(--px) * 6)); opacity: 0; } 60%, 90% { transform: none; opacity: 1; } }
   @keyframes walk { from { transform: translateX(80px); } to { transform: translateX(380px); } }
   @keyframes step { 50% { transform: translateY(calc(var(--px) * -1)); } }
   .device .statusbar {

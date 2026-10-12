@@ -17,7 +17,7 @@ export MON_ICONS
 
 .DEFAULT_GOAL := help
 
-.PHONY: help submodules apk install run test clean shots preview menu-shots capture-image \
+.PHONY: help docs-shots docs-check submodules apk install run test clean shots preview menu-shots capture-image \
         check stress test-roms version bump release-apk symbols release release-local
 
 # versionName / versionCode, read from app/build.gradle.kts.
@@ -53,11 +53,20 @@ clean: ## gradle clean
 
 ##@ Checks (what CI runs)
 
-check: ## Everything a PR must pass: unit tests, translations, ui-preview render + stress, debug build
+check: ## Everything a PR must pass: unit tests, translations, ui-preview render + stress, docs, debug build
 	python3 scripts/check_translations.py
 	./gradlew :app:testDebugUnitTest :app:assembleDebug
 	./gradlew -p ui-preview render
 	./gradlew -p ui-preview stress
+	./gradlew -p ui-preview docsSearchCheck
+	cd website && npm ci && node --test test/docs.test.js test/docsearch.test.js && npm run build
+
+docs-shots: ## Re-render the manual's screenshots (docs/manual/shots) with the invented save
+	cd website && npm run docs-art && npm run build
+	./gradlew -p ui-preview docsShots
+
+docs-check: ## The manual parses, links resolve, no dashes, every setting documented, search cases pass
+	cd website && node --test test/docs.test.js test/docsearch.test.js && npm run build
 
 stress: ## Rapid tab switching against memory / time budgets (ui-preview/src/render/Stress.kt)
 	./gradlew -p ui-preview stress

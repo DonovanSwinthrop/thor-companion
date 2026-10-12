@@ -84,6 +84,10 @@ jobs:
       - name: Stress
         run: ./gradlew -p ui-preview stress --stacktrace
 
+      # The app's docs search ranks website/test/docsearch-cases.json like the website's.
+      - name: Docs search
+        run: ./gradlew -p ui-preview docsSearchCheck --stacktrace
+
       - name: Screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -91,3 +95,24 @@ jobs:
           name: ui-preview-shots
           path: ui-preview/build/shots/
           retention-days: 7
+
+  # The manual (docs/manual): every page draws in both readers, links and screenshots resolve, no dashes,
+  # and every setting the app has is documented (website/test/docs.test.js) - so a PR that adds a setting
+  # without its docs fails here.
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: website/.nvmrc
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: node --test test/docs.test.js test/docsearch.test.js
+      - run: npm run build
