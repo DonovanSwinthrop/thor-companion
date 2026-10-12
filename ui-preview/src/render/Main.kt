@@ -684,6 +684,18 @@ fun main(args: Array<String>) {
         Shot("$g-party-detail-next", bw, bh, bd, companion("PARTY", mon = 0)) {
             onNodeWithContentDescription("Next Pokémon").performClick()
         },
+    ) + com.pokedaisy.app.companion.ui.SummaryLook.values().flatMap { look ->
+        // The summary's candidate looks (SummaryPanels.kt), page by page.
+        val l = look.name.lowercase()
+        fun at(c: () -> (@Composable () -> Unit)): () -> (@Composable () -> Unit) = { com.pokedaisy.app.companion.ui.summaryLook = look; c() }
+        listOf(
+            Shot("$g-party-detail-look-$l", bw, bh, bd, at(companion("PARTY", mon = 0))),
+            Shot("$g-party-detail-look-$l-mon2", bw, bh, bd, at(companion("PARTY", mon = 1))),
+            Shot("$g-party-detail-look-$l-stats", bw, bh, bd, at(companion("PARTY", mon = 0))) {
+                onNodeWithText("STATS").performClick()
+            },
+        )
+    } + listOf(
         // In the game's home town, which its own region map shows (Emerald has no Pallet Town rect).
         Shot("$g-settings-battery-low", bw, bh, bd, companion("SETTINGS", battery = BatteryStatus(9, charging = false))),
         Shot("$g-settings-battery-charging", bw, bh, bd, companion("SETTINGS", battery = BatteryStatus(100, charging = true))),

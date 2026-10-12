@@ -104,7 +104,34 @@ fun MonDetailScreen(
             // (No early return in here: a `return@AnimatedContent` breaks
             // Compose's slot table mid-transition.)
             val mon = party.getOrNull(i)
-            if (mon != null) {
+            val look = summaryLook
+            if (mon != null && look != SummaryLook.CURRENT) {
+                val learnOn = showLearn && canLearn
+                val options = if (learnOn) rememberLearnOptions(learn!!, mon) else null
+                val forget = options?.firstOrNull { it.move == learnPick }?.advice?.forget?.takeIf { learn!!.showHints } ?: 0
+                val stats = mon.stats
+                SummaryColumns(
+                    look, m,
+                    left = { mod ->
+                        if (learnOn) SummaryBlock(look, tr("MOVES"), m, mod, titleMetrics = small, fill = true, boxed = false) {
+                            MovesSection(mon, m, small, Modifier.fillMaxSize(), forget = forget, look = look)
+                        } else SummaryInfoBlocks(look, mon, m, small, mod)
+                    },
+                    right = { mod ->
+                        when {
+                            learnOn -> SummaryBlock(look, tr("LEARN"), m, mod, titleMetrics = small, fill = true) {
+                                CanLearnSection(options, learnPick, { learnPick = it }, learn!!.showHints, m, small, Modifier.fillMaxSize())
+                            }
+                            showStats && stats != null -> SummaryBlock(look, tr("STATS"), m, mod, titleMetrics = small, fill = true) {
+                                MonStatsSection(stats, m, small, Modifier.fillMaxSize())
+                            }
+                            else -> SummaryBlock(look, tr("MOVES"), m, mod, titleMetrics = small, fill = true, boxed = false) {
+                                MovesSection(mon, m, small, Modifier.fillMaxSize(), look = look)
+                            }
+                        }
+                    },
+                )
+            } else if (mon != null) {
                 // One white window, split by separators: info over matchups
                 // on the left, the moves on the right.
                 OptionListWindow(m, Modifier.fillMaxSize(), fill = OptionColors.titleFill) {
@@ -214,7 +241,7 @@ internal fun Separator(m: GbaTextMetrics, modifier: Modifier = Modifier, vertica
     )
 }
 
-private val SeparatorDark get() = if (OptionColors.dark) Color(0xFF0E1116) else Color(0xFFB8B8C0)
+internal val SeparatorDark get() = if (OptionColors.dark) Color(0xFF0E1116) else Color(0xFFB8B8C0)
 /** The summary screen's EXP bar blue. */
 private val ExpBlue = Color(0xFF40B8F8)
 private val SeparatorLight get() = if (OptionColors.dark) Color(0xFF3A414D) else Color(0xFFE8E8EC)
@@ -253,14 +280,39 @@ private fun SummaryLeftColumn(mon: MonView, m: GbaTextMetrics, small: GbaTextMet
     }
 }
 
-/** Name + gender, icon, level, types, status, HP - the summary's top-left block. [typesBesideIcon]:
- * the types under the level, next to the icon, instead of a row of their own (a short screen). */
+/**
+ * The summary's left column in a [SummaryLook]: the info block (BANDS: the name is its band) over
+ * MATCHUPS, which takes the rest of the height.
+ */
 @Composable
-internal fun InfoSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, typesBesideIcon: Boolean = false) {
+private fun SummaryInfoBlocks(look: SummaryLook, mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier) {
+    val u = m.u
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(if (look == SummaryLook.WINDOWS) 8.dp else u * 5)) {
+        if (look == SummaryLook.BANDS) {
+            SummaryBlock(look, mon.name, m, Modifier.fillMaxWidth(), titleTrailing = {
+                GenderMark(mon.genderSymbol, m, Modifier.padding(start = u * 3), tint = OptionColors.hintText)
+            }) { InfoSection(mon, m, small, Modifier.fillMaxWidth(), nameRow = false) }
+        } else {
+            SummaryBlock(look, null, m, Modifier.fillMaxWidth()) { InfoSection(mon, m, small, Modifier.fillMaxWidth()) }
+        }
+        SummaryBlock(look, tr("MATCHUPS"), m, Modifier.fillMaxWidth().weight(1f), titleMetrics = small, fill = true) {
+            MatchupSection(mon, small, Modifier.fillMaxWidth().weight(1f))
+        }
+    }
+}
+
+/** Name + gender, icon, level, types, status, HP - the summary's top-left block. [typesBesideIcon]:
+ * the types under the level, next to the icon, instead of a row of their own (a short screen).
+ * [nameRow] false: the name is shown elsewhere (a title band). */
+@Composable
+internal fun InfoSection(
+    mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier,
+    typesBesideIcon: Boolean = false, nameRow: Boolean = true,
+) {
     val u = m.u
     Box(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(u * 3)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (nameRow) Row(verticalAlignment = Alignment.CenterVertically) {
                 GbaText(mon.name, OptionColors.label, OptionColors.labelShadow, m, modifier = Modifier.weight(1f, fill = false))
                 GenderMark(mon.genderSymbol, m, Modifier.padding(start = u * 3))
             }
@@ -310,14 +362,14 @@ private fun Types(mon: MonView) {
 }
 
 @Composable
-internal fun GenderMark(symbol: Int, m: GbaTextMetrics, modifier: Modifier = Modifier) {
+internal fun GenderMark(symbol: Int, m: GbaTextMetrics, modifier: Modifier = Modifier, tint: Color? = null) {
     val mark = when (symbol) {
         GENDER_SYMBOL_MALE -> PixelIcons.male to Color(0xFF3984F7)
         GENDER_SYMBOL_FEMALE -> PixelIcons.female to Color(0xFFF75A5A)
         else -> null
     }
     // About the pixel font's cap height, so it sits beside the name.
-    if (mark != null) PixelIcon(mark.first, mark.second, modifier.size(m.lineHeight * 0.55f))
+    if (mark != null) PixelIcon(mark.first, tint ?: mark.second, modifier.size(m.lineHeight * 0.55f))
 }
 
 /** "HP [=====    ] 30/35" - the summary screen's labelled bar, drawn at GBA-pixel steps. */
@@ -400,14 +452,29 @@ internal fun MatchupGroup(heading: String, list: List<TypeMatchup>, small: GbaTe
     }
 }
 
-/** The four moves, sharing out the column's height, separated by rules. */
+/** The four moves, sharing out the column's height: separated by rules, or ([look]) a card each
+ * (BANDS white, PANELS grey) / the bag's dashed rules (WINDOWS). */
 @Composable
-private fun MovesSection(mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, forget: Int = 0) {
-    Column(modifier) {
+private fun MovesSection(
+    mon: MonView, m: GbaTextMetrics, small: GbaTextMetrics, modifier: Modifier = Modifier, forget: Int = 0,
+    look: SummaryLook = SummaryLook.CURRENT,
+) {
+    val cards = look == SummaryLook.BANDS || look == SummaryLook.PANELS
+    Column(modifier, verticalArrangement = if (cards) Arrangement.spacedBy(m.u * 3) else Arrangement.Top) {
         for (i in 0 until 4) {
-            if (i > 0) Separator(m, Modifier.fillMaxWidth())
             val mv = mon.moves.getOrNull(i)
-            MoveRow(mv, m, small, Modifier.weight(1f).fillMaxWidth(), forget = forget != 0 && mv?.id == forget)
+            val tagged = forget != 0 && mv?.id == forget
+            if (cards) {
+                val fill = if (look == SummaryLook.BANDS) OptionColors.titleFill else OptionColors.listFill
+                SummaryPanel(m, Modifier.weight(1f).fillMaxWidth(), fill = fill, padding = m.u * 2) {
+                    MoveRow(mv, m, small, Modifier.fillMaxSize().padding(end = m.u * 3), forget = tagged)
+                }
+            } else {
+                if (i > 0) {
+                    if (look == SummaryLook.WINDOWS) DashedRule(m) else Separator(m, Modifier.fillMaxWidth())
+                }
+                MoveRow(mv, m, small, Modifier.weight(1f).fillMaxWidth(), forget = tagged)
+            }
         }
     }
 }

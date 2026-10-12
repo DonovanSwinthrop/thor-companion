@@ -157,6 +157,7 @@ internal val trCompanion: Map<String, Tr> = mapOf(
     "WEAK TO" to Tr(ja = "じゃくてん", fr = "FAIBLE CONTRE", de = "SCHWACH GEGEN", it = "DEBOLE CONTRO", es = "DÉBIL CONTRA"),
     "RESISTS" to Tr(ja = "たいせい", fr = "RÉSISTE", de = "RESISTENT", it = "RESISTE", es = "RESISTE"),
     "IMMUNE TO" to Tr(ja = "むこう", fr = "IMMUNISÉ CONTRE", de = "IMMUN GEGEN", it = "IMMUNE A", es = "INMUNE A"),
+    "MATCHUPS" to Tr(ja = "あいしょう", fr = "AFFINITÉS", de = "TYPWIRKUNG", it = "AFFINITÀ", es = "AFINIDADES"),
     "NO MATCHUP DATA" to Tr(ja = "あいしょうの データなし", fr = "PAS DE DONNÉES DE TYPES", de = "KEINE TYPDATEN", it = "NESSUN DATO SUI TIPI", es = "SIN DATOS DE TIPOS"),
 
     // Summary: level, bars, the STATS page (the games' own summary words).
