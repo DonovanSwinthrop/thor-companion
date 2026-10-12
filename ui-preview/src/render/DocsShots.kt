@@ -263,7 +263,7 @@ fun docsShots(all: List<Shot>, bw: Int, bh: Int, bd: Float, tw: Int, th: Int, td
         Shot("companion-summary", bw, bh, bd, docsCompanion("PARTY", mon = 0)),
         Shot("companion-bag", bw, bh, bd, docsCompanion("ITEMS")),
         Shot("companion-bag-item", bw, bh, bd, docsCompanion("ITEMS")) {
-            onNodeWithText("SODA SPRAY", substring = true, ignoreCase = true).performClick()
+            onAllNodesWithText("SODA SPRAY", substring = true, ignoreCase = true).onFirst().performSemanticsAction(SemanticsActions.OnClick)
         },
         Shot("companion-battle", bw, bh, bd, docsCompanion("PARTY", snap = trainer)),
         Shot("companion-battle-moves", bw, bh, bd, docsCompanion("PARTY") { battle(BATTLE_INPUT_MOVE_SELECT).withBench() }),
@@ -277,7 +277,8 @@ fun docsShots(all: List<Shot>, bw: Int, bh: Int, bd: Float, tw: Int, th: Int, td
         Shot("companion-guide", bw, bh, bd, {
             val content: @Composable () -> Unit = {
                 QolTheme {
-                    Box(Modifier.fillMaxSize()) {
+                    // The companion's own backdrop colour with no game art (as the other companion shots have it).
+                    Box(Modifier.fillMaxSize().background(Color(0xFF2C7868))) {
                         GameBackdrop(com.pokedaisy.app.companion.data.activeGame)
                         GuideScreen(GuideSource(DOCS_GUIDE, null, null, null), GuideUiState().apply { page = "TIPS" }, snapshot().disguised(), Modifier.padding(12.dp))
                     }
@@ -336,7 +337,7 @@ fun docsShots(all: List<Shot>, bw: Int, bh: Int, bd: Float, tw: Int, th: Int, td
         Shot("help-page", tw, th, td, activity { SettingsActivity() }) {
             onNodeWithText("HELP").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
             waitForIdle()
-            onAllNodesWithText("The companion", substring = false).onFirst().performScrollTo().performClick()
+            onAllNodesWithText("Install and first setup").onFirst().performClick()
         },
         Shot("companion-help", bw, bh, bd, docsCompanion("SETTINGS")) {
             onNodeWithText("HELP").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
