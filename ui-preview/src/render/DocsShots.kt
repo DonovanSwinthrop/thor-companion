@@ -19,6 +19,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -115,7 +118,14 @@ fun SnapshotView.disguised() = copy(
     battlePlayer = battlePlayer.map { it.disguised() },
     battleOpponent = battleOpponent.map { it.disguised() },
     enemyParty = enemyParty.map { it.disguised() },
-    items = items.map { it.copy(name = Invented.item(it.name)) },
+    // Ids no game has, so the bag can't look the real names up by id; no ball pocket (its tab is named for them).
+    items = items.mapIndexed { i, it ->
+        it.copy(
+            itemId = 9000 + i, name = Invented.item(it.name),
+            description = if (it.description.isEmpty()) "" else "A fizzy spray that brings back a little HP.",
+            pocket = if (it.pocket == com.pokedaisy.app.companion.data.POCKET_POKE_BALLS) com.pokedaisy.app.companion.data.POCKET_ITEMS else it.pocket,
+        )
+    },
     location = location.copy(mapSecName = Invented.place(location.mapSecName)),
 )
 
@@ -263,7 +273,8 @@ fun docsShots(all: List<Shot>, bw: Int, bh: Int, bd: Float, tw: Int, th: Int, td
         Shot("companion-summary", bw, bh, bd, docsCompanion("PARTY", mon = 0)),
         Shot("companion-bag", bw, bh, bd, docsCompanion("ITEMS")),
         Shot("companion-bag-item", bw, bh, bd, docsCompanion("ITEMS")) {
-            onAllNodesWithText("SODA SPRAY", substring = true, ignoreCase = true).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+            // The first row of the list (a tap on its text node missed).
+            onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(800f, 105f)) }
         },
         Shot("companion-battle", bw, bh, bd, docsCompanion("PARTY", snap = trainer)),
         Shot("companion-battle-moves", bw, bh, bd, docsCompanion("PARTY") { battle(BATTLE_INPUT_MOVE_SELECT).withBench() }),

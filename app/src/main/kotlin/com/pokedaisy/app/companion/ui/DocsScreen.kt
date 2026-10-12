@@ -378,7 +378,7 @@ private fun DocBlock(
             val firstLine = with(androidx.compose.ui.platform.LocalDensity.current) { style.lineHeight.toDp() }
             b.items.forEachIndexed { i, item ->
                 Row(Modifier.padding(vertical = m.u)) {
-                    Box(Modifier.width(m.u * 12)) {
+                    Box(Modifier.width(m.u * if (b.ordered) 16 else 12)) {
                         if (b.ordered) Text("${b.start + i}.", style = style, color = OptionColors.value, modifier = Modifier.padding(top = m.u * 3))
                         else Box(Modifier.padding(top = m.u * 3 + firstLine / 2 - m.u).size(m.u * 2).background(OptionColors.value))
                     }
