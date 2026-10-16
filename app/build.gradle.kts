@@ -76,6 +76,8 @@ android {
         ndk {
             // Thor is arm64; add armeabi-v7a later only if a target device needs it.
             abiFilters += "arm64-v8a"
+            // x86_64 too for the PC's Android emulator: -Ppokedaisy.x86=true (or local.properties).
+            if (featureFlag("x86")) abiFilters += "x86_64"
         }
         externalNativeBuild {
             cmake {

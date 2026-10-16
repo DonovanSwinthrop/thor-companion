@@ -1261,6 +1261,9 @@ class PokeDaisyActivity : Activity() {
                 // guesswork), and learns the field's main callback from the player moving.
                 telemetry.knownGMain()?.let { (addr, inBattleOff) -> FfMenuWatch.useKnownGMain(addr, inBattleOff) }
                 if (snap.connected) FfMenuWatch.notePosition(snap.x, snap.y, snap.mapGroup, snap.mapNum, snap.inBattle)
+                // The NUZLOCKE tab's live feed (Radical Red only).
+                if (snap.connected && snap.game == com.pokedaisy.app.companion.data.GameKind.RADICAL_RED)
+                    com.pokedaisy.app.companion.RrOverlay.sample(com.pokedaisy.app.companion.data.InProcessReader)
                 if (snap.connected) battleSwitchAddrs = switchAddrsFor(snap.game)
                 // The menus' cursors, so a FIGHT / move tap goes straight to its cell (NativeConfig.actionCursor).
                 if (snap.connected) battleCursorAddrs = telemetry.knownCursorAddrs()
