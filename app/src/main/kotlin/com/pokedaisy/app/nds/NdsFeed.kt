@@ -12,7 +12,35 @@ object NdsFeed {
 
     /** Where a game keeps what the feed reads; [flags] = its event flags, [badges] = its badge byte (0: not mapped). */
     class Game(val pack: String, val party: Int, val zone: Int, val flags: Int = 0, val badges: Int = 0, val bag: Int = 0,
-               val repel: Int = 0)
+               val repel: Int = 0,
+               /** Gen 4: the save data is on the heap; [party] and [zone] are offsets from the address stored here. */
+               val base: Int = 0,
+               val gen4: Boolean = false)
+
+    /** Where [game]'s party is now (its count is the u32 before it); 0 if the save isn't loaded. */
+    fun partyAddr(ram: ByteArray, game: Game): Int = game.party + baseOf(ram, game)
+
+    /** Where [game]'s current map number is now; 0 if the save isn't loaded. */
+    fun zoneAddr(ram: ByteArray, game: Game): Int = game.zone + baseOf(ram, game)
+
+    private fun baseOf(ram: ByteArray, game: Game): Int {
+        if (game.base == 0) return 0
+        val v = u32(ram, game.base - NdsMons.RAM_BASE).toInt()
+        return if (v in NdsMons.RAM_BASE until NdsMons.RAM_BASE + ram.size - 0x2000) v else Int.MIN_VALUE / 2
+    }
+
+    private fun u32(b: ByteArray, o: Int): Long =
+        (b[o].toLong() and 0xFF) or ((b[o + 1].toLong() and 0xFF) shl 8) or ((b[o + 2].toLong() and 0xFF) shl 16) or ((b[o + 3].toLong() and 0xFF) shl 24)
+
+    /**
+     * Platinum (US) and Renegade Platinum: the save block's address is at 0x02101D40 (the pointer Action Replay codes
+     * start from); the party is at +0xB4 (count +0xB0, the general block's 0xA0 after a 0x14 header) and the current
+     * map header number at +0x1294. Found on a 100% save: the party screen's Pokémon at +0xB4, and the map 101 -> 86
+     * walking out of Hearthome's Pokémon Center (both Hearthome City in the ROM's header table).
+     */
+    private const val PT_BASE = 0x02101D40
+    private const val PT_PARTY = 0xB4
+    private const val PT_ZONE = 0x1294
 
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
@@ -51,6 +79,8 @@ object NdsFeed {
         return when {
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
+            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true)
+            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true)
             else -> null
         }
     }
@@ -96,7 +126,7 @@ object NdsFeed {
 
     /** A wild battle is on in [ram]: battlers on the foe's side whose Pokémon carry the player's ID (wild ones do). */
     fun wildBattle(ram: ByteArray, game: Game): Boolean {
-        val party = NdsMons.party(ram, game.party)
+        val party = NdsMons.party(ram, partyAddr(ram, game), game.gen4)
         if (party.isEmpty()) return false
         val sides = NdsMons.sides(ram, NdsMons.battlers(ram), party.map { it.pid }.toSet())
         val tid = party[0].otId
@@ -117,9 +147,9 @@ object NdsFeed {
 
     /** The state for [ram] (main RAM from 0x02000000), or null before a save is loaded (no party yet). */
     fun state(ram: ByteArray, game: Game): JSONObject? {
-        val party = NdsMons.party(ram, game.party)
+        val party = NdsMons.party(ram, partyAddr(ram, game), game.gen4)
         if (party.isEmpty()) return null
-        val zoneOff = game.zone - NdsMons.RAM_BASE
+        val zoneOff = zoneAddr(ram, game) - NdsMons.RAM_BASE
         val zone = (ram[zoneOff].toInt() and 0xFF) or ((ram[zoneOff + 1].toInt() and 0xFF) shl 8)
         val battlers = NdsMons.battlers(ram)
         val sides = NdsMons.sides(ram, battlers, party.map { it.pid }.toSet())

@@ -19,6 +19,11 @@ object NdsMons {
     const val RAM_BASE = 0x02000000
     const val PARTY_MON_BYTES = 0xDC
 
+    /** Gen 4's party Pokémon is 0xEC bytes: the same 0x88-byte box and battle stats at +0x88, with more after them. */
+    const val GEN4_PARTY_MON_BYTES = 0xEC
+
+    fun partyBytes(gen4: Boolean) = if (gen4) GEN4_PARTY_MON_BYTES else PARTY_MON_BYTES
+
     class Mon(
         val pid: Long,
         val species: Int,
@@ -76,8 +81,8 @@ object NdsMons {
     }
 
     /** The Pokémon at [off] in [ram] (an offset from [RAM_BASE]), or null if no valid one is there. */
-    fun decode(ram: ByteArray, off: Int, party: Boolean = true): Mon? {
-        if (off < 0 || off + (if (party) PARTY_MON_BYTES else 0x88) > ram.size) return null
+    fun decode(ram: ByteArray, off: Int, party: Boolean = true, gen4: Boolean = false): Mon? {
+        if (off < 0 || off + (if (party) partyBytes(gen4) else 0x88) > ram.size) return null
         val pid = u32(ram, off)
         val flags = u16(ram, off + 4)
         if (pid == 0L || flags and 0xFFF8 != 0) return null
@@ -110,10 +115,12 @@ object NdsMons {
         }
         return Mon(
             pid = pid, species = species, item = u16(d, 0x02), otId = u16(d, 0x04),
-            ability = d[0x0D].toInt() and 0xFF, nature = d[0x39].toInt() and 0xFF,
+            // Gen 4 has no nature byte: it's the PID mod 25
+            ability = d[0x0D].toInt() and 0xFF, nature = if (gen4) (pid % 25).toInt() else d[0x39].toInt() and 0xFF,
             moves = IntArray(4) { u16(d, 0x20 + 2 * it) }, pp = IntArray(4) { d[0x28 + it].toInt() and 0xFF },
             ivs = ivs, evs = evs, isEgg = (ivWord ushr 30) and 1L == 1L,
-            metLocation = u16(d, 0x78), metLevel = d[0x7C].toInt() and 0x7F,
+            // Platinum / HGSS keep the met place in block B (+0x46); Gen 5 in block D
+            metLocation = u16(d, if (gen4) 0x46 else 0x78), metLevel = d[0x7C].toInt() and 0x7F,
             level = level, hp = hp, maxHp = maxHp, stats = stats, status = status,
         )
     }
@@ -126,14 +133,15 @@ object NdsMons {
      * PP set to base + base * ppUps / 5 (the games' CalculatePPWithBonus), summed for the new checksum and encrypted
      * again with it. Returns how many were healed.
      */
-    fun healParty(ram: ByteArray, addr: Int, basePp: IntArray? = null, write: (Int, ByteArray) -> Boolean): Int {
+    fun healParty(ram: ByteArray, addr: Int, basePp: IntArray? = null, gen4: Boolean = false, write: (Int, ByteArray) -> Boolean): Int {
+        val stride = partyBytes(gen4)
         val off = addr - RAM_BASE
         val count = if (off >= 4 && off < ram.size) u32(ram, off - 4).toInt() else 0
         if (count !in 1..6) return 0
         var healed = 0
         for (i in 0 until count) {
-            val mon = off + i * PARTY_MON_BYTES
-            if (decode(ram, mon) == null) continue
+            val mon = off + i * stride
+            if (decode(ram, mon, gen4 = gen4) == null) continue
             val pid = u32(ram, mon)
             if (basePp != null) {
                 val body = crypt(ram, mon + 8, 0x80, u16(ram, mon + 6).toLong())
@@ -153,7 +161,7 @@ object NdsMons {
                 out[1] = (chk ushr 8).toByte()
                 // crypt() XORs from its source offset, so the plain body goes through it at the new checksum's seed
                 System.arraycopy(crypt(body, 0, 0x80, chk.toLong()), 0, out, 2, 0x80)
-                write(addr + i * PARTY_MON_BYTES + 6, out)
+                write(addr + i * stride + 6, out)
             }
             val stats = crypt(ram, mon + 0x88, 0x14, pid)
             // status word 0..3, level 4, hp 6, maxHp 8
@@ -164,18 +172,18 @@ object NdsMons {
             val scratch = ByteArray(0x14 + 0x88)
             System.arraycopy(stats, 0, scratch, 0x88, 0x14)
             val enc = crypt(scratch, 0x88, 0x14, pid)
-            if (write(addr + i * PARTY_MON_BYTES + 0x88, enc)) healed++
+            if (write(addr + i * stride + 0x88, enc)) healed++
         }
         return healed
     }
 
     /** The party at [addr] (its count is the u32 before it): up to 6 Pokémon. */
-    fun party(ram: ByteArray, addr: Int): List<Mon> {
+    fun party(ram: ByteArray, addr: Int, gen4: Boolean = false): List<Mon> {
         val off = addr - RAM_BASE
         if (off < 4 || off > ram.size) return emptyList()
         val count = u32(ram, off - 4).toInt()
         if (count !in 1..6) return emptyList()
-        return (0 until count).mapNotNull { decode(ram, off + it * PARTY_MON_BYTES) }
+        return (0 until count).mapNotNull { decode(ram, off + it * partyBytes(gen4), gen4 = gen4) }
     }
 
     private val TAG = "btl_pokeparam.c".toByteArray() + 0

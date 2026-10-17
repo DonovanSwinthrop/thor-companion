@@ -126,6 +126,23 @@ class NdsMonsTest {
         assertEquals(listOf(0, 100, 92), dumps.map { NdsFeed.repelSteps(it!!, game) })   // none, a Repel used, 8 steps on
     }
 
+    @Test
+    fun platinumPartyAndMap() {
+        // Platinum (US) on a 100% save: the save block's address at 0x02101D40, the party at +0xB4, the map at +0x1294
+        val game = NdsFeed.Game("pt", 0xB4, 0x1294, base = 0x02101D40, gen4 = true)
+        val inside = dump("pt_pc.bin")
+        val outside = dump("pt_out.bin")
+        assumeTrue("no Platinum dumps", inside != null && outside != null)
+        val party = NdsMons.party(outside!!, NdsFeed.partyAddr(outside, game), gen4 = true)
+        assertEquals(1, party.size)
+        assertEquals(487, party[0].species)                                    // Giratina
+        assertEquals(1, party[0].level)
+        assertEquals(party[0].pid % 25, party[0].nature.toLong())
+        fun zone(ram: ByteArray) = NdsFeed.zoneAddr(ram, game).let { a -> (ram[a - 0x02000000].toInt() and 0xFF) or ((ram[a - 0x02000000 + 1].toInt() and 0xFF) shl 8) }
+        assertEquals(101, zone(inside!!))                                      // Hearthome's Pokemon Center
+        assertEquals(86, zone(outside))                                        // Hearthome City
+    }
+
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
     private fun rom(name: String): NdsRom? {
         val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"

@@ -420,7 +420,9 @@ class NdsActivity : Activity() {
     /** The pause menu's rows: HEAL PARTY and BATTLE SHORTCUTS only where the game's party is mapped (a pack exists). */
     private fun menuItems() = NdsMenuItem.entries.filter {
         when (it) {
-            NdsMenuItem.HEAL_PARTY, NdsMenuItem.SHORTCUTS -> feedGame != null
+            NdsMenuItem.HEAL_PARTY -> feedGame != null
+            // the shortcuts need the battle and the bag mapped (Gen 5 so far)
+            NdsMenuItem.SHORTCUTS -> (feedGame?.bag ?: 0) != 0
             NdsMenuItem.REPEL -> (feedGame?.repel ?: 0) != 0
             else -> true
         }
@@ -457,7 +459,7 @@ class NdsActivity : Activity() {
                 val game = feedGame
                 if (game != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
                     // not in a battle: the battle keeps its own copy of the HP
-                    if (NdsMons.battlers(feedRam).isEmpty()) NdsMons.healParty(feedRam, game.party, movePp, NdsCore::writeRam)
+                    if (NdsMons.battlers(feedRam).isEmpty()) NdsMons.healParty(feedRam, NdsFeed.partyAddr(feedRam, game), movePp, game.gen4, NdsCore::writeRam)
                 }
                 setMenu(false)
             }
