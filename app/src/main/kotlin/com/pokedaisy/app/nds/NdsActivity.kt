@@ -263,6 +263,9 @@ class NdsActivity : Activity() {
 
     private val feedRam = ByteArray(0x400000)
 
+    /** Each move's base PP, from the ROM's own move table (HEAL PARTY fills PP with it); null if it can't be read. */
+    private val movePp by lazy { runCatching { NdsRom(rom).movePp() }.getOrNull() }
+
     /** The RUN tab's state, twice a second (emu thread, between frames). */
     private fun feed() {
         val game = feedGame ?: return
@@ -400,7 +403,7 @@ class NdsActivity : Activity() {
                 val game = feedGame
                 if (game != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
                     // not in a battle: the battle keeps its own copy of the HP
-                    if (NdsMons.battlers(feedRam).isEmpty()) NdsMons.healParty(feedRam, game.party, NdsCore::writeRam)
+                    if (NdsMons.battlers(feedRam).isEmpty()) NdsMons.healParty(feedRam, game.party, movePp, NdsCore::writeRam)
                 }
                 setMenu(false)
             }

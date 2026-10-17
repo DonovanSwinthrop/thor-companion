@@ -33,7 +33,7 @@ Press BACK (or L3) to pause. The menu has:
 - `RESUME`: back to the game.
 - `SAVE STATE` and `LOAD STATE`: one save state per game, saved the moment you pick it. `LOAD STATE` is greyed out until you've saved one.
 - `FF`: fast forward, four times the normal speed, without sound. Holding R2 fast forwards too, for as long as you hold it.
-- `HEAL PARTY`: fills every Pokémon's HP and clears its status, anywhere, like a handy healing station. Only for games the RUN tab supports, and not in a battle.
+- `HEAL PARTY`: fills every Pokémon's HP and PP and clears its status, anywhere, like a handy healing station. Only for games the RUN tab supports, and not in a battle.
 - `GAME CLOCK`: shows the game's clock hour. Press right or A (or tap it) to move it an hour later, left to move it an hour earlier, for day and night events. The menu stays open so you can step to the hour you want.
 - `SWAP SCREENS`: the same as R3.
 - `CLOSE GAME`: back to the library. The game's save is written first.

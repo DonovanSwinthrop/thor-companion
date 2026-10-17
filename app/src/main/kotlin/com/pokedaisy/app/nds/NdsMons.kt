@@ -121,10 +121,12 @@ object NdsMons {
     /**
      * Heals the party in [ram] (a snapshot): full HP and no status for every Pokémon, written back to the game
      * through [write] (address, bytes). The battle stats (0x88..) are XOR'd with a stream seeded by the PID, so
-     * the same crypt that reads them writes them. PP lives in the checksummed block and isn't touched.
-     * Returns how many were healed.
+     * the same crypt that reads them writes them. With [basePp] (each move's base PP by move id, [NdsRom.movePp])
+     * PP is filled too: it lives in block B, inside the checksummed, encrypted body, so the body is decrypted, its
+     * PP set to base + base * ppUps / 5 (the games' CalculatePPWithBonus), summed for the new checksum and encrypted
+     * again with it. Returns how many were healed.
      */
-    fun healParty(ram: ByteArray, addr: Int, write: (Int, ByteArray) -> Boolean): Int {
+    fun healParty(ram: ByteArray, addr: Int, basePp: IntArray? = null, write: (Int, ByteArray) -> Boolean): Int {
         val off = addr - RAM_BASE
         val count = if (off >= 4 && off < ram.size) u32(ram, off - 4).toInt() else 0
         if (count !in 1..6) return 0
@@ -133,6 +135,26 @@ object NdsMons {
             val mon = off + i * PARTY_MON_BYTES
             if (decode(ram, mon) == null) continue
             val pid = u32(ram, mon)
+            if (basePp != null) {
+                val body = crypt(ram, mon + 8, 0x80, u16(ram, mon + 6).toLong())
+                val b = ORDERS[(((pid ushr 13) and 31) % 24).toInt()].indexOf('B') * 0x20
+                for (k in 0 until 4) {
+                    val move = u16(body, b + 2 * k)
+                    val base = basePp.getOrElse(move) { 0 }
+                    if (move == 0 || base == 0) continue
+                    val ups = body[b + 0x0C + k].toInt() and 3
+                    body[b + 0x08 + k] = (base + base * ups / 5).toByte()
+                }
+                var sum = 0
+                for (w in 0 until 0x80 step 2) sum += u16(body, w)
+                val chk = sum and 0xFFFF
+                val out = ByteArray(2 + 0x80)
+                out[0] = chk.toByte()
+                out[1] = (chk ushr 8).toByte()
+                // crypt() XORs from its source offset, so the plain body goes through it at the new checksum's seed
+                System.arraycopy(crypt(body, 0, 0x80, chk.toLong()), 0, out, 2, 0x80)
+                write(addr + i * PARTY_MON_BYTES + 6, out)
+            }
             val stats = crypt(ram, mon + 0x88, 0x14, pid)
             // status word 0..3, level 4, hp 6, maxHp 8
             for (k in 0 until 4) stats[k] = 0

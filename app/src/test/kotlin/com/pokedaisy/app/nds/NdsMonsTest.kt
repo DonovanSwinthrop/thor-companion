@@ -62,6 +62,49 @@ class NdsMonsTest {
         }
     }
 
+    /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
+    private fun rom(name: String): NdsRom? {
+        val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"
+        return File(dir, name).takeIf { it.isFile }?.let(::NdsRom)
+    }
+
+    @Test
+    fun movePpFromTheRom() {
+        val b2 = rom("Pokémon Black Version 2.nds")
+        assumeTrue("no Black 2 ROM", b2 != null)
+        val pp = b2!!.movePp()!!
+        assertEquals(35, pp[33])                                        // Tackle
+        assertEquals(30, pp[39])                                        // Tail Whip
+        assertEquals(5, pp[63])                                         // Hyper Beam
+        val pt = rom("Pokémon Platinum Version.nds")
+        if (pt != null) {
+            val ppt = pt.movePp()!!
+            assertEquals(35, ppt[33])
+            assertEquals(5, ppt[63])
+        }
+    }
+
+    @Test
+    fun healPartyFillsPpAndFixesTheChecksum() {
+        val ram = dump("b2_wild2.bin")
+        assumeTrue("no b2_wild2.bin", ram != null)
+        val base = IntArray(700) { 35 }.also { it[39] = 30 }            // Tackle 35, Tail Whip 30, the rest 35
+        val copy = ram!!.copyOf()
+        val before = NdsMons.party(copy, 0x0221E3EC)
+        NdsMons.healParty(copy, 0x0221E3EC, base) { addr, bytes ->
+            System.arraycopy(bytes, 0, copy, addr - NdsMons.RAM_BASE, bytes.size); true
+        }
+        val after = NdsMons.party(copy, 0x0221E3EC)
+        assertEquals(before.size, after.size)                           // still decodes: the new checksum holds
+        for ((b, a) in before.zip(after)) {
+            assertEquals(b.species, a.species)
+            assertEquals(b.moves.toList(), a.moves.toList())
+            assertEquals(b.ivs.toList(), a.ivs.toList())
+            for (k in 0 until 4) if (a.moves[k] != 0) assertEquals(base[a.moves[k]], a.pp[k])
+            assertEquals(a.maxHp, a.hp)
+        }
+    }
+
     @Test
     fun healPartyFillsHpAndKeepsTheMonValid() {
         val ram = dump("b2_wild2.bin")
