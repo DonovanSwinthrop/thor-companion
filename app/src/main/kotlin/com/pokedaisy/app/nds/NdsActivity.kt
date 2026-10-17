@@ -48,6 +48,11 @@ class NdsActivity : Activity() {
     private lateinit var topView: NdsScreenView
     private lateinit var bottomView: NdsScreenView
     private var presentation: DualScreenPresentation? = null
+    /** The game's RUN tab pack, if it has one ([NdsFeed]); the touch screen's frame holds the tab over it. */
+    private var feedGame: NdsFeed.Game? = null
+    private lateinit var touchFrame: FrameLayout
+    private var runView: android.webkit.WebView? = null
+    private var runOpen by mutableStateOf(false)
     private var swapped = false
 
     @Volatile private var running = false
@@ -88,6 +93,18 @@ class NdsActivity : Activity() {
         val touch: (Int, Int, Boolean) -> Unit = { x, y, down -> NdsCore.touch(x, y, down) }
         topView = NdsScreenView(this)
         bottomView = NdsScreenView(this, touch)
+        feedGame = if (com.pokedaisy.app.companion.RrOverlay.available(this)) NdsFeed.gameFor(rom) else null
+        touchFrame = FrameLayout(this).apply {
+            val match = ViewGroup.LayoutParams.MATCH_PARENT
+            addView(bottomView, FrameLayout.LayoutParams(match, match))
+            if (feedGame != null) {
+                // RUN: the touch screen gives way to the RUN tab, and back (bottom right, clear of the tab bar)
+                addView(ComposeView(this@NdsActivity).apply {
+                    setContent { AppTheme { NdsRunButton(runOpen) { toggleRun() } } }
+                }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.BOTTOM or android.view.Gravity.END))
+            }
+        }
         owner.create()
         hasState = stateFile.isFile
         layoutScreens()
@@ -111,13 +128,13 @@ class NdsActivity : Activity() {
     /** The touch screen on the second display (or swapped onto the main one), else both stacked here. */
     private fun layoutScreens() {
         (topView.parent as? ViewGroup)?.removeView(topView)
-        (bottomView.parent as? ViewGroup)?.removeView(bottomView)
+        (touchFrame.parent as? ViewGroup)?.removeView(touchFrame)
         (menuView.parent as? ViewGroup)?.removeView(menuView)
         presentation?.releaseContent()
         presentation?.dismiss()
         presentation = null
         val second = Screens.second(this)?.takeIf { !Prefs(this).singleScreen }
-        val (main, other) = if (swapped) bottomView to topView else topView to bottomView
+        val (main, other) = if (swapped) touchFrame to topView else topView to touchFrame
         val screens = if (second != null) {
             presentation = DualScreenPresentation(this, second) { other }.also { it.show() }
             main
@@ -227,6 +244,7 @@ class NdsActivity : Activity() {
             val n = NdsCore.readAudio(sound)
             if (n > 0 && !ff) track.write(sound, 0, n * 2, AudioTrack.WRITE_NON_BLOCKING)
             if (com.pokedaisy.app.BuildConfig.DEBUG && frames % 60 == 0L) debugDump()
+            if (frames % FEED_EVERY == 0L) feed()
             if (++frames - lastFlush >= 600) {
                 NdsCore.flushSave()   // every ~10 s of game, between frames
                 val now = System.nanoTime()
@@ -240,6 +258,29 @@ class NdsActivity : Activity() {
             else if (wait < -NdsCore.FRAME_NANOS * 4) next = System.nanoTime()   // fell behind: don't race to catch up
         }
         Log.i(TAG, "emulation stopped after $frames frames")
+    }
+
+    private val feedRam = ByteArray(0x400000)
+
+    /** The RUN tab's state, twice a second (emu thread, between frames). */
+    private fun feed() {
+        val game = feedGame ?: return
+        if (!NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
+        runCatching { NdsFeed.state(feedRam, game) }.getOrNull()?.let { com.pokedaisy.app.companion.RrOverlay.postDecoded(it) }
+    }
+
+    private fun toggleRun() {
+        val game = feedGame ?: return
+        runOpen = !runOpen
+        if (runOpen) {
+            val web = com.pokedaisy.app.companion.RrOverlay.view(this, game.pack)
+            (web.parent as? ViewGroup)?.removeView(web)
+            touchFrame.addView(web, 1, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            runView = web
+        } else {
+            runView?.let { touchFrame.removeView(it) }
+            runView = null
+        }
     }
 
     /** Debug builds: `files/nds-dump` present = main RAM (4 MB) written to `files/nds-ram.bin` (fixtures for the readers). */
@@ -371,6 +412,8 @@ class NdsActivity : Activity() {
         private const val TAG = "pokedaisy/nds"
         /** Fast forward runs this many frames per frame shown (4x). */
         private const val FF_FRAMES = 4
+        /** Frames between RUN tab updates (twice a second). */
+        private const val FEED_EVERY = 30L
 
         private val KEY_MAP = mapOf(
             KeyEvent.KEYCODE_BUTTON_A to NdsCore.A,

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -58,5 +59,14 @@ fun NdsMenu(title: String, selected: Int, fastForward: Boolean, hasState: Boolea
                 )
             }
         }
+    }
+}
+
+/** The touch screen's RUN button: opens the RUN tab over the DS touch screen; BACK (the same place) closes it. */
+@Composable
+fun NdsRunButton(open: Boolean, onClick: () -> Unit) {
+    val m = rememberGbaTextMetrics()
+    Box(Modifier.padding(m.u * 2)) {
+        com.pokedaisy.app.companion.ui.OptionButton(tk(if (open) "BACK" else "RUN"), m, onClick, emphasis = !open)
     }
 }

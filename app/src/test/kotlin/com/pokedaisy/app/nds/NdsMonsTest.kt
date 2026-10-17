@@ -57,6 +57,8 @@ class NdsMonsTest {
             assertEquals(name, 2, sides.player.size)
             assertEquals(name, lead, sides.player[0].species)          // Tepig, then the Patrat switched in
             assertEquals(name, 504, sides.foe.single().species)        // the wild Patrat
+            assertEquals(name, 124, party[1].metLocation)               // caught on Route 19
+            assertEquals(name, 117, party[0].metLocation)               // the starter: Aspertia City
         }
     }
 }

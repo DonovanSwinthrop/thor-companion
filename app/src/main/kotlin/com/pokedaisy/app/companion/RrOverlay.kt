@@ -126,6 +126,15 @@ object RrOverlay {
         }
     }
 
+    /** A state built elsewhere in the decoded form (the DS player's, [com.pokedaisy.app.nds.NdsFeed]). Any thread. */
+    fun postDecoded(state: JSONObject) {
+        lastState = JSONObject().put("type", "state").put("state", state).toString()
+        post(lastState!!)
+        if (samples++ % 5 == 0) {
+            post(JSONObject().put("type", "clock").put("hour", Calendar.getInstance().get(Calendar.HOUR_OF_DAY)).toString())
+        }
+    }
+
     private fun monJson(m: com.pokedaisy.app.companion.data.MonView) = JSONObject()
         .put("sp", m.species).put("name", m.name).put("lv", m.level).put("hp", m.hp).put("maxHP", m.maxHp)
         .put("status", m.status).put("pid", m.personality).put("egg", m.isEgg)

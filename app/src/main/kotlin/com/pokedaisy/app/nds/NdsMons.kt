@@ -32,6 +32,9 @@ object NdsMons {
         val ivs: IntArray,
         val evs: IntArray,
         val isEgg: Boolean,
+        /** Where and at what level it was met (block D): a place name id, as the zone table's. */
+        val metLocation: Int,
+        val metLevel: Int,
         /** Party data (null for a box Pokémon). */
         val level: Int?,
         val hp: Int?,
@@ -110,6 +113,7 @@ object NdsMons {
             ability = d[0x0D].toInt() and 0xFF, nature = d[0x39].toInt() and 0xFF,
             moves = IntArray(4) { u16(d, 0x20 + 2 * it) }, pp = IntArray(4) { d[0x28 + it].toInt() and 0xFF },
             ivs = ivs, evs = evs, isEgg = (ivWord ushr 30) and 1L == 1L,
+            metLocation = u16(d, 0x78), metLevel = d[0x7C].toInt() and 0x7F,
             level = level, hp = hp, maxHp = maxHp, stats = stats, status = status,
         )
     }

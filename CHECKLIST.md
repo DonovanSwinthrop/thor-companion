@@ -88,8 +88,15 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] DS Pokemon reader (NdsMons): party, battlers with live HP, which one is on the field (checked on Black 2 RAM:
       a rival battle, a wild battle with two in the party, a switch); dumps kept on this PC only (they hold game code)
 - [x] Load the ROM off the main thread (a 512 MB ROM froze the slow test device long enough for "isn't responding")
-- [ ] DS packs from the ROM: Black 2 / BB2R first (names, stats, moves, trainers, wild), then Platinum / RP, HGSS / Sterling
-- [ ] Companion button on the touch screen: swap the DS touch screen for the RUN tab and back
+- [x] BB2R pack from the ROM (packs/gen5/build_pack.py): 686 species, moves, abilities, items, 63 places' wild tables,
+      gyms / Elite Four / Iris with Redux's Normal caps, Hugh's battles by your starter, Colress / Bianca / Ghetsis
+- [x] RUN button on the touch screen (bottom right): the RUN tab over the DS touch screen, BACK to return. Checked on
+      the test device with Black 2 RAM: live wild battle (damage, turn order), Route 19's table, dupes, met places
+- [ ] DS trainer-beaten flags / badge count (Next starts at the first fight until then): needs one dump right after
+      beating a single trainer, and one after a gym
+- [ ] Packs for plain Black 2, Platinum / Renegade Platinum, HGSS / Sterling Silver (Gen 4 readers: party address,
+      battle blocks, zone), Black / Blaze Black
+- [ ] "RUN" is translated as the battle command (flee) in other languages: give the tab its own label key
 - [ ] Cheat menu for DS games: change time (the DS clock), heal party (PokeVial), infinite repel, auto-run
 - [ ] GBA extras like Radical Red's: heal party anywhere, change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
