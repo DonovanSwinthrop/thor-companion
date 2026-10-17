@@ -57,6 +57,13 @@ object NdsFeed {
     private const val B2_ZONE = 0x0221EAE8
 
     /**
+     * Black / White (US): the party at 0x022349B4 (count before it) and the zone 0x6FC after it, Black 2's layout.
+     * Found on a finished Black save at the Gear Station (zone 68). Blaze Black shares the code and is taken to share them.
+     */
+    private const val B1_PARTY = 0x022349B4
+    private const val B1_ZONE = 0x022350B0
+
+    /**
      * Black 2 (US)'s event flags (the save's EventWork flags, mirrored in RAM). Trainer N's "beaten" flag is
      * 1488 + N: found by diffing dumps around two Route 19 fights (Youngster 164 -> flag 1652, Lass 165 -> 1653),
      * each the only flag that changed. The packs' doneFlags use the same rule.
@@ -87,6 +94,8 @@ object NdsFeed {
             ?.copyOfRange(12, 16)?.toString(Charsets.US_ASCII) ?: return null
         val name = rom.name.lowercase()
         return when {
+            code == "IRBO" && "blaze" in name -> Game("bbk", B1_PARTY, B1_ZONE)
+            code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true)

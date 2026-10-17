@@ -144,6 +144,16 @@ class NdsMonsTest {
     }
 
     @Test
+    fun blackPartyWithPidZeroMonsAndZone() {
+        // Black (US), a finished save at the Gear Station: three event Pokemon with PID 0 lead the party
+        val ram = dump("b1_station.bin")
+        assumeTrue("no Black dump", ram != null)
+        val party = NdsMons.party(ram!!, 0x022349B4)
+        assertEquals(listOf(381, 245, 639, 521, 612), party.map { it.species })
+        assertEquals(68, (ram[0x2350B0].toInt() and 0xFF) or ((ram[0x2350B1].toInt() and 0xFF) shl 8))
+    }
+
+    @Test
     fun soulSilverPartyMapAndNature() {
         // SoulSilver (US) on a finished save: the save block's address at 0x02111880, party +0xA8, map +0x1244
         val ss = rom("Pokémon SoulSilver Version.nds")

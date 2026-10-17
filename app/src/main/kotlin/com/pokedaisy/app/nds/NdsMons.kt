@@ -85,8 +85,9 @@ object NdsMons {
         if (off < 0 || off + (if (party) partyBytes(gen4) else 0x88) > ram.size) return null
         val pid = u32(ram, off)
         val flags = u16(ram, off + 4)
-        if (pid == 0L || flags and 0xFFF8 != 0) return null
         val chk = u16(ram, off + 6)
+        // event Pokemon can have PID 0: only an all-zero header is an empty slot
+        if ((pid == 0L && chk == 0) || flags and 0xFFF8 != 0) return null
         val body = crypt(ram, off + 8, 0x80, chk.toLong())
         var sum = 0
         for (i in 0 until 0x80 step 2) sum += u16(body, i)
