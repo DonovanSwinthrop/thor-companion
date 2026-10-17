@@ -111,6 +111,7 @@ val SETTING_KEYWORDS: Map<String, String> = mapOf(
     "THEME" to "colors look background skin style",
     "FPS / CPU" to "fps frame rate framerate cpu usage performance speed overlay counter 60",
     "DARK MODE" to "dark night black theme light colors appearance auto system",
+    "BACKGROUND" to "background color colour wallpaper backdrop black navy purple teal rainbow companion",
     "RESUME GAMES" to "auto resume continue launch boot",
     "FOLDERS" to "roms folder saves directory path location storage retroarch syncthing save states",
     "COVER ART" to "box art boxart covers steamgriddb images thumbnails api key",

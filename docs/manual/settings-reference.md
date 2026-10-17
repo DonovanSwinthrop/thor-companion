@@ -44,6 +44,7 @@ The `SPEED OPTIONS` page:
 | `SINGLE SCREEN` | `ON`, **`OFF`** | Only on a device with two screens: play on one, the second screen free for other apps and the companion as a window over the game. | [Devices](devices.md#single-screen) |
 | `THEME` | **`POKéDAISY`**, `FIRERED`, `LEAFGREEN`, `EMERALD`, `RUBY`, `SAPPHIRE`, `PLATINUM`, `HEARTGOLD`, `SOULSILVER` | The backdrop of the library, Settings and setup. Nothing changes in game. | [Screen](screen.md) |
 | `DARK MODE` | **`OFF`**, `ON`, `AUTO` | Dark windows on both screens. `AUTO` follows the device. | [Screen](screen.md) |
+| `BACKGROUND` | **`GAME ART`**, `BLACK`, `NAVY`, `PURPLE`, `TEAL`, `RAINBOW` | What sits behind the companion's tabs. | [Screen](screen.md) |
 | `FPS / CPU` | `ON`, **`OFF`** | Frames per second and the app's CPU use in the game's corner. Tap it for more. | [Screen](screen.md) |
 
 The `DISPLAY OPTIONS` page:

@@ -51,6 +51,9 @@ class NdsActivity : Activity() {
     private var swapped = false
 
     @Volatile private var running = false
+    /** The ROM is in (loaded off the main thread); [resumed]: between onResume and onPause. */
+    private var loaded = false
+    private var resumed = false
     private var thread: Thread? = null
     private var audio: AudioTrack? = null
     /** Buttons held now (UI thread), and ones pressed since the last frame ([latched]): a tap whose press and
@@ -85,14 +88,24 @@ class NdsActivity : Activity() {
         val touch: (Int, Int, Boolean) -> Unit = { x, y, down -> NdsCore.touch(x, y, down) }
         topView = NdsScreenView(this)
         bottomView = NdsScreenView(this, touch)
-        if (!NdsCore.load(rom.absolutePath, save.absolutePath, jit = true)) {
-            Toast.makeText(this, "This DS game wouldn't load.", Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
         owner.create()
         hasState = stateFile.isFile
         layoutScreens()
+        // A DS ROM runs to 512 MB: read it off the main thread (a slow device froze long enough for "isn't responding")
+        Thread({
+            val ok = NdsCore.load(rom.absolutePath, save.absolutePath, jit = true)
+            runOnUiThread {
+                if (isDestroyed) {
+                    if (ok) NdsCore.close()
+                } else if (!ok) {
+                    Toast.makeText(this, com.pokedaisy.app.companion.i18n.tr("This DS game wouldn't load"), Toast.LENGTH_LONG).show()
+                    finish()
+                } else {
+                    loaded = true
+                    if (resumed) start()
+                }
+            }
+        }, "nds-load").start()
     }
 
     /** The touch screen on the second display (or swapped onto the main one), else both stacked here. */
@@ -142,12 +155,14 @@ class NdsActivity : Activity() {
         super.onResume()
         if (!::topView.isInitialized) return
         owner.resume()
-        start()
+        resumed = true
+        if (loaded) start()
     }
 
     override fun onPause() {
+        resumed = false
         stop()
-        NdsCore.flushSave()
+        if (loaded) NdsCore.flushSave()
         super.onPause()
     }
 
@@ -155,7 +170,7 @@ class NdsActivity : Activity() {
         stop()
         presentation?.dismiss()
         if (::topView.isInitialized) {
-            NdsCore.close()
+            if (loaded) NdsCore.close()
             owner.destroy()
         }
         super.onDestroy()

@@ -140,6 +140,7 @@ internal val trLibrary: Map<String, Tr> = mapOf(
     "None yet" to Tr(ja = "まだ なし", fr = "Aucun pour l'instant", de = "Noch keine", it = "Ancora nessuno", es = "Ninguno aún", br = "Nenhuma ainda", pt = "Ainda nenhuma"),
     "{0} of {1}" to Tr(ja = "{0} / {1}", fr = "{0} sur {1}", de = "{0} von {1}", it = "{0} di {1}", es = "{0} de {1}", br = "{0} de {1}", pt = "{0} de {1}"),
     "{0} hardcore" to Tr(ja = "ハードコア {0}", fr = "{0} hardcore", de = "{0} Hardcore", it = "{0} hardcore", es = "{0} hardcore", br = "{0} hardcore", pt = "{0} hardcore"),
+    "This DS game wouldn't load" to Tr(ja = "この DSの ゲームは よみこめません", fr = "Impossible de charger ce jeu DS", de = "Dieses DS-Spiel ließ sich nicht laden", it = "Impossibile caricare questo gioco DS", es = "No se pudo cargar este juego de DS", br = "Não foi possível carregar este jogo de DS", pt = "Não foi possível carregar este jogo de DS"),
     "Couldn't load your progress" to Tr(ja = "しんちょくを よみこめません", fr = "Impossible de charger votre progression", de = "Fortschritt konnte nicht geladen werden", it = "Impossibile caricare i tuoi progressi", es = "No se pudo cargar tu progreso", br = "Não foi possível carregar seu progresso", pt = "Não foi possível carregar o seu progresso"),
     // Crash reports: the one-time ask (CrashReports)
     "CRASH REPORTS?" to Tr(ja = "クラッシュ レポート？", fr = "RAPPORTS DE PLANTAGE ?", de = "ABSTURZBERICHTE?", it = "SEGNALAZIONI CRASH?", es = "¿INFORMES DE FALLOS?", br = "RELATÓRIOS DE FALHAS?", pt = "RELATÓRIOS DE FALHAS?"),

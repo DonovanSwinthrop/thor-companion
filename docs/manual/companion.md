@@ -67,7 +67,7 @@ The options come in groups, the ones you change while playing first:
 
 - **FF / SPEED**: `FF`, `FF SPEED`, `GAME SPEED`, `REWIND` and `SPEED OPTIONS` (a page with `SCENE SPEEDS`, `FF MODE` and `FF MUSIC`). See [Fast-forward](fast-forward.md).
 - **GAMEPLAY**: `WILD ENCOUNTERS`, `AUTO-RUN`, `RUN INDOORS` and `CHEATS`. See [Controls](controls.md) and [Cheats](cheats.md).
-- **SCREEN**: `ASPECT`, `HUD`, `DISPLAY OPTIONS` (a page with `STATUS BAR`, `SHADERS` and `OVERLAY`), `DARK MODE`, `FPS / CPU` and, depending on your device, `BATTLE BUTTONS`, `COMPANION VIEW`, `SWAP SCREENS` or `SINGLE SCREEN`. See [Screen and display](screen.md).
+- **SCREEN**: `ASPECT`, `HUD`, `DISPLAY OPTIONS` (a page with `STATUS BAR`, `SHADERS` and `OVERLAY`), `DARK MODE`, `BACKGROUND`, `FPS / CPU` and, depending on your device, `BATTLE BUTTONS`, `COMPANION VIEW`, `SWAP SCREENS` or `SINGLE SCREEN`. See [Screen and display](screen.md).
 - **COMPANION**: `BATTLE HINTS`, `ONE-TAP MOVES`, `FOE IVS`, `TAB BAR`, `CLICK SOUND` and `TWEAKS`.
 - **CONTROLS**: `GAME BUTTONS`, `HOTKEYS`, `QUICK MENU` and `TOUCH PAD`. See [Controls](controls.md).
 - **APP**: `LANGUAGE` and `HELP` (this manual).

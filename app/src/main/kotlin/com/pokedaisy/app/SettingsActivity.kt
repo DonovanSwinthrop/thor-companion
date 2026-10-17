@@ -612,7 +612,8 @@ class SettingsActivity : ComponentActivity() {
                 }
             },
             // What the companion draws behind its tabs: the game's art or a colour.
-            SettingRow(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label, subtitle = "Behind the companion's tabs") {
+            SettingRow(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label, subtitle = "Behind the companion's tabs",
+                labelBadge = com.pokedaisy.app.companion.NewFeatures.badge(com.pokedaisy.app.companion.NewFeatures.COMPANION_BACKGROUND)) {
                 selector = Selector(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.Choice.entries.map { it.label }, com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label) { l ->
                     com.pokedaisy.app.companion.ui.theme.CompanionBackground.set(this@SettingsActivity, com.pokedaisy.app.companion.ui.theme.CompanionBackground.byLabel(l))
                 }

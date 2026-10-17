@@ -471,7 +471,8 @@ private fun homeRows(
             })
         },
         // What the companion draws behind its tabs: the game's art or a colour.
-        SettingRow(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label, subtitle = "Behind the companion's tabs") {
+        SettingRow(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label, subtitle = "Behind the companion's tabs",
+            labelBadge = NewFeatures.badge(NewFeatures.COMPANION_BACKGROUND)) {
             select(Selector(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.Choice.entries.map { it.label }, com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label) { l ->
                 s.setCompanionBackground(com.pokedaisy.app.companion.ui.theme.CompanionBackground.byLabel(l).key)
             })

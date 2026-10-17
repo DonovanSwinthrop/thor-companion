@@ -135,6 +135,8 @@ Overlays are switched off on a phone held upright, where the game sits across th
 
 `DARK MODE` turns the app's white and grey windows into dark slate ones with light text, on both screens at once. Nice at night or in a dim room.
 
+`BACKGROUND` picks what sits behind the companion's tabs: `GAME ART` (the running game's own backdrop, the default), a plain `BLACK`, `NAVY`, `PURPLE` or `TEAL`, or a `RAINBOW` fade.
+
 - `OFF`: the light windows (the default).
 - `ON`: always dark.
 - `AUTO`: follows your device's dark theme setting.

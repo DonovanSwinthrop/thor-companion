@@ -87,7 +87,7 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] Keyboard / quick taps reach the game (a press since the last frame counts), keys let go when the window loses focus
 - [x] DS Pokemon reader (NdsMons): party, battlers with live HP, which one is on the field (checked on Black 2 RAM:
       a rival battle, a wild battle with two in the party, a switch); dumps kept on this PC only (they hold game code)
-- [ ] Load the ROM off the main thread (a 512 MB ROM froze the slow test device long enough for "isn't responding")
+- [x] Load the ROM off the main thread (a 512 MB ROM froze the slow test device long enough for "isn't responding")
 - [ ] DS packs from the ROM: Black 2 / BB2R first (names, stats, moves, trainers, wild), then Platinum / RP, HGSS / Sterling
 - [ ] Companion button on the touch screen: swap the DS touch screen for the RUN tab and back
 - [ ] Cheat menu for DS games: change time (the DS clock), heal party (PokeVial), infinite repel, auto-run
