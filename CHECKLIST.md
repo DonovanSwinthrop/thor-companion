@@ -105,9 +105,10 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] DS pause menu: HEAL PARTY (HP + status + PP, outside a battle; PP from the ROM's own move table) and TIME +1 HOUR (DS clock); heal checked on
       Black 2 RAM (6/18 -> 18/18, the Pokemon still valid)
   - [x] DS pause menu GAME CLOCK row: shows the hour, LEFT / RIGHT step it either way (was TIME +1 HOUR)
-  - [x] DS BATTLE SHORTCUTS: R runs from wild battles (taps the game's RUN), checked in Black 2 on the emulator; L = best ball still to do
+  - [x] DS BATTLE SHORTCUTS: R runs from wild battles (taps the game's RUN), L = best ball, both checked in Black 2 on the emulator
   - [x] Black 2 / BB2R RUN tab Next follows the game: trainer flags (1488 + id, 0x02225846) and gym leaders by badge (0x022266E8)
-  - [ ] DS cheat menu still to do: infinite repel (needs the repel counter's address), auto-run
+  - [x] DS INFINITE REPEL (Black 2 / BB2R), checked in the emulator; auto-run parked (no reliable field flag)
+  - [x] DS NATURE: change a party Pokemon's nature, stats recomputed (Black 2 / BB2R; Gen 4 needs a PID change, not yet)
 - [x] GBA QUICK MENU HEAL tile: full HP + no status, outside a battle (PartyHeal; not R.O.W.E. / Quetzal layouts)
 - [ ] GBA extras still to do: change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist); HEAL to check in a real game
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
