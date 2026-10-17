@@ -98,7 +98,7 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
       battle blocks, zone), Black / Blaze Black
 - [x] The DS RUN button no longer translates as "flee" (own label key RUN TAB)
 - [x] Plain Black 2 pack (packs/gen5, same builder; caps from its own leaders)
-- [x] Black / Blaze Black packs `b1` / `bbk` (packs/gen5, same builder): bosses, caps, rivals, names, zones. Wild tables empty (zone -> wild file link not found); DS player needs IRBO detection first
+- [x] Black / Blaze Black packs `b1` / `bbk` (packs/gen5, same builder): bosses, caps, rivals, names, zones, wild tables (BW1's zone table is Black 2's: wild +0x14, place +0x1A; Route 1 = zone 317). DS player needs IRBO detection first
 - [x] Gen 4 packs from the ROM (packs/gen4: gen4rom.py text / NARCs, build_pack.py): Platinum `pt`, Renegade Platinum `rp`,
       HeartGold / SoulSilver `hgss` (bosses by trainer class, rivals by starter, wild tables, zone -> place). Need A's Gen 4
       party / zone reader before the RUN tab can use them. The "Sterling Silver" ROMs on E: are plain SoulSilver (one has a level cap patch only)
