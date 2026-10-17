@@ -118,6 +118,35 @@ object NdsMons {
         )
     }
 
+    /**
+     * Heals the party in [ram] (a snapshot): full HP and no status for every Pokémon, written back to the game
+     * through [write] (address, bytes). The battle stats (0x88..) are XOR'd with a stream seeded by the PID, so
+     * the same crypt that reads them writes them. PP lives in the checksummed block and isn't touched.
+     * Returns how many were healed.
+     */
+    fun healParty(ram: ByteArray, addr: Int, write: (Int, ByteArray) -> Boolean): Int {
+        val off = addr - RAM_BASE
+        val count = if (off >= 4 && off < ram.size) u32(ram, off - 4).toInt() else 0
+        if (count !in 1..6) return 0
+        var healed = 0
+        for (i in 0 until count) {
+            val mon = off + i * PARTY_MON_BYTES
+            if (decode(ram, mon) == null) continue
+            val pid = u32(ram, mon)
+            val stats = crypt(ram, mon + 0x88, 0x14, pid)
+            // status word 0..3, level 4, hp 6, maxHp 8
+            for (k in 0 until 4) stats[k] = 0
+            stats[6] = stats[8]
+            stats[7] = stats[9]
+            // back through the same crypt: crypt() reads from a ByteArray offset, so lay the plain bytes in a scratch copy
+            val scratch = ByteArray(0x14 + 0x88)
+            System.arraycopy(stats, 0, scratch, 0x88, 0x14)
+            val enc = crypt(scratch, 0x88, 0x14, pid)
+            if (write(addr + i * PARTY_MON_BYTES + 0x88, enc)) healed++
+        }
+        return healed
+    }
+
     /** The party at [addr] (its count is the u32 before it): up to 6 Pokémon. */
     fun party(ram: ByteArray, addr: Int): List<Mon> {
         val off = addr - RAM_BASE

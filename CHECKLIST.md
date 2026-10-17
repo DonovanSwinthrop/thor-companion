@@ -98,7 +98,9 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
       battle blocks, zone), Black / Blaze Black
 - [x] The DS RUN button no longer translates as "flee" (own label key RUN TAB)
 - [x] Plain Black 2 pack (packs/gen5, same builder; caps from its own leaders)
-- [ ] Cheat menu for DS games: change time (the DS clock), heal party (PokeVial), infinite repel, auto-run
+- [x] DS pause menu: HEAL PARTY (HP + status, outside a battle; PP not yet) and TIME +1 HOUR (DS clock); heal checked on
+      Black 2 RAM (6/18 -> 18/18, the Pokemon still valid)
+  - [ ] DS cheat menu still to do: infinite repel (needs the repel counter's address), auto-run, heal PP, time choices
 - [ ] GBA extras like Radical Red's: heal party anywhere, change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,

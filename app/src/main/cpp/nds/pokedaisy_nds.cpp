@@ -379,6 +379,34 @@ Java_com_pokedaisy_app_nds_NdsCore_readRam(JNIEnv* env, jclass, jint addr, jbyte
     return JNI_TRUE;
 }
 
+// Writes into main RAM (the same 4 MB as readRam): the cheat menu's heal. Between frames only.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_nds_NdsCore_writeRam(JNIEnv* env, jclass, jint addr, jbyteArray in) {
+    std::lock_guard<std::mutex> l(g_lock);
+    if (!g_nds) return JNI_FALSE;
+    u32 a = (u32) addr, len = (u32) env->GetArrayLength(in);
+    if (a < 0x02000000u || a + len > 0x02400000u) return JNI_FALSE;
+    u32 off = (a - 0x02000000u) & g_nds->MainRAMMask;
+    if (off + len > g_nds->MainRAMMask + 1) return JNI_FALSE;
+    env->GetByteArrayRegion(in, 0, (jsize) len, reinterpret_cast<jbyte*>(g_nds->MainRAM + off));
+    return JNI_TRUE;
+}
+
+// The DS clock moved by [hours] (the games read it for day / night and the time-of-day events).
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_nds_NdsCore_shiftClock(JNIEnv*, jclass, jint hours) {
+    std::lock_guard<std::mutex> l(g_lock);
+    if (!g_nds) return JNI_FALSE;
+    int y, mo, d, h, mi, s;
+    g_nds->RTC.GetDateTime(y, mo, d, h, mi, s);
+    struct tm t = {};
+    t.tm_year = y - 1900; t.tm_mon = mo - 1; t.tm_mday = d; t.tm_hour = h + hours; t.tm_min = mi; t.tm_sec = s;
+    t.tm_isdst = -1;
+    mktime(&t);   // normalises the overflowing hour into the date
+    g_nds->RTC.SetDateTime(t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+    return JNI_TRUE;
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_pokedaisy_app_nds_NdsCore_saveState(JNIEnv* env, jclass, jstring jpath) {
     std::lock_guard<std::mutex> l(g_lock);

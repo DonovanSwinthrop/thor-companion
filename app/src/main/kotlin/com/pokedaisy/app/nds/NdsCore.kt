@@ -50,6 +50,12 @@ object NdsCore {
     /** Main RAM (0x02000000-0x023FFFFF) at [addr] into [out]; false outside it or with no game. */
     @JvmStatic external fun readRam(addr: Int, out: ByteArray): Boolean
 
+    /** [data] into main RAM at [addr] (the cheat menu's heal); false outside it or with no game. */
+    @JvmStatic external fun writeRam(addr: Int, data: ByteArray): Boolean
+
+    /** Moves the DS clock by [hours] (day / night, time-of-day events). */
+    @JvmStatic external fun shiftClock(hours: Int): Boolean
+
     @JvmStatic external fun saveState(path: String): Boolean
     @JvmStatic external fun loadState(path: String): Boolean
 

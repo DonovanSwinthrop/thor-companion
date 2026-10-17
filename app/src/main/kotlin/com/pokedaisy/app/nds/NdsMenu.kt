@@ -27,6 +27,8 @@ enum class NdsMenuItem(val label: String) {
     SAVE_STATE("SAVE STATE"),
     LOAD_STATE("LOAD STATE"),
     FAST_FORWARD("FF"),
+    HEAL_PARTY("HEAL PARTY"),
+    TIME("TIME +1 HOUR"),
     SWAP("SWAP SCREENS"),
     CLOSE("CLOSE GAME"),
 }
@@ -36,9 +38,8 @@ enum class NdsMenuItem(val label: String) {
  * D-pad ([selected], moved by [NdsActivity]) or by touch. [hasState] greys LOAD STATE out with no state saved.
  */
 @Composable
-fun NdsMenu(title: String, selected: Int, fastForward: Boolean, hasState: Boolean, onPick: (NdsMenuItem) -> Unit) {
+fun NdsMenu(title: String, items: List<NdsMenuItem>, selected: Int, fastForward: Boolean, hasState: Boolean, onPick: (NdsMenuItem) -> Unit) {
     val m = rememberGbaTextMetrics()
-    val items = NdsMenuItem.entries
     Box(
         Modifier.fillMaxSize().background(Color(0xB0000000))
             .clickable(interactionSource = MutableInteractionSource(), indication = null) { onPick(NdsMenuItem.RESUME) },

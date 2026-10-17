@@ -61,4 +61,26 @@ class NdsMonsTest {
             assertEquals(name, 117, party[0].metLocation)               // the starter: Aspertia City
         }
     }
+
+    @Test
+    fun healPartyFillsHpAndKeepsTheMonValid() {
+        val ram = dump("b2_wild2.bin")
+        assumeTrue("no b2_wild2.bin", ram != null)
+        val copy = ram!!.copyOf()
+        val before = NdsMons.party(copy, 0x0221E3EC)
+        assertEquals(6, before[1].hp)                                   // the caught Patrat, hurt
+        val healed = NdsMons.healParty(copy, 0x0221E3EC) { addr, bytes ->
+            System.arraycopy(bytes, 0, copy, addr - NdsMons.RAM_BASE, bytes.size); true
+        }
+        assertEquals(2, healed)
+        val after = NdsMons.party(copy, 0x0221E3EC)
+        assertEquals(2, after.size)                                     // still decodes: the checksum block is untouched
+        for ((b, a) in before.zip(after)) {
+            assertEquals(b.species, a.species)
+            assertEquals(a.maxHp, a.hp)
+            assertEquals(0, a.status)
+            assertEquals(b.level, a.level)
+            assertEquals(b.maxHp, a.maxHp)
+        }
+    }
 }

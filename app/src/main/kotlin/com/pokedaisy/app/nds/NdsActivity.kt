@@ -78,7 +78,7 @@ class NdsActivity : Activity() {
         ComposeView(this).apply {
             setContent {
                 AppTheme {
-                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuCursor, fastForward, hasState, ::pick)
+                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, ::pick)
                 }
             }
         }
@@ -358,8 +358,11 @@ class NdsActivity : Activity() {
         }
     }
 
+    /** The pause menu's rows: HEAL PARTY only where the game's party is mapped (a pack exists). */
+    private fun menuItems() = NdsMenuItem.entries.filter { it != NdsMenuItem.HEAL_PARTY || feedGame != null }
+
     private fun menuKey(code: Int) {
-        val items = NdsMenuItem.entries
+        val items = menuItems()
         when (code) {
             KeyEvent.KEYCODE_DPAD_UP -> menuCursor = (menuCursor + items.size - 1) % items.size
             KeyEvent.KEYCODE_DPAD_DOWN -> menuCursor = (menuCursor + 1) % items.size
@@ -382,6 +385,19 @@ class NdsActivity : Activity() {
                 setMenu(false)
             }
             NdsMenuItem.FAST_FORWARD -> fastForward = !fastForward
+            NdsMenuItem.HEAL_PARTY -> {
+                // between frames the emulation thread is parked ([paused]): read the party, write it healed
+                val game = feedGame
+                if (game != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
+                    // not in a battle: the battle keeps its own copy of the HP
+                    if (NdsMons.battlers(feedRam).isEmpty()) NdsMons.healParty(feedRam, game.party, NdsCore::writeRam)
+                }
+                setMenu(false)
+            }
+            NdsMenuItem.TIME -> {
+                NdsCore.shiftClock(1)
+                setMenu(false)
+            }
             NdsMenuItem.SWAP -> {
                 setMenu(false)
                 swap()
