@@ -1,12 +1,12 @@
 ---
-title: The NUZLOCKE tab (Radical Red)
+title: The RUN tab (Radical Red)
 summary: A damage calculator, battle planner, boss teams and a team helper for Radical Red 4.1, live from your game, with a nuzlocke mode and a normal playthrough mode.
 section: companion
 order: 10
 keywords: [nuzlocke, playthrough, calc, calculator, damage, lines, planner, theory craft, bosses, level cap, encounters, graveyard, team helper, partners, radical red, overlay]
 ---
 
-Playing Radical Red, the companion gets one more tab, first in the bar: `NUZLOCKE`. It answers the questions a hard run keeps asking. How much does this move do? Who wins this fight at the level cap? Which route haven't I used yet? What should I bring to the next boss?
+Playing Radical Red, the companion gets one more tab, first in the bar: `RUN`. It answers the questions a hard run keeps asking. How much does this move do? Who wins this fight at the level cap? Which route haven't I used yet? What should I bring to the next boss?
 
 It reads your game as you play, so there's nothing to type in. It shows only for Radical Red 4.1, in builds that carry its files.
 
@@ -21,7 +21,7 @@ It reads your game as you play, so there's nothing to type in. It shows only for
 
 ## Nuzlocke or playthrough
 
-Open the tab's own settings (the gear at the end of its page list) and pick `Nuzlocke` or `Playthrough` under `MODE`. The tab's name follows your pick: `NUZLOCKE` or `PLAYTHROUGH`.
+Open the tab's own settings (the gear at the end of its page list) and pick `Nuzlocke` or `Playthrough` under `MODE`.
 
 - **Nuzlocke** tracks your encounters: which routes you've used, how many are left, duplicates, and boxes 20 to 25 as the graveyard.
 - **Playthrough** keeps everything else and drops that bookkeeping. Boxes 20 to 25 count as normal boxes.

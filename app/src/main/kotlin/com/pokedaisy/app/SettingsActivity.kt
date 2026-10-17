@@ -611,6 +611,12 @@ class SettingsActivity : ComponentActivity() {
                     DarkMode.set(this@SettingsActivity, modes.first { it.label == l })
                 }
             },
+            // What the companion draws behind its tabs: the game's art or a colour.
+            SettingRow(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label, subtitle = "Behind the companion's tabs") {
+                selector = Selector(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.Choice.entries.map { it.label }, com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label) { l ->
+                    com.pokedaisy.app.companion.ui.theme.CompanionBackground.set(this@SettingsActivity, com.pokedaisy.app.companion.ui.theme.CompanionBackground.byLabel(l))
+                }
+            },
             // The game's frames per second and the app's CPU share, in the game's corner.
             SettingRow(tk("FPS / CPU"), onOff(prefs.showPerformance), subtitle = "Speed and CPU use in the game's corner") {
                 prefs.showPerformance = !prefs.showPerformance

@@ -10,6 +10,6 @@ DST="$(dirname "$0")/../app/src/main/assets/overlay"
 rm -rf "$DST" && mkdir -p "$DST"
 for f in "$SRC"/*; do
   case "$(basename "$f")" in manifest.webmanifest|*.pre_*|*.bak*) continue ;; esac
-  cp "$f" "$DST/"
+  cp -r "$f" "$DST/"   # packs/<game>/pack.js too (other games' data, built by packs/<game>/build_pack.py)
 done
 echo "Overlay copied: $(ls "$DST" | wc -l) files, $(du -sh "$DST" | cut -f1)"

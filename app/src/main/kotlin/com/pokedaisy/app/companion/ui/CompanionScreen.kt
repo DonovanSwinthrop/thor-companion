@@ -231,7 +231,7 @@ fun CompanionScreen(
                 "CARD" -> card != null && cardArt?.style == card.style || id in cachedTabs
                 "ACHIEVEMENTS" -> achievements != null
                 // The nuzlocke overlay: Radical Red only, and only in a build that carries its files.
-                "NUZLOCKE" -> game == com.pokedaisy.app.companion.data.GameKind.RADICAL_RED && overlayFiles
+                "NUZLOCKE" -> com.pokedaisy.app.companion.RrOverlay.gameParam(game) != null && overlayFiles
                 else -> true
             }
         }
@@ -355,7 +355,9 @@ fun CompanionScreen(
             if (game == null) {
                 AppBackdrop()
             } else {
-                GameBackdrop(game)
+                // SETTINGS > BACKGROUND: the game's art, or a colour of the player's.
+                if (com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice == com.pokedaisy.app.companion.ui.theme.CompanionBackground.Choice.GAME) GameBackdrop(game)
+                else com.pokedaisy.app.companion.ui.theme.CompanionBackground.Backdrop()
                 AnimatedVisibility(
                     visible = current == "ITEMS" && hasItemsBackdrop(game),
                     enter = fadeIn(tween(200)), exit = fadeOut(tween(200)), label = "tab-backdrop",
@@ -490,7 +492,7 @@ fun CompanionScreen(
                             // The game's own card fills the tab, over the backdrop.
                             TrainerCardScreen(card, cardArt, Modifier.fillMaxSize(), initialBack = initialCardBack)
                         } else if (tab == "NUZLOCKE") {
-                            RrOverlayPane(Modifier.fillMaxSize())
+                            RrOverlayPane(com.pokedaisy.app.companion.RrOverlay.gameParam(game) ?: "rr", Modifier.fillMaxSize())
                         } else if (tab == "MAP") {
                             MapScreen(snapshot, modifier = Modifier.fillMaxSize(), fly = fly)
                         } else if (tab == "PARTY") {
@@ -655,8 +657,8 @@ object CompanionStatusBar {
  */
 internal fun companionTabLabel(id: String): String = when (id) {
     "ACHIEVEMENTS" -> tr("CHEEVOS")
-    // The tab follows the overlay's mode (its settings: NUZLOCKE / PLAYTHROUGH); the id stays NUZLOCKE.
-    "NUZLOCKE" -> if (com.pokedaisy.app.companion.RrOverlay.mode.value == "play") "PLAYTHROUGH" else "NUZLOCKE"
+    // One short name for both of the overlay's modes (the user's pick): fits beside BATTLE's chip too.
+    "NUZLOCKE" -> "RUN"
     "PARTY" -> tr("PARTY")
     "DEX" -> tr("DEX")
     "MAP" -> tr("MAP")
@@ -916,9 +918,9 @@ private fun ErrorBanner(message: String) {
 
 /** The NUZLOCKE tab: the nuzlocke overlay's page ([com.pokedaisy.app.companion.RrOverlay]), kept alive across tab switches. */
 @Composable
-private fun RrOverlayPane(modifier: Modifier = Modifier) {
+private fun RrOverlayPane(game: String, modifier: Modifier = Modifier) {
     androidx.compose.ui.viewinterop.AndroidView(
-        factory = { ctx -> com.pokedaisy.app.companion.RrOverlay.view(ctx) },
+        factory = { ctx -> com.pokedaisy.app.companion.RrOverlay.view(ctx, game) },
         modifier = modifier,
     )
 }

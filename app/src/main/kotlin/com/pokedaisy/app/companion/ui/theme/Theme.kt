@@ -344,6 +344,7 @@ fun AppTheme(content: @Composable () -> Unit) {
         val id = runCatching { com.pokedaisy.app.Prefs(context).appTheme }.getOrDefault(DAISY_THEME_ID)
         AppColors.applyTheme(themeById(id))
         runCatching { DarkMode.load(context) }
+        runCatching { CompanionBackground.load(context) }
     }
 
     val pixel = pixelFontFamily()

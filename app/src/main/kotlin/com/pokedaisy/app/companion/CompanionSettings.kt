@@ -134,6 +134,9 @@ interface CompanionSettings {
     /** Saves DARK MODE (an ordinal of DarkModeSetting, see [Prefs.darkMode]); the look itself is DarkMode's state. */
     fun setDarkMode(v: Int) {}
 
+    /** Saves BACKGROUND (see CompanionBackground); the look itself is its Compose state. */
+    fun setCompanionBackground(key: String) {}
+
     /** Whether battle INFO has a STATS page with the foe's IVs - see [Prefs.showFoeIvs]. */
     val showFoeIvs: Boolean get() = false
     fun setShowFoeIvs(on: Boolean) {}

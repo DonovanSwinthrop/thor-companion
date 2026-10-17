@@ -28,7 +28,16 @@ import java.util.Calendar
  */
 object RrOverlay {
     private const val HOST = "appassets.androidplatform.net"
-    const val URL = "https://$HOST/overlay/overlay.html?android"
+    private const val URL = "https://$HOST/overlay/overlay.html?android"
+
+    /** The games the overlay has data for, and its `?game=` for each (Radical Red is the default page). */
+    fun gameParam(game: com.pokedaisy.app.companion.data.GameKind?): String? = when (game) {
+        com.pokedaisy.app.companion.data.GameKind.RADICAL_RED -> "rr"
+        com.pokedaisy.app.companion.data.GameKind.UNBOUND -> "unbound"
+        com.pokedaisy.app.companion.data.GameKind.SWORD_SHIELD -> "swsh"
+        else -> null
+    }
+    private var loadedGame: String? = null
 
     // Radical Red 4.1 (FireRed USA base) RAM, from rr_overlay.lua / thor/ram_map.js.
     private const val SAVE_BLOCK1_PTR = 0x03005008L
@@ -161,12 +170,14 @@ object RrOverlay {
     fun available(context: Context): Boolean =
         runCatching { context.assets.open("overlay/overlay.html").close() }.isSuccess
 
-    /** The tab's page, made once per screen (its context) and kept while tabs switch, so the overlay keeps its place. */
+    /** The tab's page, made once per screen (its context) and game, kept while tabs switch, so the overlay keeps its place. */
     @SuppressLint("SetJavaScriptEnabled")
-    fun view(context: Context): WebView {
+    fun view(context: Context, game: String): WebView {
         web?.let { w ->
-            if (w.context === context) { (w.parent as? ViewGroup)?.removeView(w); return w }
+            if (w.context === context && loadedGame == game) { (w.parent as? ViewGroup)?.removeView(w); return w }
+            (w.parent as? ViewGroup)?.removeView(w)
             w.destroy(); web = null
+            reset()
         }
         val w = WebView(context)
         w.setBackgroundColor(0xFF101217.toInt())
@@ -209,8 +220,9 @@ object RrOverlay {
                 }
             }
         }, "RRAndroid")
-        w.loadUrl(URL)
+        w.loadUrl(if (game == "rr") URL else "$URL&game=$game")
         web = w
+        loadedGame = game
         return w
     }
 

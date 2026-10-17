@@ -32,12 +32,35 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] Don't feed the overlay until the save is loaded (checked: title screen says 'Waiting for the game')
 - [x] Matches the PC overlay: same addresses and code; checked against your save (route, next fight, team, battle)
 - [x] APK on the drive: E:\Thor_AYN_Roms\Apps\Thor-Companion (PokeDaisy fork).apk, listed in Thor Setup
-- [ ] Commit + push to your GitHub fork (waiting for your OK)
+- [x] Pushed to your fork, branch nuzlocke-tab
+
+## Extras you asked for
+- [x] Tab renamed RUN (fits next to BATTLE's chip in a battle)
+- [x] Companion BACKGROUND setting on both screens: GAME ART, BLACK, NAVY, PURPLE, TEAL, RAINBOW
+- [x] First time you open RUN it asks Nuzlocke or Playthrough; stays until changed in its settings
+- [ ] Commit + push the extras + Unbound app changes (waiting for your OK)
 
 ## Stage 2: More GBA games (PokeDaisy already has their guides; we add calc + bosses) <- next
 - [ ] Unbound 2.1.1.1 (boss sets on hand)
+  - [x] Data check: boss sets x3 difficulties (Dynamic Calc), Unbound dex/moves, PokeDaisy's Unbound ids/maps/wild/boss flags
+  - [x] Map what the overlay needs from a game (data.js / savedata.js shapes)
+  - [x] Boss teams matched to the game's trainer records: ~87 of ~95 per difficulty (the rest are legendary
+        encounters, not trainers). packs/unbound/match_trainers.py -> trainers.json. Recheck Rival 4 (Gible)
+  - [x] Wild Pokemon read from the ROM: 59 places, 481 tables (packs/unbound/read_wild.py -> wild.json)
+  - [x] Pack assembled (packs/unbound/build_pack.py): 1263/1267 species identified by stats + types, Unbound's own
+        stats and moves in the damage engine, 3 difficulties (picker in settings + first open), rival by your starter
+  - [x] Overlay loads a pack per game (game-select.js, ub-select.js); each game keeps its own settings
+  - [x] App: RUN tab + live feed for Unbound (same memory layout as Radical Red); checked on PokeDaisy's Unbound RAM
+        dump (party, map, next fight) and in the app on your ROM
+  - [ ] Unbound live battle on a real fight (the battle dump had no foe)
+  - [ ] Unbound Dex + Items tabs (needs learnsets / item locations from the ROM; until then hidden, answers at
+        current levels instead of trained to the cap)
 - [ ] Emerald Imperium 1.3.1 (docs zip on hand)
-- [ ] Sword & Shield Ultimate Plus (wiki; no trainer docs)
+- [x] Sword & Shield Ultimate Plus: pack built from the ROM alone (packs/rom_pack.py): 1240/1242 species, the 8 gyms
+      in badge order with caps (Milo 20 ... Raihan 48), Hop / Bede / Marnie and 130+ notable trainers, wild by place,
+      the hack's own stats and move powers in the damage engine. RUN tab checked in the app on your ROM
+  - [ ] Its trainers' natures / EVs (the ROM only stores them for custom sets) and default moves for trainers without
+        custom moves (needs the learnset reader)
 - [ ] SoulGold v1.2 (website data)
 
 ## Stage 3: Library

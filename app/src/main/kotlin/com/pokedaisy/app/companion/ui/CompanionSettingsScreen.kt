@@ -470,6 +470,12 @@ private fun homeRows(
                 s.setDarkMode(pick.ordinal)
             })
         },
+        // What the companion draws behind its tabs: the game's art or a colour.
+        SettingRow(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label, subtitle = "Behind the companion's tabs") {
+            select(Selector(tk("BACKGROUND"), com.pokedaisy.app.companion.ui.theme.CompanionBackground.Choice.entries.map { it.label }, com.pokedaisy.app.companion.ui.theme.CompanionBackground.choice.label) { l ->
+                s.setCompanionBackground(com.pokedaisy.app.companion.ui.theme.CompanionBackground.byLabel(l).key)
+            })
+        },
         // The game's frames per second and the app's CPU share, in the game's corner.
         SettingRow(tk("FPS / CPU"), onOff(s.showPerformance), subtitle = "Speed and CPU use in the game's corner") { s.setShowPerformance(!s.showPerformance); changed() },
         groupTitle(tk("COMPANION")),
