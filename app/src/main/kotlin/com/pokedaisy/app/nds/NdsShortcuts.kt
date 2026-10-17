@@ -37,8 +37,9 @@ object NdsShortcuts {
 
     // Black 2's battle touch screen
     private val RUN = Tap(128, 181)
-    private val BAG = Tap(39, 168)
-    private val BALLS_POCKET = Tap(192, 47)
+    // the bag slides in over ~1 s: a tap before it's up is lost (the next one then lands on the wrong pocket)
+    private val BAG = Tap(39, 168, wait = 75)
+    private val BALLS_POCKET = Tap(192, 47, wait = 50)
     private val NEXT_PAGE = Tap(59, 174, wait = 20)
     private val USE = Tap(107, 175)
     private val SLOT_X = intArrayOf(64, 192)
@@ -67,7 +68,7 @@ object NdsShortcuts {
             add(BAG)
             add(BALLS_POCKET)
             repeat(index / 6) { add(NEXT_PAGE) }
-            add(Tap(SLOT_X[slot % 2], SLOT_Y[slot / 2]))
+            add(Tap(SLOT_X[slot % 2], SLOT_Y[slot / 2], wait = 45))
             add(USE)
         }
     }
