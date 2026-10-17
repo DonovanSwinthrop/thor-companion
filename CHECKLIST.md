@@ -85,7 +85,8 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] Checked on the test device: Platinum boots, 3D intro, keys reach the game, full speed (59.9 fps)
 - [ ] Try it on the Thor (arm64 JIT)
 - [ ] Companion button on the touch screen: swap the DS touch screen for the RUN tab and back
-- [ ] Save states, fast forward for DS games
+- [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
+      close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
 - [ ] Blaze Black Reduxx, Blaze Black 2 Redux, Renegade Platinum, Sterling Silver packs
 
 ## Stage 5: 3DS

@@ -383,10 +383,16 @@ Java_com_pokedaisy_app_nds_NdsCore_saveState(JNIEnv* env, jclass, jstring jpath)
     std::lock_guard<std::mutex> l(g_lock);
     if (!g_nds) return JNI_FALSE;
     Savestate state;
-    if (state.Error || !g_nds->DoSavestate(&state) || state.Error) return JNI_FALSE;
+    if (state.Error || !g_nds->DoSavestate(&state) || state.Error) {
+        __android_log_print(ANDROID_LOG_ERROR, TAG, "save state: the core couldn't write one");
+        return JNI_FALSE;
+    }
     std::string path = str(env, jpath);
     FILE* f = std::fopen(path.c_str(), "wb");
-    if (!f) return JNI_FALSE;
+    if (!f) {
+        __android_log_print(ANDROID_LOG_ERROR, TAG, "save state: can't open %s", path.c_str());
+        return JNI_FALSE;
+    }
     bool ok = std::fwrite(state.Buffer(), 1, state.Length(), f) == state.Length();
     return (std::fclose(f) == 0 && ok) ? JNI_TRUE : JNI_FALSE;
 }
