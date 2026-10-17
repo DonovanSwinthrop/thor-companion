@@ -32,7 +32,7 @@ Press BACK (or L3) to pause. The menu has:
 
 - `RESUME`: back to the game.
 - `SAVE STATE` and `LOAD STATE`: one save state per game, saved the moment you pick it. `LOAD STATE` is greyed out until you've saved one.
-- `FF`: fast forward, three times the normal speed, without sound. Holding R2 fast forwards too, for as long as you hold it.
+- `FF`: fast forward, four times the normal speed, without sound. Holding R2 fast forwards too, for as long as you hold it.
 - `SWAP SCREENS`: the same as R3.
 - `CLOSE GAME`: back to the library. The game's save is written first.
 

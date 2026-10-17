@@ -280,6 +280,7 @@ Java_com_pokedaisy_app_nds_NdsCore_load(JNIEnv* env, jclass, jstring jrom, jstri
     std::vector<u8> rom = readFile(str(env, jrom));
     if (rom.empty()) return JNI_FALSE;
     g_save = readFile(g_savePath);
+    __android_log_print(ANDROID_LOG_INFO, TAG, "save %s: %zu bytes", g_savePath.c_str(), g_save.size());
     g_saveDirty = false;
 
     NDSArgs args;

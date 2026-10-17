@@ -26,9 +26,10 @@ object SaveBackups {
             ?.sortedByDescending { it.name }.orEmpty()
 
     /** Backs [save] up if it has data the newest backup doesn't. Never throws: a
-     * folder we can't write mustn't keep the game from starting. */
-    fun snapshot(save: File, now: Long = System.currentTimeMillis()): File? = runCatching {
-        if (!save.isFile || save.length() == 0L || save.length() > GameSaves.MAX_BYTES) return null
+     * folder we can't write mustn't keep the game from starting. [maxBytes]: DS saves
+     * run to 8 MB, the GBA's to [GameSaves.MAX_BYTES]. */
+    fun snapshot(save: File, now: Long = System.currentTimeMillis(), maxBytes: Long = GameSaves.MAX_BYTES.toLong()): File? = runCatching {
+        if (!save.isFile || save.length() == 0L || save.length() > maxBytes) return null
         val bytes = save.readBytes()
         val existing = list(save)
         if (existing.firstOrNull()?.let { sameSave(it.readBytes(), bytes) } == true) return null

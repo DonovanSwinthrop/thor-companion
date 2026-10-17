@@ -53,7 +53,10 @@ class NdsActivity : Activity() {
     @Volatile private var running = false
     private var thread: Thread? = null
     private var audio: AudioTrack? = null
-    private var keys = 0
+    /** Buttons held now (UI thread), and ones pressed since the last frame ([latched]): a tap whose press and
+     * release land between two frames (a keyboard's, or a quick one) still reaches the game. */
+    @Volatile private var keys = 0
+    private val latched = java.util.concurrent.atomic.AtomicInteger(0)
 
     private val owner = ComposeHostOwner()
     private var menuOpen by mutableStateOf(false)
@@ -78,7 +81,7 @@ class NdsActivity : Activity() {
         val path = intent.getStringExtra(LibraryActivity.EXTRA_ROM)
         rom = path?.let(::File)?.takeIf { it.isFile } ?: run { finish(); return }
         save = SavesLocation.saveFor(this, Prefs(this), rom)
-        if (save.exists()) SaveBackups.snapshot(save)
+        if (save.exists()) SaveBackups.snapshot(save, maxBytes = 8L shl 20)
         val touch: (Int, Int, Boolean) -> Unit = { x, y, down -> NdsCore.touch(x, y, down) }
         topView = NdsScreenView(this)
         bottomView = NdsScreenView(this, touch)
@@ -199,15 +202,16 @@ class NdsActivity : Activity() {
             // fast forward: FF_FRAMES frames a tick, the last one shown, the sound skipped
             val ff = fastForward || ffHeld
             repeat(if (ff) FF_FRAMES - 1 else 0) {
-                NdsCore.runFrame(top, bottom)
+                runFrame(top, bottom)
                 NdsCore.readAudio(sound)
                 frames++
             }
-            if (!NdsCore.runFrame(top, bottom)) break
+            if (!runFrame(top, bottom)) break
             topView.show(top)
             bottomView.show(bottom)
             val n = NdsCore.readAudio(sound)
             if (n > 0 && !ff) track.write(sound, 0, n * 2, AudioTrack.WRITE_NON_BLOCKING)
+            if (com.pokedaisy.app.BuildConfig.DEBUG && frames % 60 == 0L) debugDump()
             if (++frames - lastFlush >= 600) {
                 NdsCore.flushSave()   // every ~10 s of game, between frames
                 val now = System.nanoTime()
@@ -221,6 +225,26 @@ class NdsActivity : Activity() {
             else if (wait < -NdsCore.FRAME_NANOS * 4) next = System.nanoTime()   // fell behind: don't race to catch up
         }
         Log.i(TAG, "emulation stopped after $frames frames")
+    }
+
+    /** Debug builds: `files/nds-dump` present = main RAM (4 MB) written to `files/nds-ram.bin` (fixtures for the readers). */
+    private fun debugDump() {
+        val req = File(filesDir, "nds-dump")
+        if (!req.exists()) return
+        req.delete()
+        val ram = ByteArray(0x400000)
+        if (NdsCore.readRam(0x02000000, ram)) File(filesDir, "nds-ram.bin").writeBytes(ram)
+        Log.i(TAG, "RAM dumped")
+    }
+
+    private var pressedLastFrame = 0
+
+    /** One frame with the buttons held now plus any tapped since the last two frames. */
+    private fun runFrame(top: IntArray, bottom: IntArray): Boolean {
+        val tapped = latched.getAndSet(0)
+        NdsCore.setKeys(keys or tapped or pressedLastFrame)
+        pressedLastFrame = tapped
+        return NdsCore.runFrame(top, bottom)
     }
 
     // ------------------------------------------------------------------------------------------- keys
@@ -245,6 +269,7 @@ class NdsActivity : Activity() {
         if (bit == null) return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             keys = keys or bit
+            latched.getAndUpdate { it or bit }
             if (keys and (NdsCore.SELECT or NdsCore.R) == NdsCore.SELECT or NdsCore.R) {
                 keys = keys and (NdsCore.SELECT or NdsCore.R).inv()
                 swap()
@@ -252,7 +277,6 @@ class NdsActivity : Activity() {
         } else if (event.action == KeyEvent.ACTION_UP) {
             keys = keys and bit.inv()
         }
-        NdsCore.setKeys(keys)
         return true
     }
 
@@ -313,6 +337,16 @@ class NdsActivity : Activity() {
         }
     }
 
+    // A window losing focus mid-press never gets the key's release: let go of everything.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) {
+            keys = 0
+            NdsCore.setKeys(0)
+            ffHeld = false
+        }
+    }
+
     private fun swap() {
         swapped = !swapped
         layoutScreens()
@@ -320,8 +354,8 @@ class NdsActivity : Activity() {
 
     companion object {
         private const val TAG = "pokedaisy/nds"
-        /** Fast forward runs this many frames per frame shown (3x). */
-        private const val FF_FRAMES = 3
+        /** Fast forward runs this many frames per frame shown (4x). */
+        private const val FF_FRAMES = 4
 
         private val KEY_MAP = mapOf(
             KeyEvent.KEYCODE_BUTTON_A to NdsCore.A,

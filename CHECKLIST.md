@@ -84,7 +84,15 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
       the game's .sav found and backed up like the GBA saves, written every ~10 s and on leaving
 - [x] Checked on the test device: Platinum boots, 3D intro, keys reach the game, full speed (59.9 fps)
 - [ ] Try it on the Thor (arm64 JIT)
+- [x] Keyboard / quick taps reach the game (a press since the last frame counts), keys let go when the window loses focus
+- [x] DS Pokemon reader (NdsMons): party, battlers with live HP, which one is on the field (checked on Black 2 RAM:
+      a rival battle, a wild battle with two in the party, a switch); dumps kept on this PC only (they hold game code)
+- [ ] Load the ROM off the main thread (a 512 MB ROM froze the slow test device long enough for "isn't responding")
+- [ ] DS packs from the ROM: Black 2 / BB2R first (names, stats, moves, trainers, wild), then Platinum / RP, HGSS / Sterling
 - [ ] Companion button on the touch screen: swap the DS touch screen for the RUN tab and back
+- [ ] Cheat menu for DS games: change time (the DS clock), heal party (PokeVial), infinite repel, auto-run
+- [ ] GBA extras like Radical Red's: heal party anywhere, change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
+- [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
 - [ ] Blaze Black Reduxx, Blaze Black 2 Redux, Renegade Platinum, Sterling Silver packs
