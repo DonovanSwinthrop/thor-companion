@@ -74,10 +74,18 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [ ] Check it in the app on your ROM and save (and Imperium's)
 
 ## Stage 3: Library
-- [ ] Check what PokeDaisy's library already does; add DS / 3DS folders if missing
+- [x] Check what PokeDaisy's library already does: GBA / GB only, 32 MB cap
+- [x] `.nds` files listed (up to 512 MB) and opened in the DS player
+- [ ] 3DS games: they stay in Azahar (Stage 5)
 
 ## Stage 4: DS inside the app
-- [ ] melonDS core, two screens, swap button (game touch screen <-> companion)
+- [x] melonDS core in the app (third_party/melonDS, the core only; free BIOS, no BIOS files needed; JIT on)
+- [x] DS player (NdsActivity): top screen on the main display, touch screen on the second; R3 / SELECT + R swaps;
+      the game's .sav found and backed up like the GBA saves, written every ~10 s and on leaving
+- [x] Checked on the test device: Platinum boots, 3D intro, keys reach the game, full speed (59.9 fps)
+- [ ] Try it on the Thor (arm64 JIT)
+- [ ] Companion button on the touch screen: swap the DS touch screen for the RUN tab and back
+- [ ] Save states, fast forward for DS games
 - [ ] Blaze Black Reduxx, Blaze Black 2 Redux, Renegade Platinum, Sterling Silver packs
 
 ## Stage 5: 3DS

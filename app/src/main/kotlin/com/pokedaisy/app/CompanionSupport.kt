@@ -27,6 +27,8 @@ object CompanionSupport {
      * some off as PARTIAL. Blocking, like [isSupported].
      */
     fun verdict(rom: File): Verdict {
+        // DS games play in NdsActivity (melonDS); their companion comes with each game's pack
+        if (com.pokedaisy.app.nds.NdsActivity.isNdsRom(rom)) return Verdict.SUPPORTED
         if (isSupported(rom)) return Verdict.SUPPORTED
         val e = BestEffortStore.load(RomIdentity.sha1(rom))
             ?: return if (RomIdentity.gameCode(rom)?.let(com.pokedaisy.app.companion.data.BestEffort::canTry) == true) Verdict.TRYABLE else Verdict.UNSUPPORTED

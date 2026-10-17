@@ -14,7 +14,9 @@ import java.io.File
  */
 object RomFolder {
 
-    private val EXTENSIONS = RomArchive.ROM_EXTENSIONS + RomArchive.EXTENSIONS
+    private val EXTENSIONS = RomArchive.ROM_EXTENSIONS + RomArchive.EXTENSIONS + "nds"
+    /** DS games run up to 512 MB. */
+    private const val MAX_NDS_BYTES = 512L shl 20
     private const val MAX_ROM_BYTES = 32L shl 20
     /** The folder itself plus a couple of levels (e.g. `roms/gba/hacks/`). */
     private const val MAX_DEPTH = 3
@@ -99,7 +101,7 @@ object RomFolder {
             .onEnter { it == root || !it.name.startsWith(".") }
             .filter { f ->
                 f.isFile && f.name.substringAfterLast('.', "").lowercase() in EXTENSIONS &&
-                    f.length() in 0x200L..MAX_ROM_BYTES
+                    f.length() in 0x200L..(if (f.extension.equals("nds", true)) MAX_NDS_BYTES else MAX_ROM_BYTES)
             }
             .toList()
         val old = load(context)

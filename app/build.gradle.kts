@@ -161,6 +161,8 @@ val licensesAsset by tasks.registering {
         "blip_buf (in mGBA) - GNU LGPL 2.1" to "third_party/mgba/src/third-party/blip_buf/license.txt",
         "inih (in mGBA) - BSD" to "third_party/mgba/src/third-party/inih/LICENSE.txt",
         "rcheevos - MIT" to "third_party/rcheevos/LICENSE",
+        "melonDS (DS games) - GNU GPL 3.0" to "third_party/melonDS/LICENSE",
+        "teakra (in melonDS) - MIT" to "third_party/melonDS/src/teakra/LICENSE",
         "LCD and Scanlines shaders - MIT" to "third_party/licenses/mGBA-shaders-MIT.txt",
         "xBR, xBRZ and ScaleFX shaders (libretro glsl-shaders) - MIT, xBRZ also GNU GPL 3.0" to "third_party/licenses/libretro-shaders.txt",
         "PixelMplus - M+ FONT LICENSE" to "app/src/main/assets/fonts/LICENSE-PixelMplus.txt",

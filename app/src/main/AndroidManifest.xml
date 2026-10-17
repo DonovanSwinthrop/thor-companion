@@ -126,5 +126,13 @@
             android:launchMode="singleTask"
             android:parentActivityName=".LibraryActivity"
             android:theme="@style/Theme.PokeDaisy" />
+        <!-- DS games (melonDS): both screens are the game's, R3 / SELECT + R swaps them. -->
+        <activity
+            android:name=".nds.NdsActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
+            android:launchMode="singleTask"
+            android:parentActivityName=".LibraryActivity"
+            android:theme="@style/Theme.PokeDaisy" />
     </application>
 </manifest>

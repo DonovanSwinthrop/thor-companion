@@ -1291,7 +1291,8 @@ class LibraryActivity : ComponentActivity() {
         prefs.pushRecentRom(rom.absolutePath)
         // Opened on the bottom screen, the game still goes to the top one (Screens.mainDisplayLaunch).
         val onMain = Screens.mainDisplayLaunch(this)
-        val intent = Intent(this, PokeDaisyActivity::class.java).putExtra(EXTRA_ROM, rom.absolutePath)
+        val activity = if (com.pokedaisy.app.nds.NdsActivity.isNdsRom(rom)) com.pokedaisy.app.nds.NdsActivity::class.java else PokeDaisyActivity::class.java
+        val intent = Intent(this, activity).putExtra(EXTRA_ROM, rom.absolutePath)
         if (onMain != null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent, onMain)
     }

@@ -89,3 +89,31 @@ target_link_libraries(pokedaisy
     rcheevos
     android
     log)
+
+# ---------------------------------------------------------------------------
+# Vendored melonDS (git submodule) - the DS core only: no Qt / SDL frontend, no
+# OpenGL renderer (the software one, threaded), no GDB stub. Its own Android JIT
+# (ARMJIT_A64 / x64, ashmem fastmem). Built into its own library, pokedaisy_nds.
+# ---------------------------------------------------------------------------
+get_filename_component(MELONDS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/melonDS" ABSOLUTE)
+if(NOT EXISTS "${MELONDS_DIR}/src/NDS.h")
+    message(FATAL_ERROR "melonDS submodule missing at ${MELONDS_DIR} - run: git submodule update --init third_party/melonDS")
+endif()
+enable_language(CXX)
+enable_language(ASM)
+list(APPEND CMAKE_MODULE_PATH "${MELONDS_DIR}/cmake")
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    set(ARCHITECTURE ARM64)
+elseif(ANDROID_ABI STREQUAL "x86_64")
+    set(ARCHITECTURE x86_64)
+endif()
+set(ENABLE_JIT          ON  CACHE BOOL "" FORCE)
+set(ENABLE_OGLRENDERER  OFF CACHE BOOL "" FORCE)
+set(ENABLE_GDBSTUB      OFF CACHE BOOL "" FORCE)
+set(melonDS_VERSION "1.1")
+set(melonDS_HOMEPAGE_URL "https://melonds.kuribo64.net")
+add_subdirectory("${MELONDS_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}/melonDS" EXCLUDE_FROM_ALL)
+
+add_library(pokedaisy_nds SHARED nds/pokedaisy_nds.cpp)
+set_target_properties(pokedaisy_nds PROPERTIES CXX_STANDARD 17)
+target_link_libraries(pokedaisy_nds core android log)
