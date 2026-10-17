@@ -62,6 +62,21 @@ class NdsMonsTest {
         }
     }
 
+    @Test
+    fun trainerFlagsBeforeAndAfterTwoFights() {
+        val game = NdsFeed.Game("b2", 0x0221E3EC, 0x0221EAE8, 0x02225846)
+        val dumps = listOf("b2_tr1_before", "b2_tr1_after", "b2_tr2_before", "b2_tr2_after").map { dump("$it.bin") }
+        assumeTrue("no trainer-flag dumps", dumps.all { it != null })
+        val (b1, a1, b2, a2) = dumps.map { it!! }
+        // Route 19: Youngster Terrell (164), then Lass Isabel (165); nobody else beaten yet, not even Cheren (156)
+        assertEquals(false, NdsFeed.trainerBeaten(b1, game, 164))
+        assertEquals(true, NdsFeed.trainerBeaten(a1, game, 164))
+        assertEquals(false, NdsFeed.trainerBeaten(b2, game, 165))
+        assertEquals(true, NdsFeed.trainerBeaten(a2, game, 165))
+        assertEquals(true, NdsFeed.trainerBeaten(a2, game, 164))
+        assertEquals(false, NdsFeed.trainerBeaten(a2, game, 156))
+    }
+
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
     private fun rom(name: String): NdsRom? {
         val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"

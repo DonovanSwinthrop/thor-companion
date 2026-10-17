@@ -10,12 +10,20 @@ import java.io.File
  */
 object NdsFeed {
 
-    /** Where a game keeps what the feed reads. */
-    class Game(val pack: String, val party: Int, val zone: Int)
+    /** Where a game keeps what the feed reads; [flags] = its event flags (0: not mapped). */
+    class Game(val pack: String, val party: Int, val zone: Int, val flags: Int = 0)
 
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
     private const val B2_ZONE = 0x0221EAE8
+
+    /**
+     * Black 2 (US)'s event flags (the save's EventWork flags, mirrored in RAM). Trainer N's "beaten" flag is
+     * 1488 + N: found by diffing dumps around two Route 19 fights (Youngster 164 -> flag 1652, Lass 165 -> 1653),
+     * each the only flag that changed. The packs' doneFlags use the same rule.
+     */
+    private const val B2_FLAGS = 0x02225846
+    private const val FLAG_BYTES = 0x180
 
     /** The game a ROM is, by its header's game code and (for hacks sharing one) its file name. */
     fun gameFor(rom: File): Game? {
@@ -23,8 +31,8 @@ object NdsFeed {
             ?.copyOfRange(12, 16)?.toString(Charsets.US_ASCII) ?: return null
         val name = rom.name.lowercase()
         return when {
-            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE)
-            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE)
+            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS)
+            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS)
             else -> null
         }
     }
@@ -58,6 +66,20 @@ object NdsFeed {
 
     private var frame = 0
 
+    /** Black 2's first trainer flag: trainer N is beaten when event flag [TRAINER_FLAG_BASE] + N is set. */
+    const val TRAINER_FLAG_BASE = 1488
+
+    /** Whether [game]'s trainer [id] is beaten in [ram] (false where the flags aren't mapped). */
+    fun trainerBeaten(ram: ByteArray, game: Game, id: Int): Boolean {
+        if (game.flags == 0) return false
+        val f = TRAINER_FLAG_BASE + id
+        return (ram[game.flags - NdsMons.RAM_BASE + (f shr 3)].toInt() shr (f and 7)) and 1 == 1
+    }
+
+    private fun hex(ram: ByteArray, off: Int, len: Int) = buildString(len * 2) {
+        for (i in off until off + len) append("%02x".format(ram[i].toInt() and 0xFF))
+    }
+
     /** The state for [ram] (main RAM from 0x02000000), or null before a save is loaded (no party yet). */
     fun state(ram: ByteArray, game: Game): JSONObject? {
         val party = NdsMons.party(ram, game.party)
@@ -81,8 +103,8 @@ object NdsFeed {
             .put("partyDec", JSONArray().apply { party.forEach { put(mon(it)) } })
             .put("enemyDec", JSONArray().apply { if (trainer) sides.foe.forEach { b -> b.mon?.let { put(mon(it, b.hp, b.maxHp, b.level, b.ability)) } } })
             .put("battlersDec", bat)
-            // the game's own flags aren't mapped yet: nothing counts as beaten, so Next starts at the first fight
-            .put("flags", "00".repeat(0x200))
+            // unmapped flags: nothing counts as beaten, so Next starts at the first fight
+            .put("flags", if (game.flags != 0) hex(ram, game.flags - NdsMons.RAM_BASE, FLAG_BYTES) else "00".repeat(FLAG_BYTES))
             .put("trainerA", 0).put("trainerB", 0).put("mode", 0).put("outcome", 0)
     }
 }
