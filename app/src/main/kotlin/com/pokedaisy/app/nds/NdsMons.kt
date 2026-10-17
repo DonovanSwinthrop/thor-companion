@@ -198,37 +198,79 @@ object NdsMons {
         }
     }
 
+    private fun shuffle(pid: Long) = ORDERS[(((pid ushr 13) and 31) % 24).toInt()]
+
     /**
-     * Gen 5: gives party slot [slot] at [addr] the nature [nature] (0-24), the way a nature-changing item would: the
-     * nature byte in block B (the checksummed body: decrypted, changed, summed, encrypted again) and the battle stats
-     * after it computed again from [base] (the species' base stats), its IVs, EVs and level. HP and max HP are kept.
-     * False if the slot holds no valid Pokémon.
+     * Gives party slot [slot] at [addr] the nature [nature] (0-24), the way a nature-changing item would, and computes
+     * its battle stats again from [base] (the species' base stats), its IVs, EVs and level; HP and max HP are kept.
+     * Gen 5 keeps the nature in a byte of block B (the checksummed body: decrypted, changed, summed, encrypted again).
+     * Gen 4 ([gen4]) has no such byte: the nature is the PID mod 25, so the Pokémon gets a new PID ([gen4Pid]), its
+     * blocks are shuffled into the new PID's order and everything after the body is encrypted again with it.
+     * False if the slot holds no valid Pokémon (or, Gen 4, no PID keeps what it has to).
      */
-    fun setNature(ram: ByteArray, addr: Int, slot: Int, nature: Int, base: IntArray, write: (Int, ByteArray) -> Boolean): Boolean {
-        val mon = addr - RAM_BASE + slot * PARTY_MON_BYTES
-        val m = decode(ram, mon) ?: return false
+    fun setNature(ram: ByteArray, addr: Int, slot: Int, nature: Int, base: IntArray, gen4: Boolean = false,
+                  write: (Int, ByteArray) -> Boolean): Boolean {
+        val stride = partyBytes(gen4)
+        val mon = addr - RAM_BASE + slot * stride
+        val m = decode(ram, mon, gen4 = gen4) ?: return false
         val pid = u32(ram, mon)
-        val body = crypt(ram, mon + 8, 0x80, u16(ram, mon + 6).toLong())
-        val b = ORDERS[(((pid ushr 13) and 31) % 24).toInt()].indexOf('B') * 0x20
-        body[b + 0x19] = nature.toByte()
+        var body = crypt(ram, mon + 8, 0x80, u16(ram, mon + 6).toLong())
+        var newPid = pid
+        if (gen4) {
+            val plain = ByteArray(0x80)   // A B C D
+            val old = shuffle(pid)
+            for (i in 0 until 4) System.arraycopy(body, i * 0x20, plain, (old[i] - 'A') * 0x20, 0x20)
+            newPid = gen4Pid(pid, u16(plain, 0x04), u16(plain, 0x06), nature) ?: return false
+            val now = shuffle(newPid)
+            body = ByteArray(0x80)
+            for (i in 0 until 4) System.arraycopy(plain, (now[i] - 'A') * 0x20, body, i * 0x20, 0x20)
+        } else {
+            body[shuffle(pid).indexOf('B') * 0x20 + 0x19] = nature.toByte()
+        }
         var sum = 0
         for (w in 0 until 0x80 step 2) sum += u16(body, w)
         val chk = sum and 0xFFFF
-        val out = ByteArray(2 + 0x80)
-        out[0] = chk.toByte()
-        out[1] = (chk ushr 8).toByte()
-        System.arraycopy(crypt(body, 0, 0x80, chk.toLong()), 0, out, 2, 0x80)
-        if (!write(addr + slot * PARTY_MON_BYTES + 6, out)) return false
-        val st = crypt(ram, mon + 0x88, 0x14, pid)
-        val level = st[4].toInt() and 0xFF
+        val out = ByteArray(0x88)
+        System.arraycopy(ram, mon, out, 0, 6)   // flags kept
+        for (k in 0 until 4) out[k] = (newPid ushr (8 * k)).toByte()
+        out[6] = chk.toByte()
+        out[7] = (chk ushr 8).toByte()
+        System.arraycopy(crypt(body, 0, 0x80, chk.toLong()), 0, out, 8, 0x80)
+        // the battle stats and the rest after the body: one stream from the PID
+        val ext = crypt(ram, mon + 0x88, stride - 0x88, pid)
+        val level = ext[4].toInt() and 0xFF
         val now = stats(base, m.ivs, m.evs, level, nature)
         for (s in 1 until 6) {   // atk..spd at +0x0A..; hp / max hp (+6 / +8) stay
-            st[0x08 + 2 * s] = now[s].toByte()
-            st[0x09 + 2 * s] = (now[s] ushr 8).toByte()
+            ext[0x08 + 2 * s] = now[s].toByte()
+            ext[0x09 + 2 * s] = (now[s] ushr 8).toByte()
         }
-        val scratch = ByteArray(0x88 + 0x14)
-        System.arraycopy(st, 0, scratch, 0x88, 0x14)
-        return write(addr + slot * PARTY_MON_BYTES + 0x88, crypt(scratch, 0x88, 0x14, pid))
+        if (!write(addr + slot * stride, out)) return false
+        return write(addr + slot * stride + 0x88, crypt(ext, 0, ext.size, newPid))
+    }
+
+    /**
+     * A Gen 4 PID like [pid] with nature [nature] (PID mod 25) that keeps what else the PID decides: the low byte
+     * (gender against the species' ratio, ability slot in bit 0), shiny or not (trainer id [tid] ^ secret id [sid] ^
+     * both PID halves < 8), and Wurmple's evolution ((PID >> 16) mod 10 < 5). Searches the high half first, then the
+     * low half's high byte too (a shiny's high half is tied to the low half). Null if none fits.
+     */
+    fun gen4Pid(pid: Long, tid: Int, sid: Int, nature: Int): Long? {
+        val lo = (pid and 0xFFFF).toInt()
+        val hi = (pid ushr 16).toInt()
+        val shiny = (tid xor sid xor lo xor hi) < 8
+        val wurmple = hi % 10 < 5
+        for (d in 0 until 256) {
+            val newLo = ((((lo ushr 8) + d) and 0xFF) shl 8) or (lo and 0xFF)
+            val his = if (shiny) (0 until 8).map { tid xor sid xor newLo xor it }
+                      else (1..0xFFFF).map { (hi + it) and 0xFFFF }
+            for (h in his) {
+                val p = (h.toLong() shl 16) or newLo.toLong()
+                if (p % 25 != nature.toLong() || (h % 10 < 5) != wurmple) continue
+                if (!shiny && (tid xor sid xor newLo xor h) < 8) continue
+                return p
+            }
+        }
+        return null
     }
 
     /** The party at [addr] (its count is the u32 before it): up to 6 Pokémon. */

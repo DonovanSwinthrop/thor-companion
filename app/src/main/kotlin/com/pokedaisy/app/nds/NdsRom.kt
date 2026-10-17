@@ -118,14 +118,101 @@ class NdsRom(private val file: File) {
         }
     }
 
-    /** Gen 5's species names (text 90) and nature names (text 27), in the game's own language. */
-    fun gen5SpeciesNames(): List<String>? = gen5Text(90)
-    fun gen5NatureNames(): List<String>? = gen5Text(27)
+    /**
+     * A Gen 4 text file (Platinum `msgdata/pl_msg.narc`, HeartGold / SoulSilver `a/0/2/7`): its lines, decrypted. The
+     * table's (offset, length) pairs are XOR'd with seed * 0x2FD * (i + 1), each line's characters with a key from
+     * 0x91BD3 * (i + 1) stepping 0x493D; 0xF100 starts a 9-bit line packed 15 bits to a word. The characters are the
+     * games' own table: letters, digits and the punctuation names use. Null outside Gen 4.
+     */
+    fun gen4Text(index: Int): List<String>? {
+        val path = when {
+            code.startsWith("CPU") -> "msgdata/pl_msg.narc"
+            code.startsWith("IPK") || code.startsWith("IPG") -> "a/0/2/7"
+            else -> return null
+        }
+        val data = narc(file(path) ?: return null).getOrNull(index) ?: return null
+        val lines = u16(data, 0)
+        val seed = u16(data, 2)
+        return List(lines) { i ->
+            val k = (seed * 0x2FD * (i + 1)) and 0xFFFF
+            val key = k or (k shl 16)
+            val off = u32(data, 4 + 8 * i) xor key
+            val len = u32(data, 8 + 8 * i) xor key
+            var ck = (0x91BD3 * (i + 1)) and 0xFFFF
+            var chars = List(len) { j -> (u16(data, off + 2 * j) xor ck).also { ck = (ck + 0x493D) and 0xFFFF } }
+            if (chars.firstOrNull() == 0xF100) {
+                val out = ArrayList<Int>()
+                var bits = 0L
+                var n = 0
+                for (w in chars.drop(1)) {
+                    bits = bits or ((w and 0x7FFF).toLong() shl n)
+                    n += 15
+                    while (n >= 9) { out += (bits and 0x1FF).toInt(); bits = bits ushr 9; n -= 9 }
+                }
+                chars = out.map { if (it == 0x1FF) 0xFFFF else it }
+            }
+            buildString {
+                for (c in chars) {
+                    if (c == 0xFFFF) break
+                    when (c) {
+                        in 0x121..0x12A -> append('0' + (c - 0x121))
+                        in 0x12B..0x144 -> append('A' + (c - 0x12B))
+                        in 0x145..0x15E -> append('a' + (c - 0x145))
+                        0x1DE -> append(' ')
+                        0x188 -> append('é')
+                        0x1AB -> append('!')
+                        0x1AC -> append('?')
+                        0x1AD -> append(',')
+                        0x1AE -> append('.')
+                        0x1B3 -> append('\'')
+                        0x1BB -> append('♂')
+                        0x1BC -> append('♀')
+                        0x1BE -> append('-')
+                        0x1C2 -> append('&')
+                        0x1C4 -> append(':')
+                        0x1E0 -> append("PK")
+                        0x1E1 -> append("MN")
+                    }
+                }
+            }
+        }
+    }
 
-    /** Each species' base stats (hp, atk, def, spe, spa, spd) from Gen 5's personal data `a/0/1/6`. */
-    fun gen5BaseStats(): List<IntArray>? {
-        if (!code.startsWith("IR")) return null
-        return narc(file("a/0/1/6") ?: return null).map { p -> IntArray(6) { if (p.size > it) p[it].toInt() and 0xFF else 0 } }
+    /** Species names, in the game's own language (Gen 5 text 90; Platinum 412, HGSS 821, in capitals there, so title case). */
+    fun speciesNames(): List<String>? = when {
+        code.startsWith("IR") -> gen5Text(90)
+        code.startsWith("CPU") -> gen4Text(412)?.map(::titleCase)
+        code.startsWith("IPK") || code.startsWith("IPG") -> gen4Text(821)?.map(::titleCase)
+        else -> null
+    }
+
+    /** Nature names, Hardy to Quirky (Gen 5 text 27; Platinum 202, HGSS 34). */
+    fun natureNames(): List<String>? = when {
+        code.startsWith("IR") -> gen5Text(27)
+        code.startsWith("CPU") -> gen4Text(202)
+        code.startsWith("IPK") || code.startsWith("IPG") -> gen4Text(34)
+        else -> null
+    }
+
+    /**
+     * Each species' base stats (hp, atk, def, spe, spa, spd), the first six bytes of its personal data: Gen 5
+     * `a/0/1/6`, Platinum `poketool/personal/pl_personal.narc`, HGSS `a/0/0/2`. A hack's changed stats come with it.
+     */
+    fun baseStats(): List<IntArray>? {
+        val path = when {
+            code.startsWith("IR") -> "a/0/1/6"
+            code.startsWith("CPU") -> "poketool/personal/pl_personal.narc"
+            code.startsWith("IPK") || code.startsWith("IPG") -> "a/0/0/2"
+            else -> return null
+        }
+        return narc(file(path) ?: return null).map { p -> IntArray(6) { if (p.size > it) p[it].toInt() and 0xFF else 0 } }
+    }
+
+    private fun titleCase(s: String): String {
+        if (s.any { it.isLowerCase() }) return s
+        val b = StringBuilder(s.lowercase())
+        for (i in b.indices) if (i == 0 || b[i - 1] == ' ' || b[i - 1] == '-') b[i] = b[i].uppercaseChar()
+        return b.toString()
     }
 
     /**

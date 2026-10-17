@@ -84,17 +84,17 @@ class NdsActivity : Activity() {
     private fun pickerChoose(i: Int) { picker?.choose?.invoke(i) }
 
     /** NATURE's game data, read from the ROM once: species and nature names in the game's language, base stats. */
-    private val gen5Data by lazy {
-        runCatching { NdsRom(rom).let { r -> Triple(r.gen5SpeciesNames(), r.gen5NatureNames(), r.gen5BaseStats()) } }.getOrNull()
+    private val natureData by lazy {
+        runCatching { NdsRom(rom).let { r -> Triple(r.speciesNames(), r.natureNames(), r.baseStats()) } }.getOrNull()
     }
 
     /** NATURE: the party (name, level, nature now); a pick opens the natures, a nature changes it and comes back. */
     private fun openNatureParty(cursor: Int = 0) {
         val game = feedGame ?: return
-        val (names, natures, base) = gen5Data ?: return
+        val (names, natures, base) = natureData ?: return
         if (names == null || natures == null || base == null || !NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
         val addr = NdsFeed.partyAddr(feedRam, game)
-        val party = NdsMons.party(feedRam, addr)
+        val party = NdsMons.party(feedRam, addr, game.gen4)
         if (party.isEmpty()) return
         val rows = party.map { mon ->
             (names.getOrNull(mon.species) ?: "#${mon.species}") + "  Lv${mon.level ?: 0}" to natures.getOrNull(mon.nature)
@@ -103,7 +103,7 @@ class NdsActivity : Activity() {
             val mon = party[slot]
             val parent = picker
             picker = Picker(rows[slot].first, natures.take(25).mapIndexed { n, name -> name to (if (n == mon.nature) "<" else null) }, parent) { n ->
-                if (NdsMons.setNature(feedRam, addr, slot, n, base.getOrElse(mon.species) { IntArray(6) }, NdsCore::writeRam)) {
+                if (NdsMons.setNature(feedRam, addr, slot, n, base.getOrElse(mon.species) { IntArray(6) }, game.gen4, NdsCore::writeRam)) {
                     Log.i(TAG, "nature: slot $slot ${mon.species} -> $n")
                 }
                 openNatureParty(slot)
@@ -465,7 +465,7 @@ class NdsActivity : Activity() {
             NdsMenuItem.SHORTCUTS -> (feedGame?.bag ?: 0) != 0
             NdsMenuItem.REPEL -> (feedGame?.repel ?: 0) != 0
             // Gen 5 keeps the nature in its own byte; Gen 4's is the PID (not yet)
-            NdsMenuItem.NATURE -> feedGame != null && feedGame?.gen4 == false
+            NdsMenuItem.NATURE -> feedGame != null
             else -> true
         }
     }

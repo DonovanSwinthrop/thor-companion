@@ -148,19 +148,19 @@ class NdsMonsTest {
         val b2 = rom("Pokémon Black Version 2.nds")
         val ram = dump("b2_field2.bin")
         assumeTrue("no Black 2 ROM / dump", b2 != null && ram != null)
-        val base = b2!!.gen5BaseStats()!!
+        val base = b2!!.baseStats()!!
         val party = NdsMons.party(ram!!, 0x0221E3EC)
         assertEquals(3, party.size)
         for (m in party) {   // the games' own stats, computed again from base stats, IVs, EVs, level and nature
             assertEquals(m.stats!!.toList(), NdsMons.stats(base[m.species], m.ivs, m.evs, m.level!!, m.nature).toList())
         }
-        assertEquals("Hardy", b2.gen5NatureNames()!![0])
-        assertEquals("Tepig", b2.gen5SpeciesNames()!![498])
+        assertEquals("Hardy", b2.natureNames()!![0])
+        assertEquals("Tepig", b2.speciesNames()!![498])
         val copy = ram.copyOf()
         val tepig = party[0]
         val target = if (tepig.nature == 3) 13 else 3                            // Adamant (+atk -spa) or Jolly
         val write = { addr: Int, bytes: ByteArray -> System.arraycopy(bytes, 0, copy, addr - NdsMons.RAM_BASE, bytes.size); true }
-        assertEquals(true, NdsMons.setNature(copy, 0x0221E3EC, 0, target, base[498], write))
+        assertEquals(true, NdsMons.setNature(copy, 0x0221E3EC, 0, target, base[498], write = write))
         val after = NdsMons.party(copy, 0x0221E3EC)
         assertEquals(3, after.size)                                             // still decodes: checksum fixed
         assertEquals(target, after[0].nature)
@@ -168,6 +168,51 @@ class NdsMonsTest {
         assertEquals(tepig.hp, after[0].hp)
         assertEquals(NdsMons.stats(base[498], tepig.ivs, tepig.evs, tepig.level!!, target).toList(), after[0].stats!!.toList())
         assertEquals(party[1].nature, after[1].nature)                          // the others untouched
+    }
+
+    @Test
+    fun gen4PidKeepsGenderAbilityShinyAndWurmple() {
+        val (tid, sid) = 12345 to 54321
+        val plain = 0x8A3F_51C7L                                                  // not shiny
+        val lo = 0x51C7
+        val shiny = ((tid xor sid xor lo xor 3).toLong() shl 16) or lo.toLong()  // shiny value 3
+        for (pid in listOf(plain, shiny)) {
+            fun sv(p: Long) = tid xor sid xor (p and 0xFFFF).toInt() xor (p ushr 16).toInt()
+            for (n in 0 until 25) {
+                val p = NdsMons.gen4Pid(pid, tid, sid, n)!!
+                assertEquals(n.toLong(), p % 25)
+                assertEquals(pid and 0xFF, p and 0xFF)                              // gender and ability slot
+                assertEquals(sv(pid) < 8, sv(p) < 8)                                // shiny stays shiny, plain stays plain
+                assertEquals((pid ushr 16) % 10 < 5, (p ushr 16) % 10 < 5)          // Wurmple's line
+            }
+        }
+    }
+
+    @Test
+    fun platinumNatureChangeGivesANewPid() {
+        val pt = rom("Pokémon Platinum Version.nds")
+        val ram = dump("pt_out.bin")
+        assumeTrue("no Platinum ROM / dump", pt != null && ram != null)
+        val game = NdsFeed.Game("pt", 0xB4, 0x1294, base = 0x02101D40, gen4 = true)
+        val addr = NdsFeed.partyAddr(ram!!, game)
+        val base = pt!!.baseStats()!!
+        val m = NdsMons.party(ram, addr, gen4 = true)[0]
+        assertEquals("Giratina", pt.speciesNames()!![487])
+        assertEquals("Quirky", pt.natureNames()!![24])
+        assertEquals(m.stats!!.toList(), NdsMons.stats(base[487], m.ivs, m.evs, m.level!!, m.nature).toList())
+        val copy = ram.copyOf()
+        val target = (m.nature + 7) % 25
+        val write = { a: Int, bytes: ByteArray -> System.arraycopy(bytes, 0, copy, a - NdsMons.RAM_BASE, bytes.size); true }
+        assertEquals(true, NdsMons.setNature(copy, addr, 0, target, base[487], gen4 = true, write = write))
+        val after = NdsMons.party(copy, addr, gen4 = true)[0]                   // decodes: new order, checksum, stream
+        assertEquals(target, after.nature)
+        assertEquals(m.pid and 0xFF, after.pid and 0xFF)
+        assertEquals(m.species, after.species)
+        assertEquals(m.ivs.toList(), after.ivs.toList())
+        assertEquals(m.moves.toList(), after.moves.toList())
+        assertEquals(m.hp, after.hp)
+        assertEquals(m.level, after.level)
+        assertEquals(NdsMons.stats(base[487], m.ivs, m.evs, m.level!!, target).toList(), after.stats!!.toList())
     }
 
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
