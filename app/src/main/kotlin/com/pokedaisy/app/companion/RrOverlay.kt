@@ -35,8 +35,14 @@ object RrOverlay {
         com.pokedaisy.app.companion.data.GameKind.RADICAL_RED -> "rr"
         com.pokedaisy.app.companion.data.GameKind.UNBOUND -> "unbound"
         com.pokedaisy.app.companion.data.GameKind.SWORD_SHIELD -> "swsh"
+        com.pokedaisy.app.companion.data.GameKind.IMPERIUM -> "imperium"
+        com.pokedaisy.app.companion.data.GameKind.SOULGOLD -> "soulgold"
         else -> null
     }
+
+    /** The games fed PokeDaisy's decoded snapshot ([sampleDecoded]) instead of raw memory ([sample]). */
+    fun decoded(game: com.pokedaisy.app.companion.data.GameKind?) =
+        game == com.pokedaisy.app.companion.data.GameKind.IMPERIUM || game == com.pokedaisy.app.companion.data.GameKind.SOULGOLD
     private var loadedGame: String? = null
 
     // Radical Red 4.1 (FireRed USA base) RAM, from rr_overlay.lua / thor/ram_map.js.
@@ -67,7 +73,7 @@ object RrOverlay {
     private const val BOX_BYTES = 30 * 58
     private const val PC_BYTES = 19 * BOX_BYTES
 
-    private val main = Handler(Looper.getMainLooper())
+    private val main by lazy { Handler(Looper.getMainLooper()) }
     private const val PREFS = "pokedaisy"
     private const val MODE_KEY = "rr_overlay_mode"
 
@@ -101,6 +107,63 @@ object RrOverlay {
             }
             post(JSONObject().put("type", "clock").put("hour", Calendar.getInstance().get(Calendar.HOUR_OF_DAY)).toString())
         }
+    }
+
+    /**
+     * Games on another engine (Emerald Imperium, SoulGold: pokeemerald-expansion) don't get raw memory: the overlay
+     * can't decode their Pokémon. They get PokeDaisy's own decoded snapshot instead (`dec: 1`): party, battlers in
+     * battle slot order (yours 0 / 2, the foe's 1 / 3), the foe's team, the place and the save's flags. The pack
+     * (packs/<game>/pack.js) turns the numbers into the damage engine's names. Main thread or emu thread, after
+     * [com.pokedaisy.app.companion.TelemetryStore.refresh].
+     */
+    fun sampleDecoded(s: com.pokedaisy.app.companion.data.SnapshotView) {
+        if (!s.connected || s.party.isEmpty()) return
+        val state = runCatching { decodedState(s) }.getOrNull() ?: return
+        lastState = JSONObject().put("type", "state").put("state", state).toString()
+        post(lastState!!)
+        if (samples++ % 5 == 0) {
+            post(JSONObject().put("type", "clock").put("hour", Calendar.getInstance().get(Calendar.HOUR_OF_DAY)).toString())
+        }
+    }
+
+    private fun monJson(m: com.pokedaisy.app.companion.data.MonView) = JSONObject()
+        .put("sp", m.species).put("name", m.name).put("lv", m.level).put("hp", m.hp).put("maxHP", m.maxHp)
+        .put("status", m.status).put("pid", m.personality).put("egg", m.isEgg)
+        .put("moves", org.json.JSONArray().apply { m.moves.forEach { put(JSONObject().put("id", it.id).put("name", it.name)) } })
+        .put("item", m.heldItemId).put("itemName", m.heldItem ?: "")
+        .put("ab", m.abilityId).put("abName", m.abilityName ?: "")
+        .apply {
+            m.stats?.let { st ->
+                put("nat", st.nature).put("ivs", org.json.JSONArray(st.ivs)).put("evs", org.json.JSONArray(st.evs))
+                put("stats", org.json.JSONArray(st.stats))
+            }
+            m.battleStats?.let { put("bstats", org.json.JSONArray(it)) }
+            m.statStages?.let { put("stages", org.json.JSONArray(it)) }
+        }
+
+    internal fun decodedState(s: com.pokedaisy.app.companion.data.SnapshotView): JSONObject {
+        val trainer = s.inBattle && s.enemyParty.isNotEmpty()
+        // battle slots as the game numbers them: yours 0 and 2, the foe's 1 and 3
+        val bat = org.json.JSONArray()
+        for (slot in 0 until 4) {
+            val side = if (slot % 2 == 0) s.battlePlayer else s.battleOpponent
+            bat.put(side.getOrNull(slot / 2)?.let(::monJson) ?: JSONObject.NULL)
+        }
+        // the save's flags 0..0xFFF, packed like the games' flag bytes (beaten trainers are 0x500 + their id)
+        val flags = ByteArray(0x200)
+        s.progress?.let { p -> for (f in 0 until 0x1000) if (p.flag(f)) flags[f shr 3] = (flags[f shr 3].toInt() or (1 shl (f and 7))).toByte() }
+        return JSONObject()
+            .put("v", 2).put("dec", 1).put("frame", frame++)
+            .put("inBattle", if (s.inBattle) 1 else 0)
+            .put("battleType", (if (s.isDoubleBattle) 1 else 0) or (if (trainer) 8 else 0))
+            .put("mapsec", s.regionMapSectionId).put("mapName", s.location.mapSecName)
+            .put("map", org.json.JSONArray().put(s.mapGroup).put(s.mapNum))
+            .put("partyCount", s.party.size)
+            .put("partyDec", org.json.JSONArray().apply { s.party.forEach { put(monJson(it)) } })
+            .put("enemyDec", org.json.JSONArray().apply { s.enemyParty.forEach { put(monJson(it)) } })
+            .put("battlersDec", bat)
+            .put("flags", flags.toHex())
+            .put("trainerA", 0).put("trainerB", 0).put("mode", 0).put("outcome", 0)
     }
 
     /** A game was closed or switched: the next page load starts empty. */

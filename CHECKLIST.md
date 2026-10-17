@@ -38,10 +38,10 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] Tab renamed RUN (fits next to BATTLE's chip in a battle)
 - [x] Companion BACKGROUND setting on both screens: GAME ART, BLACK, NAVY, PURPLE, TEAL, RAINBOW
 - [x] First time you open RUN it asks Nuzlocke or Playthrough; stays until changed in its settings
-- [ ] Commit + push the extras + Unbound app changes (waiting for your OK)
+- [x] Commit + push the extras + Unbound app changes
 
-## Stage 2: More GBA games (PokeDaisy already has their guides; we add calc + bosses) <- next
-- [ ] Unbound 2.1.1.1 (boss sets on hand)
+## Stage 2: More GBA games (PokeDaisy already has their guides; we add calc + bosses)
+- [x] Unbound 2.1.1.1 (boss sets on hand)
   - [x] Data check: boss sets x3 difficulties (Dynamic Calc), Unbound dex/moves, PokeDaisy's Unbound ids/maps/wild/boss flags
   - [x] Map what the overlay needs from a game (data.js / savedata.js shapes)
   - [x] Boss teams matched to the game's trainer records: ~87 of ~95 per difficulty (the rest are legendary
@@ -55,13 +55,23 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [ ] Unbound live battle on a real fight (the battle dump had no foe)
   - [ ] Unbound Dex + Items tabs (needs learnsets / item locations from the ROM; until then hidden, answers at
         current levels instead of trained to the cap)
-- [ ] Emerald Imperium 1.3.1 (docs zip on hand)
+- [x] Emerald Imperium 1.3.1 (docs zip on hand)
+  - [x] Decoded feed: the app sends PokeDaisy's own decoding (party, foes, battlers, flags) for the expansion games,
+        since their memory isn't Radical Red's (RrOverlay.decodedState, RrOverlayDecodedTest on the RAM fixtures)
+  - [x] Pack (packs/imperium): 132 boss fights from Boss Battles.xlsx (19 caps, rival by your starter's type),
+        trainer ids from the ROM, wild by place from the routes sheet, the game's stats / abilities / evolutions
+  - [x] Checked in the browser on the Imperium fixtures: Route 101, next fight, team, a live wild battle
 - [x] Sword & Shield Ultimate Plus: pack built from the ROM alone (packs/rom_pack.py): 1240/1242 species, the 8 gyms
       in badge order with caps (Milo 20 ... Raihan 48), Hop / Bede / Marnie and 130+ notable trainers, wild by place,
       the hack's own stats and move powers in the damage engine. RUN tab checked in the app on your ROM
   - [ ] Its trainers' natures / EVs (the ROM only stores them for custom sets) and default moves for trainers without
         custom moves (needs the learnset reader)
-- [ ] SoulGold v1.2 (website data)
+- [x] SoulGold v1.2 (your ROM is v1.2b)
+  - [x] Pack from the ROM (packs/soulgold): Normal + Hard boss teams, Johto gyms (Chuck / Jasmine / Pryce by how
+        many of the others you've beaten), League, Kanto, the rival by your starter, Rockets; beaten by badge / Hall
+        of Fame flags; wild by place and time of day
+  - [x] Checked in the browser on the SoulGold battle fixture: live wild battle with damage, next fight, route
+  - [ ] Check it in the app on your ROM and save (and Imperium's)
 
 ## Stage 3: Library
 - [ ] Check what PokeDaisy's library already does; add DS / 3DS folders if missing

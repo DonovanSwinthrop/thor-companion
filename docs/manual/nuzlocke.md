@@ -1,14 +1,22 @@
 ---
-title: The RUN tab (Radical Red)
-summary: A damage calculator, battle planner, boss teams and a team helper for Radical Red 4.1, live from your game, with a nuzlocke mode and a normal playthrough mode.
+title: The RUN tab
+summary: A damage calculator, battle planner, boss teams and a team helper for Radical Red, Unbound, Sword and Shield Ultimate Plus, Emerald Imperium and SoulGold, live from your game, with a nuzlocke mode and a normal playthrough mode.
 section: companion
 order: 10
-keywords: [nuzlocke, playthrough, calc, calculator, damage, lines, planner, theory craft, bosses, level cap, encounters, graveyard, team helper, partners, radical red, overlay]
+keywords: [nuzlocke, playthrough, calc, calculator, damage, lines, planner, theory craft, bosses, level cap, encounters, graveyard, team helper, partners, radical red, unbound, sword and shield, imperium, soulgold, difficulty, overlay]
 ---
 
-Playing Radical Red, the companion gets one more tab, first in the bar: `RUN`. It answers the questions a hard run keeps asking. How much does this move do? Who wins this fight at the level cap? Which route haven't I used yet? What should I bring to the next boss?
+Playing one of these games, the companion gets one more tab, first in the bar: `RUN`. It answers the questions a hard run keeps asking. How much does this move do? Who wins this fight at the level cap? Which route haven't I used yet? What should I bring to the next boss?
 
-It reads your game as you play, so there's nothing to type in. It shows only for Radical Red 4.1, in builds that carry its files.
+It reads your game as you play, so there's nothing to type in. It shows only in builds that carry its files, for:
+
+- Radical Red 4.1
+- Unbound
+- Sword and Shield Ultimate Plus
+- Emerald Imperium 1.3.1
+- SoulGold 1.2
+
+The first time you open it, it asks how you're playing (see below).
 
 ## Its pages
 
@@ -16,15 +24,19 @@ It reads your game as you play, so there's nothing to type in. It shows only for
 - **Battle**: in a battle, both sides' Pokémon with their items and abilities, the turn order, and a table of what every move does both ways. In a double battle it warns you when both foes together could knock one of yours out. Outside a battle, **Future bosses** shows every fight still ahead.
 - **Next**: your next required fight, its team, your level cap, and your best answer to each of its Pokémon, trained to the cap. **Theory craft** lets you try any of your Pokémon against it.
 - **Team**: your party and boxes, and the team helper (below).
-- **Dex**, **Items**: every Pokémon's data, and where to find items, TMs and tutors.
+- **Dex**, **Items** (Radical Red only): every Pokémon's data, and where to find items, TMs and tutors.
 - **Lines**: a turn by turn plan for the fight you're in. It's off until you ask for it, so it never spoils a fight you want to work out yourself.
 
 ## Nuzlocke or playthrough
 
-Open the tab's own settings (the gear at the end of its page list) and pick `Nuzlocke` or `Playthrough` under `MODE`.
+The first time you open the tab it asks which one. It stays on your pick until you change it in the tab's own settings (the gear at the end of its page list), under `MODE`.
 
 - **Nuzlocke** tracks your encounters: which routes you've used, how many are left, duplicates, and boxes 20 to 25 as the graveyard.
 - **Playthrough** keeps everything else and drops that bookkeeping. Boxes 20 to 25 count as normal boxes.
+
+## Difficulty
+
+Unbound and SoulGold have boss teams for each difficulty. Pick the one you started your game on when the tab asks, or later in its settings under `DIFFICULTY`.
 
 ## The team helper
 

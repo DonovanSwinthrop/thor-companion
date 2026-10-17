@@ -1266,8 +1266,10 @@ class PokeDaisyActivity : Activity() {
                 telemetry.knownGMain()?.let { (addr, inBattleOff) -> FfMenuWatch.useKnownGMain(addr, inBattleOff) }
                 if (snap.connected) FfMenuWatch.notePosition(snap.x, snap.y, snap.mapGroup, snap.mapNum, snap.inBattle)
                 // The RUN tab's live feed (Radical Red, Unbound: the same FireRed / CFRU memory layout).
-                if (snap.connected && com.pokedaisy.app.companion.RrOverlay.gameParam(snap.game) != null)
-                    com.pokedaisy.app.companion.RrOverlay.sample(com.pokedaisy.app.companion.data.InProcessReader)
+                if (snap.connected && com.pokedaisy.app.companion.RrOverlay.gameParam(snap.game) != null) {
+                    if (com.pokedaisy.app.companion.RrOverlay.decoded(snap.game)) com.pokedaisy.app.companion.RrOverlay.sampleDecoded(snap)
+                    else com.pokedaisy.app.companion.RrOverlay.sample(com.pokedaisy.app.companion.data.InProcessReader)
+                }
                 if (snap.connected) battleSwitchAddrs = switchAddrsFor(snap.game)
                 // The menus' cursors, so a FIGHT / move tap goes straight to its cell (NativeConfig.actionCursor).
                 if (snap.connected) battleCursorAddrs = telemetry.knownCursorAddrs()
