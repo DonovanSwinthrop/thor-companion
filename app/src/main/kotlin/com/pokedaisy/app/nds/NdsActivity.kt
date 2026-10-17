@@ -77,8 +77,9 @@ class NdsActivity : Activity() {
     /** A wild battle is on (the feed's last read): R runs away while [shortcuts] is on. */
     @Volatile private var wildBattle = false
 
-    /** Frames left to hold the stylus on the game's RUN (the battle shortcut), then let go. */
-    private val runTap = java.util.concurrent.atomic.AtomicInteger(0)
+    /** The battle shortcuts' touches on the game's battle screen, played a frame at a time. */
+    private val taps = NdsShortcuts.Taps()
+    private val shortcutRam = ByteArray(0x400000)
     @Volatile private var paused = false
     @Volatile private var ffHeld = false
     private val stateFile by lazy { File(File(filesDir, "nds-states").apply { mkdirs() }, rom.nameWithoutExtension + ".state") }
@@ -313,12 +314,7 @@ class NdsActivity : Activity() {
     /** One frame with the buttons held now plus any tapped since the last two frames. */
     private fun runFrame(top: IntArray, bottom: IntArray): Boolean {
         val tapped = latched.getAndSet(0)
-        // the battle shortcut: the stylus on the game's RUN for a few frames, then off
-        val tap = runTap.get()
-        if (tap > 0) {
-            NdsCore.touch(RUN_X, RUN_Y, tap > 1)
-            runTap.decrementAndGet()
-        }
+        taps.frame { x, y, down -> NdsCore.touch(x, y, down) }
         NdsCore.setKeys(keys or tapped or pressedLastFrame)
         pressedLastFrame = tapped
         return NdsCore.runFrame(top, bottom)
@@ -335,9 +331,15 @@ class NdsActivity : Activity() {
             if (down) menuKey(event.keyCode)
             return true
         }
-        // battle shortcut: R in a wild battle taps the game's RUN (its key's release is kept from the game too)
+        // battle shortcuts, wild battles only (the keys' releases are kept from the game too): R taps the game's RUN,
+        // L throws the best ball in the bag (BAG, POKé BALLS, the ball, USE)
         if (shortcuts && wildBattle && (event.keyCode == KeyEvent.KEYCODE_BUTTON_R1 || event.keyCode == KeyEvent.KEYCODE_W)) {
-            if (down) runTap.set(RUN_TAP_FRAMES + 1)
+            if (down) taps.play(NdsShortcuts.run)
+            return true
+        }
+        val bagAt = feedGame?.bag ?: 0
+        if (shortcuts && wildBattle && bagAt != 0 && (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 || event.keyCode == KeyEvent.KEYCODE_Q)) {
+            if (down && !taps.busy && NdsCore.readRam(NdsMons.RAM_BASE, shortcutRam)) NdsShortcuts.ball(shortcutRam, bagAt)?.let(taps::play)
             return true
         }
         if (event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
@@ -468,11 +470,6 @@ class NdsActivity : Activity() {
         private const val FF_FRAMES = 4
         /** Frames between RUN tab updates (twice a second). */
         private const val FEED_EVERY = 30L
-
-        /** The RUN button on Gen 4 / 5's battle touch screen (bottom middle), in DS pixels, and how long it's held. */
-        private const val RUN_X = 128
-        private const val RUN_Y = 181
-        private const val RUN_TAP_FRAMES = 4
 
         private val KEY_MAP = mapOf(
             KeyEvent.KEYCODE_BUTTON_A to NdsCore.A,

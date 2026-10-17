@@ -11,7 +11,7 @@ import java.io.File
 object NdsFeed {
 
     /** Where a game keeps what the feed reads; [flags] = its event flags, [badges] = its badge byte (0: not mapped). */
-    class Game(val pack: String, val party: Int, val zone: Int, val flags: Int = 0, val badges: Int = 0)
+    class Game(val pack: String, val party: Int, val zone: Int, val flags: Int = 0, val badges: Int = 0, val bag: Int = 0)
 
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
@@ -33,14 +33,17 @@ object NdsFeed {
     private const val B2_BADGES = 0x022266E8
     const val BADGE_FLAG_BASE = FLAG_BYTES * 8
 
+    /** Black 2's items pocket (save 0x18400; balls live there in Gen 5): the battle shortcut's L reads it. */
+    private const val B2_BAG = 0x0221D9E4
+
     /** The game a ROM is, by its header's game code and (for hacks sharing one) its file name. */
     fun gameFor(rom: File): Game? {
         val code = runCatching { rom.inputStream().use { s -> ByteArray(16).also { s.read(it) } } }.getOrNull()
             ?.copyOfRange(12, 16)?.toString(Charsets.US_ASCII) ?: return null
         val name = rom.name.lowercase()
         return when {
-            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES)
-            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES)
+            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG)
+            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG)
             else -> null
         }
     }

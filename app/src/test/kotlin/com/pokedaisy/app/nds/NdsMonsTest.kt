@@ -101,6 +101,23 @@ class NdsMonsTest {
         }
     }
 
+    @Test
+    fun bestBallFromTheBag() {
+        val ram = dump("b2_wild_menu.bin")
+        assumeTrue("no b2_wild_menu.bin", ram != null)
+        assertEquals(4, NdsShortcuts.bestBall(ram!!, 0x0221D9E4))                 // 8 Poke Balls (and an X Speed)
+        val taps = NdsShortcuts.ball(ram, 0x0221D9E4)!!
+        assertEquals(4, taps.size)                                                // BAG, POKE BALLS, the first slot, USE
+        assertEquals(64, taps[2].x)
+        assertEquals(32, taps[2].y)
+        // with Ultra Balls in the bag after the Poke Balls, they're thrown instead, from the second slot
+        val more = ram.copyOf()
+        val slot = 0x0221D9E4 - NdsMons.RAM_BASE + 4 * 2
+        more[slot] = 2; more[slot + 1] = 0; more[slot + 2] = 3; more[slot + 3] = 0
+        assertEquals(2, NdsShortcuts.bestBall(more, 0x0221D9E4))
+        assertEquals(192, NdsShortcuts.ball(more, 0x0221D9E4)!![2].x)
+    }
+
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
     private fun rom(name: String): NdsRom? {
         val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"
