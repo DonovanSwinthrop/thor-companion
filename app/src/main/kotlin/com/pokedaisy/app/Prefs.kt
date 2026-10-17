@@ -129,6 +129,10 @@ class Prefs(context: Context) {
     /** AUTO-RUN: B held for the player while walking on the field (holding it walks). */
     /** BATTLE SHORTCUTS: in a wild battle R runs away (and on DS, L throws the best ball). The DS pause menu and the
      * companion's GAMEPLAY group flip the same switch. */
+    /** DS games: INFINITE REPEL (the pause menu), per game by its ROM file name. */
+    fun infiniteRepel(rom: String): Boolean = p.getBoolean("infinite_repel_$rom", false)
+    fun setInfiniteRepel(rom: String, on: Boolean) = p.edit().putBoolean("infinite_repel_$rom", on).apply()
+
     var battleShortcuts: Boolean
         get() = p.getBoolean("battle_shortcuts", true)
         set(v) = p.edit().putBoolean("battle_shortcuts", v).apply()

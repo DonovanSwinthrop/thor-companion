@@ -118,6 +118,14 @@ class NdsMonsTest {
         assertEquals(192, NdsShortcuts.ball(more, 0x0221D9E4)!![2].x)
     }
 
+    @Test
+    fun repelCounterCountsDown() {
+        val game = NdsFeed.Game("b2", 0x0221E3EC, 0x0221EAE8, repel = 0x02226F11)
+        val dumps = listOf("b2_rep0", "b2_rep1", "b2_rep2").map { dump("$it.bin") }
+        assumeTrue("no repel dumps", dumps.all { it != null })
+        assertEquals(listOf(0, 100, 92), dumps.map { NdsFeed.repelSteps(it!!, game) })   // none, a Repel used, 8 steps on
+    }
+
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
     private fun rom(name: String): NdsRom? {
         val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"

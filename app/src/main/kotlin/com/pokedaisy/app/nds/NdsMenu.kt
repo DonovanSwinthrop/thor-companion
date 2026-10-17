@@ -29,7 +29,8 @@ enum class NdsMenuItem(val label: String) {
     FAST_FORWARD("FF"),
     HEAL_PARTY("HEAL PARTY"),
     TIME("GAME CLOCK"),
-    SHORTCUTS("BATTLE SHORTCUTS"),
+    SHORTCUTS("SHORTCUTS"),
+    REPEL("INFINITE REPEL"),
     SWAP("SWAP SCREENS"),
     CLOSE("CLOSE GAME"),
 }
@@ -40,7 +41,7 @@ enum class NdsMenuItem(val label: String) {
  * The clock row shows the DS clock's [hour] as "< 14:00 >": LEFT / RIGHT step it, A or a tap adds an hour.
  */
 @Composable
-fun NdsMenu(title: String, items: List<NdsMenuItem>, selected: Int, fastForward: Boolean, hasState: Boolean, hour: Int, shortcuts: Boolean, onPick: (NdsMenuItem) -> Unit) {
+fun NdsMenu(title: String, items: List<NdsMenuItem>, selected: Int, fastForward: Boolean, hasState: Boolean, hour: Int, shortcuts: Boolean, repel: Boolean, onPick: (NdsMenuItem) -> Unit) {
     val m = rememberGbaTextMetrics()
     Box(
         Modifier.fillMaxSize().background(Color(0xB0000000))
@@ -55,6 +56,7 @@ fun NdsMenu(title: String, items: List<NdsMenuItem>, selected: Int, fastForward:
                         val value = when {
                             item == NdsMenuItem.FAST_FORWARD -> tk(if (fastForward) "ON" else "OFF")
                             item == NdsMenuItem.SHORTCUTS -> tk(if (shortcuts) "ON" else "OFF")
+                            item == NdsMenuItem.REPEL -> tk(if (repel) "ON" else "OFF")
                             item == NdsMenuItem.TIME && hour >= 0 -> "< %02d:00 >".format(hour)
                             else -> null
                         }

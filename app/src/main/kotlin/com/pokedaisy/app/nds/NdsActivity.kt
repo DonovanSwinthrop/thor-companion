@@ -74,6 +74,9 @@ class NdsActivity : Activity() {
     private var clockHour by mutableIntStateOf(-1)
     private var shortcuts by mutableStateOf(true)
 
+    /** INFINITE REPEL: the feed tops the game's repel counter up while it's on. */
+    private var infiniteRepel by mutableStateOf(false)
+
     /** A wild battle is on (the feed's last read): R runs away while [shortcuts] is on. */
     @Volatile private var wildBattle = false
 
@@ -87,7 +90,7 @@ class NdsActivity : Activity() {
         ComposeView(this).apply {
             setContent {
                 AppTheme {
-                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, clockHour, shortcuts, ::pick)
+                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, clockHour, shortcuts, infiniteRepel, ::pick)
                 }
             }
         }
@@ -104,6 +107,7 @@ class NdsActivity : Activity() {
         bottomView = NdsScreenView(this, touch)
         feedGame = if (com.pokedaisy.app.companion.RrOverlay.available(this)) NdsFeed.gameFor(rom) else null
         shortcuts = Prefs(this).battleShortcuts
+        infiniteRepel = Prefs(this).infiniteRepel(rom.name)
         touchFrame = FrameLayout(this).apply {
             val match = ViewGroup.LayoutParams.MATCH_PARENT
             addView(bottomView, FrameLayout.LayoutParams(match, match))
@@ -255,7 +259,7 @@ class NdsActivity : Activity() {
             if (n > 0 && !ff) track.write(sound, 0, n * 2, AudioTrack.WRITE_NON_BLOCKING)
             // a fast-forward tick runs several frames: act when a multiple was crossed, not hit (it never was at FF)
             val before = frames
-            if (com.pokedaisy.app.BuildConfig.DEBUG && (before + 1) / 60 != (before - (if (ff) FF_FRAMES - 1 else 0)) / 60) debugDump()
+            if (com.pokedaisy.app.BuildConfig.DEBUG && (before + 1) / 60 != (before - (if (ff) FF_FRAMES - 1 else 0)) / 60) { debugDump(); debugPoke() }
             if ((before + 1) / FEED_EVERY != (before - (if (ff) FF_FRAMES - 1 else 0)) / FEED_EVERY) feed()
             if (++frames - lastFlush >= 600) {
                 NdsCore.flushSave()   // every ~10 s of game, between frames
@@ -282,6 +286,10 @@ class NdsActivity : Activity() {
         val game = feedGame ?: return
         if (!NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
         wildBattle = runCatching { NdsFeed.wildBattle(feedRam, game) }.getOrDefault(false)
+        // INFINITE REPEL: never let the steps run low (the game then never asks to use another)
+        if (infiniteRepel && game.repel != 0 && NdsFeed.repelSteps(feedRam, game) < REPEL_TOP / 2) {
+            NdsCore.writeRam(game.repel, byteArrayOf(REPEL_TOP.toByte()))
+        }
         runCatching { NdsFeed.state(feedRam, game) }.getOrNull()?.let { com.pokedaisy.app.companion.RrOverlay.postDecoded(it) }
     }
 
@@ -296,6 +304,22 @@ class NdsActivity : Activity() {
         } else {
             runView?.let { touchFrame.removeView(it) }
             runView = null
+        }
+    }
+
+    /** Debug builds: `files/nds-poke` lines of "address hexbytes" are written into main RAM, then the file goes (finding
+     * addresses: give the game an item, a counter, a flag, and watch what it does with it). */
+    private fun debugPoke() {
+        val req = File(filesDir, "nds-poke")
+        if (!req.exists()) return
+        val lines = runCatching { req.readLines() }.getOrDefault(emptyList())
+        req.delete()
+        for (line in lines) {
+            val parts = line.trim().split(' ', '\t').filter { it.isNotEmpty() }
+            if (parts.size != 2) continue
+            val addr = parts[0].removePrefix("0x").toLongOrNull(16)?.toInt() ?: continue
+            val bytes = parts[1].chunked(2).mapNotNull { it.toIntOrNull(16)?.toByte() }.toByteArray()
+            Log.i(TAG, "poke 0x%08x %s: %b".format(addr, parts[1], NdsCore.writeRam(addr, bytes)))
         }
     }
 
@@ -395,7 +419,11 @@ class NdsActivity : Activity() {
 
     /** The pause menu's rows: HEAL PARTY and BATTLE SHORTCUTS only where the game's party is mapped (a pack exists). */
     private fun menuItems() = NdsMenuItem.entries.filter {
-        (it != NdsMenuItem.HEAL_PARTY && it != NdsMenuItem.SHORTCUTS) || feedGame != null
+        when (it) {
+            NdsMenuItem.HEAL_PARTY, NdsMenuItem.SHORTCUTS -> feedGame != null
+            NdsMenuItem.REPEL -> (feedGame?.repel ?: 0) != 0
+            else -> true
+        }
     }
 
     private fun menuKey(code: Int) {
@@ -434,6 +462,10 @@ class NdsActivity : Activity() {
                 setMenu(false)
             }
             NdsMenuItem.TIME -> stepClock(1)
+            NdsMenuItem.REPEL -> {
+                infiniteRepel = !infiniteRepel
+                Prefs(this).setInfiniteRepel(rom.name, infiniteRepel)
+            }
             NdsMenuItem.SHORTCUTS -> {
                 shortcuts = !shortcuts
                 Prefs(this).battleShortcuts = shortcuts
@@ -470,6 +502,9 @@ class NdsActivity : Activity() {
         private const val FF_FRAMES = 4
         /** Frames between RUN tab updates (twice a second). */
         private const val FEED_EVERY = 30L
+
+        /** INFINITE REPEL's top-up: a Max Repel's steps, rewritten once half are walked. */
+        private const val REPEL_TOP = 250
 
         private val KEY_MAP = mapOf(
             KeyEvent.KEYCODE_BUTTON_A to NdsCore.A,

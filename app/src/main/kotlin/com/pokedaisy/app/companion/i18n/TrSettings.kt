@@ -56,6 +56,8 @@ internal val trSettings: Map<String, Tr> = mapOf(
     "Behind the companion's tabs" to Tr(ja = "コンパニオンの タブの うしろ", fr = "Derrière les onglets du compagnon", de = "Hinter den Tabs des Begleiters", it = "Dietro le schede del compagno", es = "Detrás de las pestañas del compañero", br = "Atrás das abas do companheiro", pt = "Atrás dos separadores do companheiro"),
     "RUN TAB" to Tr(ja = "RUN", fr = "RUN", de = "RUN", it = "RUN", es = "RUN", br = "RUN", pt = "RUN"),
     "HEAL PARTY" to Tr(ja = "パーティを かいふく", fr = "SOIGNER L'ÉQUIPE", de = "TEAM HEILEN", it = "CURA LA SQUADRA", es = "CURAR EQUIPO", br = "CURAR EQUIPE", pt = "CURAR EQUIPA"),
+    "SHORTCUTS" to Tr(ja = "ショートカット", fr = "RACCOURCIS", de = "KÜRZEL", it = "SCORCIATOIE", es = "ATAJOS", br = "ATALHOS", pt = "ATALHOS"),
+    "INFINITE REPEL" to Tr(ja = "むげん スプレー", fr = "REPOUSSE INFINI", de = "SCHUTZ ENDLOS", it = "REPELLENTE INFINITO", es = "REPELENTE INFINITO", br = "REPELENTE INFINITO", pt = "REPELENTE INFINITO"),
     "BATTLE SHORTCUTS" to Tr(ja = "バトルの ショートカット", fr = "RACCOURCIS COMBAT", de = "KAMPF-KÜRZEL", it = "SCORCIATOIE LOTTA", es = "ATAJOS DE COMBATE", br = "ATALHOS DE BATALHA", pt = "ATALHOS DE BATALHA"),
     "GAME CLOCK" to Tr(ja = "ゲームの とけい", fr = "HORLOGE DU JEU", de = "SPIELUHR", it = "OROLOGIO DI GIOCO", es = "RELOJ DEL JUEGO", br = "RELÓGIO DO JOGO", pt = "RELÓGIO DO JOGO"),
     "LICENSES" to Tr(ja = "ライセンス", fr = "LICENCES", de = "LIZENZEN", it = "LICENZE", es = "LICENCIAS", br = "LICENÇAS", pt = "LICENÇAS"),
