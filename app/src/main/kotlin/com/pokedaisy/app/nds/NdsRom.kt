@@ -73,6 +73,62 @@ class NdsRom(private val file: File) {
     }
 
     /**
+     * A Gen 5 (I*) text file from `a/0/0/2`: its lines, decrypted (each line XOR'd with a key that rolls back from its
+     * last character; 0xF100 starts a 9-bit packed line). Null outside Gen 5.
+     */
+    fun gen5Text(index: Int): List<String>? {
+        if (!code.startsWith("IR")) return null
+        val data = narc(file("a/0/0/2") ?: return null).getOrNull(index) ?: return null
+        val lines = u16(data, 2)
+        val block = u32(data, 12)
+        return List(lines) { i ->
+            val off = u32(data, block + 4 + 8 * i)
+            val len = u16(data, block + 4 + 8 * i + 4)
+            val enc = IntArray(len) { u16(data, block + off + 2 * it) }
+            var key = enc.last() xor 0xFFFF
+            val dec = IntArray(len)
+            for (j in len - 1 downTo 0) {
+                dec[j] = enc[j] xor key
+                key = ((key ushr 3) or (key shl 13)) and 0xFFFF
+            }
+            var chars = dec.toList()
+            if (chars.firstOrNull() == 0xF100) {
+                val out = ArrayList<Int>()
+                var bits = 0L
+                var n = 0
+                for (w in chars.drop(1)) {
+                    bits = bits or (w.toLong() shl n)
+                    n += 16
+                    while (n >= 9) { out += (bits and 0x1FF).toInt(); bits = bits ushr 9; n -= 9 }
+                }
+                chars = out.map { if (it == 0x1FF) 0xFFFF else it }
+            }
+            buildString {
+                for (c in chars) {
+                    if (c == 0xFFFF) break
+                    when (c) {
+                        0xF000 -> {}
+                        0x246D -> append('♂')
+                        0x246E -> append('♀')
+                        0xFFFE -> append(' ')
+                        else -> if (c < 0xD800) append(c.toChar())
+                    }
+                }
+            }
+        }
+    }
+
+    /** Gen 5's species names (text 90) and nature names (text 27), in the game's own language. */
+    fun gen5SpeciesNames(): List<String>? = gen5Text(90)
+    fun gen5NatureNames(): List<String>? = gen5Text(27)
+
+    /** Each species' base stats (hp, atk, def, spe, spa, spd) from Gen 5's personal data `a/0/1/6`. */
+    fun gen5BaseStats(): List<IntArray>? {
+        if (!code.startsWith("IR")) return null
+        return narc(file("a/0/1/6") ?: return null).map { p -> IntArray(6) { if (p.size > it) p[it].toInt() and 0xFF else 0 } }
+    }
+
+    /**
      * Each move's base PP by move id, from the game's move table: Gen 5 (I*) `a/0/2/1`, PP at +5; Platinum
      * `poketool/waza/pl_waza_tbl.narc` and HeartGold / SoulSilver `a/0/1/1`, PP at +6. Null for a game it doesn't know.
      */

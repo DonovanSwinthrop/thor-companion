@@ -177,6 +177,60 @@ object NdsMons {
         return healed
     }
 
+    /**
+     * The stats (hp, atk, def, spe, spa, spd) the games compute: ((2B + IV + EV/4) L / 100) + 5, times 1.1 / 0.9 for the
+     * stat [nature] raises / lowers (natures go atk, def, spe, spa, spd: raised = nature / 5, lowered = nature % 5);
+     * HP is (2B + IV + EV/4) L / 100 + L + 10.
+     */
+    fun stats(base: IntArray, ivs: IntArray, evs: IntArray, level: Int, nature: Int): IntArray = IntArray(6) { s ->
+        val core = (2 * base[s] + ivs[s] + evs[s] / 4) * level / 100
+        if (s == 0) core + level + 10
+        else {
+            val v = core + 5
+            val up = nature / 5 + 1
+            val down = nature % 5 + 1
+            when {
+                up == down -> v
+                s == up -> v * 110 / 100
+                s == down -> v * 90 / 100
+                else -> v
+            }
+        }
+    }
+
+    /**
+     * Gen 5: gives party slot [slot] at [addr] the nature [nature] (0-24), the way a nature-changing item would: the
+     * nature byte in block B (the checksummed body: decrypted, changed, summed, encrypted again) and the battle stats
+     * after it computed again from [base] (the species' base stats), its IVs, EVs and level. HP and max HP are kept.
+     * False if the slot holds no valid Pokémon.
+     */
+    fun setNature(ram: ByteArray, addr: Int, slot: Int, nature: Int, base: IntArray, write: (Int, ByteArray) -> Boolean): Boolean {
+        val mon = addr - RAM_BASE + slot * PARTY_MON_BYTES
+        val m = decode(ram, mon) ?: return false
+        val pid = u32(ram, mon)
+        val body = crypt(ram, mon + 8, 0x80, u16(ram, mon + 6).toLong())
+        val b = ORDERS[(((pid ushr 13) and 31) % 24).toInt()].indexOf('B') * 0x20
+        body[b + 0x19] = nature.toByte()
+        var sum = 0
+        for (w in 0 until 0x80 step 2) sum += u16(body, w)
+        val chk = sum and 0xFFFF
+        val out = ByteArray(2 + 0x80)
+        out[0] = chk.toByte()
+        out[1] = (chk ushr 8).toByte()
+        System.arraycopy(crypt(body, 0, 0x80, chk.toLong()), 0, out, 2, 0x80)
+        if (!write(addr + slot * PARTY_MON_BYTES + 6, out)) return false
+        val st = crypt(ram, mon + 0x88, 0x14, pid)
+        val level = st[4].toInt() and 0xFF
+        val now = stats(base, m.ivs, m.evs, level, nature)
+        for (s in 1 until 6) {   // atk..spd at +0x0A..; hp / max hp (+6 / +8) stay
+            st[0x08 + 2 * s] = now[s].toByte()
+            st[0x09 + 2 * s] = (now[s] ushr 8).toByte()
+        }
+        val scratch = ByteArray(0x88 + 0x14)
+        System.arraycopy(st, 0, scratch, 0x88, 0x14)
+        return write(addr + slot * PARTY_MON_BYTES + 0x88, crypt(scratch, 0x88, 0x14, pid))
+    }
+
     /** The party at [addr] (its count is the u32 before it): up to 6 Pokémon. */
     fun party(ram: ByteArray, addr: Int, gen4: Boolean = false): List<Mon> {
         val off = addr - RAM_BASE

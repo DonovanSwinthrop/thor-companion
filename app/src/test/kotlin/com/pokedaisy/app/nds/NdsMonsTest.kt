@@ -143,6 +143,33 @@ class NdsMonsTest {
         assertEquals(86, zone(outside))                                        // Hearthome City
     }
 
+    @Test
+    fun statsFormulaMatchesTheGameAndNatureChangeKeepsTheMonValid() {
+        val b2 = rom("Pokémon Black Version 2.nds")
+        val ram = dump("b2_field2.bin")
+        assumeTrue("no Black 2 ROM / dump", b2 != null && ram != null)
+        val base = b2!!.gen5BaseStats()!!
+        val party = NdsMons.party(ram!!, 0x0221E3EC)
+        assertEquals(3, party.size)
+        for (m in party) {   // the games' own stats, computed again from base stats, IVs, EVs, level and nature
+            assertEquals(m.stats!!.toList(), NdsMons.stats(base[m.species], m.ivs, m.evs, m.level!!, m.nature).toList())
+        }
+        assertEquals("Hardy", b2.gen5NatureNames()!![0])
+        assertEquals("Tepig", b2.gen5SpeciesNames()!![498])
+        val copy = ram.copyOf()
+        val tepig = party[0]
+        val target = if (tepig.nature == 3) 13 else 3                            // Adamant (+atk -spa) or Jolly
+        val write = { addr: Int, bytes: ByteArray -> System.arraycopy(bytes, 0, copy, addr - NdsMons.RAM_BASE, bytes.size); true }
+        assertEquals(true, NdsMons.setNature(copy, 0x0221E3EC, 0, target, base[498], write))
+        val after = NdsMons.party(copy, 0x0221E3EC)
+        assertEquals(3, after.size)                                             // still decodes: checksum fixed
+        assertEquals(target, after[0].nature)
+        assertEquals(tepig.ivs.toList(), after[0].ivs.toList())
+        assertEquals(tepig.hp, after[0].hp)
+        assertEquals(NdsMons.stats(base[498], tepig.ivs, tepig.evs, tepig.level!!, target).toList(), after[0].stats!!.toList())
+        assertEquals(party[1].nature, after[1].nature)                          // the others untouched
+    }
+
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
     private fun rom(name: String): NdsRom? {
         val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"

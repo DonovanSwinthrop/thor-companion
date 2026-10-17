@@ -74,6 +74,43 @@ class NdsActivity : Activity() {
     private var clockHour by mutableIntStateOf(-1)
     private var shortcuts by mutableStateOf(true)
 
+    /** A list opened from the pause menu (NATURE's party, then its natures): [back] is the list it was opened from. */
+    private class Picker(val title: String, val rows: List<Pair<String, String?>>, val back: Picker?, val choose: (Int) -> Unit) {
+        var cursor by mutableIntStateOf(0)
+    }
+
+    private var picker by mutableStateOf<Picker?>(null)
+
+    private fun pickerChoose(i: Int) { picker?.choose?.invoke(i) }
+
+    /** NATURE's game data, read from the ROM once: species and nature names in the game's language, base stats. */
+    private val gen5Data by lazy {
+        runCatching { NdsRom(rom).let { r -> Triple(r.gen5SpeciesNames(), r.gen5NatureNames(), r.gen5BaseStats()) } }.getOrNull()
+    }
+
+    /** NATURE: the party (name, level, nature now); a pick opens the natures, a nature changes it and comes back. */
+    private fun openNatureParty(cursor: Int = 0) {
+        val game = feedGame ?: return
+        val (names, natures, base) = gen5Data ?: return
+        if (names == null || natures == null || base == null || !NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
+        val addr = NdsFeed.partyAddr(feedRam, game)
+        val party = NdsMons.party(feedRam, addr)
+        if (party.isEmpty()) return
+        val rows = party.map { mon ->
+            (names.getOrNull(mon.species) ?: "#${mon.species}") + "  Lv${mon.level ?: 0}" to natures.getOrNull(mon.nature)
+        }
+        picker = Picker(com.pokedaisy.app.companion.i18n.tk("NATURE"), rows, null) { slot ->
+            val mon = party[slot]
+            val parent = picker
+            picker = Picker(rows[slot].first, natures.take(25).mapIndexed { n, name -> name to (if (n == mon.nature) "<" else null) }, parent) { n ->
+                if (NdsMons.setNature(feedRam, addr, slot, n, base.getOrElse(mon.species) { IntArray(6) }, NdsCore::writeRam)) {
+                    Log.i(TAG, "nature: slot $slot ${mon.species} -> $n")
+                }
+                openNatureParty(slot)
+            }.also { it.cursor = mon.nature }
+        }.also { it.cursor = cursor }
+    }
+
     /** INFINITE REPEL: the feed tops the game's repel counter up while it's on. */
     private var infiniteRepel by mutableStateOf(false)
 
@@ -90,7 +127,9 @@ class NdsActivity : Activity() {
         ComposeView(this).apply {
             setContent {
                 AppTheme {
-                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, clockHour, shortcuts, infiniteRepel, ::pick)
+                    val p = picker
+                    if (menuOpen && p != null) NdsPicker(p.title, p.rows, p.cursor, { pickerChoose(it) }, { picker = p.back })
+                    else if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, clockHour, shortcuts, infiniteRepel, ::pick)
                 }
             }
         }
@@ -401,6 +440,7 @@ class NdsActivity : Activity() {
     private fun setMenu(open: Boolean) {
         menuOpen = open
         paused = open
+        picker = null
         if (open) {
             menuCursor = 0
             keys = 0
@@ -424,11 +464,22 @@ class NdsActivity : Activity() {
             // the shortcuts need the battle and the bag mapped (Gen 5 so far)
             NdsMenuItem.SHORTCUTS -> (feedGame?.bag ?: 0) != 0
             NdsMenuItem.REPEL -> (feedGame?.repel ?: 0) != 0
+            // Gen 5 keeps the nature in its own byte; Gen 4's is the PID (not yet)
+            NdsMenuItem.NATURE -> feedGame != null && feedGame?.gen4 == false
             else -> true
         }
     }
 
     private fun menuKey(code: Int) {
+        picker?.let { p ->
+            when (code) {
+                KeyEvent.KEYCODE_DPAD_UP -> p.cursor = (p.cursor + p.rows.size - 1) % p.rows.size
+                KeyEvent.KEYCODE_DPAD_DOWN -> p.cursor = (p.cursor + 1) % p.rows.size
+                KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_Z, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> p.choose(p.cursor)
+                KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_X -> picker = p.back
+            }
+            return
+        }
         val items = menuItems()
         when (code) {
             KeyEvent.KEYCODE_DPAD_UP -> menuCursor = (menuCursor + items.size - 1) % items.size
@@ -464,6 +515,7 @@ class NdsActivity : Activity() {
                 setMenu(false)
             }
             NdsMenuItem.TIME -> stepClock(1)
+            NdsMenuItem.NATURE -> openNatureParty()
             NdsMenuItem.REPEL -> {
                 infiniteRepel = !infiniteRepel
                 Prefs(this).setInfiniteRepel(rom.name, infiniteRepel)
