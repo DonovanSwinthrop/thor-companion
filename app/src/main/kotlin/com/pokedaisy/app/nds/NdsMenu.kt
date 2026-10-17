@@ -67,6 +67,6 @@ fun NdsMenu(title: String, selected: Int, fastForward: Boolean, hasState: Boolea
 fun NdsRunButton(open: Boolean, onClick: () -> Unit) {
     val m = rememberGbaTextMetrics()
     Box(Modifier.padding(m.u * 2)) {
-        com.pokedaisy.app.companion.ui.OptionButton(tk(if (open) "BACK" else "RUN"), m, onClick, emphasis = !open)
+        com.pokedaisy.app.companion.ui.OptionButton(tk(if (open) "BACK" else "RUN TAB"), m, onClick, emphasis = !open)
     }
 }

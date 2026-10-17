@@ -24,6 +24,7 @@ object NdsFeed {
         val name = rom.name.lowercase()
         return when {
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE)
+            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE)
             else -> null
         }
     }

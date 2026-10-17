@@ -96,7 +96,8 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
       beating a single trainer, and one after a gym
 - [ ] Packs for plain Black 2, Platinum / Renegade Platinum, HGSS / Sterling Silver (Gen 4 readers: party address,
       battle blocks, zone), Black / Blaze Black
-- [ ] "RUN" is translated as the battle command (flee) in other languages: give the tab its own label key
+- [x] The DS RUN button no longer translates as "flee" (own label key RUN TAB)
+- [x] Plain Black 2 pack (packs/gen5, same builder; caps from its own leaders)
 - [ ] Cheat menu for DS games: change time (the DS clock), heal party (PokeVial), infinite repel, auto-run
 - [ ] GBA extras like Radical Red's: heal party anywhere, change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
