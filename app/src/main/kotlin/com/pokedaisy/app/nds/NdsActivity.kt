@@ -97,7 +97,7 @@ class NdsActivity : Activity() {
         val party = NdsMons.party(feedRam, addr, game.gen4)
         if (party.isEmpty()) return
         val rows = party.map { mon ->
-            (names.getOrNull(mon.species) ?: "#${mon.species}") + "  Lv${mon.level ?: 0}" to natures.getOrNull(mon.nature)
+            (names.getOrNull(mon.species) ?: "#${mon.species}") + " Lv${mon.level ?: 0}" to natures.getOrNull(mon.nature)
         }
         picker = Picker(com.pokedaisy.app.companion.i18n.tk("NATURE"), rows, null) { slot ->
             val mon = party[slot]

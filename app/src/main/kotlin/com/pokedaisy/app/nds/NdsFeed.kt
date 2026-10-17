@@ -42,6 +42,16 @@ object NdsFeed {
     private const val PT_PARTY = 0xB4
     private const val PT_ZONE = 0x1294
 
+    /**
+     * HeartGold / SoulSilver (US): the save data's address is at 0x02111880 (the same block Action Replay codes reach
+     * from 0x0211186C + 0xCFE0); the party is at +0xA8 (count +0xA4) and the current map header number at +0x1244.
+     * Found on a finished SoulSilver save: its six Pokémon at +0xA8, and the map 56 -> 482 walking into Fuchsia
+     * City's Pokémon Center (both Fuchsia City in the ROM's header table).
+     */
+    private const val HGSS_BASE = 0x02111880
+    private const val HGSS_PARTY = 0xA8
+    private const val HGSS_ZONE = 0x1244
+
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
     private const val B2_ZONE = 0x0221EAE8
@@ -81,6 +91,7 @@ object NdsFeed {
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true)
             code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true)
+            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, base = HGSS_BASE, gen4 = true)
             else -> null
         }
     }

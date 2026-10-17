@@ -144,6 +144,35 @@ class NdsMonsTest {
     }
 
     @Test
+    fun soulSilverPartyMapAndNature() {
+        // SoulSilver (US) on a finished save: the save block's address at 0x02111880, party +0xA8, map +0x1244
+        val ss = rom("Pokémon SoulSilver Version.nds")
+        val field = dump("ss_field1.bin")
+        val pc = dump("ss_pc1.bin")
+        assumeTrue("no SoulSilver ROM / dumps", ss != null && field != null && pc != null)
+        val game = NdsFeed.Game("hgss", 0xA8, 0x1244, base = 0x02111880, gen4 = true)
+        val addr = NdsFeed.partyAddr(field!!, game)
+        val party = NdsMons.party(field, addr, gen4 = true)
+        assertEquals(listOf(157, 196, 18, 62, 162, 20), party.map { it.species })
+        assertEquals(List(6) { 100 }, party.map { it.level })
+        fun zone(ram: ByteArray) = NdsFeed.zoneAddr(ram, game).let { a -> (ram[a - 0x02000000].toInt() and 0xFF) or ((ram[a - 0x02000000 + 1].toInt() and 0xFF) shl 8) }
+        assertEquals(56, zone(field))                                          // Fuchsia City
+        assertEquals(482, zone(pc!!))                                          // its Pokemon Center
+        val base = ss!!.baseStats()!!
+        assertEquals("Typhlosion", ss.speciesNames()!![157])
+        assertEquals("Hardy", ss.natureNames()!![0])
+        for (m in party) assertEquals(m.stats!!.toList(), NdsMons.stats(base[m.species], m.ivs, m.evs, m.level!!, m.nature).toList())
+        val copy = field.copyOf()
+        val target = (party[0].nature + 3) % 25
+        val write = { a: Int, bytes: ByteArray -> System.arraycopy(bytes, 0, copy, a - NdsMons.RAM_BASE, bytes.size); true }
+        assertEquals(true, NdsMons.setNature(copy, addr, 0, target, base[157], gen4 = true, write = write))
+        val after = NdsMons.party(copy, addr, gen4 = true)
+        assertEquals(6, after.size)
+        assertEquals(target, after[0].nature)
+        assertEquals(party[1].pid, after[1].pid)
+    }
+
+    @Test
     fun statsFormulaMatchesTheGameAndNatureChangeKeepsTheMonValid() {
         val b2 = rom("Pokémon Black Version 2.nds")
         val ram = dump("b2_field2.bin")
