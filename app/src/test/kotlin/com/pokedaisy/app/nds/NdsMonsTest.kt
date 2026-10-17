@@ -77,6 +77,20 @@ class NdsMonsTest {
         assertEquals(false, NdsFeed.trainerBeaten(a2, game, 156))
     }
 
+    @Test
+    fun gymTrainerFlagAndCherensBadge() {
+        val game = NdsFeed.Game("b2", 0x0221E3EC, 0x0221EAE8, 0x02225846, 0x022266E8)
+        val dumps = listOf("b2_gym1_before", "b2_gym1_after", "b2_cheren_before", "b2_cheren_after").map { dump("$it.bin") }
+        assumeTrue("no gym dumps", dumps.all { it != null })
+        val (gb, ga, cb, ca) = dumps.map { it!! }
+        // a gym trainer (Youngster Pedro, 171) uses the trainer rule; Cheren (156) doesn't: his win is the badge
+        assertEquals(false, NdsFeed.trainerBeaten(gb, game, 171))
+        assertEquals(true, NdsFeed.trainerBeaten(ga, game, 171))
+        assertEquals(0, NdsFeed.badges(cb, game))
+        assertEquals(1, NdsFeed.badges(ca, game))
+        assertEquals(false, NdsFeed.trainerBeaten(ca, game, 156))
+    }
+
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
     private fun rom(name: String): NdsRom? {
         val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"

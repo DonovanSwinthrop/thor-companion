@@ -10,8 +10,8 @@ import java.io.File
  */
 object NdsFeed {
 
-    /** Where a game keeps what the feed reads; [flags] = its event flags (0: not mapped). */
-    class Game(val pack: String, val party: Int, val zone: Int, val flags: Int = 0)
+    /** Where a game keeps what the feed reads; [flags] = its event flags, [badges] = its badge byte (0: not mapped). */
+    class Game(val pack: String, val party: Int, val zone: Int, val flags: Int = 0, val badges: Int = 0)
 
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
@@ -25,14 +25,22 @@ object NdsFeed {
     private const val B2_FLAGS = 0x02225846
     private const val FLAG_BYTES = 0x180
 
+    /**
+     * Black 2's badges, a bit each (save 0x21104). Gym leaders don't set their trainer flag: Cheren's win set no
+     * 1488 + 156, while this byte went 0 -> 1. The feed appends it after the event flags, so badge n is flag
+     * [BADGE_FLAG_BASE] + n for the packs' doneFlags.
+     */
+    private const val B2_BADGES = 0x022266E8
+    const val BADGE_FLAG_BASE = FLAG_BYTES * 8
+
     /** The game a ROM is, by its header's game code and (for hacks sharing one) its file name. */
     fun gameFor(rom: File): Game? {
         val code = runCatching { rom.inputStream().use { s -> ByteArray(16).also { s.read(it) } } }.getOrNull()
             ?.copyOfRange(12, 16)?.toString(Charsets.US_ASCII) ?: return null
         val name = rom.name.lowercase()
         return when {
-            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS)
-            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS)
+            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES)
+            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES)
             else -> null
         }
     }
@@ -76,6 +84,10 @@ object NdsFeed {
         return (ram[game.flags - NdsMons.RAM_BASE + (f shr 3)].toInt() shr (f and 7)) and 1 == 1
     }
 
+    /** [game]'s badges as a bit field (0 where they aren't mapped). */
+    fun badges(ram: ByteArray, game: Game): Int =
+        if (game.badges == 0) 0 else ram[game.badges - NdsMons.RAM_BASE].toInt() and 0xFF
+
     private fun hex(ram: ByteArray, off: Int, len: Int) = buildString(len * 2) {
         for (i in off until off + len) append("%02x".format(ram[i].toInt() and 0xFF))
     }
@@ -104,7 +116,8 @@ object NdsFeed {
             .put("enemyDec", JSONArray().apply { if (trainer) sides.foe.forEach { b -> b.mon?.let { put(mon(it, b.hp, b.maxHp, b.level, b.ability)) } } })
             .put("battlersDec", bat)
             // unmapped flags: nothing counts as beaten, so Next starts at the first fight
-            .put("flags", if (game.flags != 0) hex(ram, game.flags - NdsMons.RAM_BASE, FLAG_BYTES) else "00".repeat(FLAG_BYTES))
+            .put("flags", (if (game.flags != 0) hex(ram, game.flags - NdsMons.RAM_BASE, FLAG_BYTES) else "00".repeat(FLAG_BYTES)) +
+                (if (game.badges != 0) hex(ram, game.badges - NdsMons.RAM_BASE, 1) else "00"))
             .put("trainerA", 0).put("trainerB", 0).put("mode", 0).put("outcome", 0)
     }
 }
