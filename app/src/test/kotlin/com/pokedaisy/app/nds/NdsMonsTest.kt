@@ -91,6 +91,16 @@ class NdsMonsTest {
         assertEquals(false, NdsFeed.trainerBeaten(ca, game, 156))
     }
 
+    @Test
+    fun wildBattleOnlyInAWildBattle() {
+        val game = NdsFeed.Game("b2", 0x0221E3EC, 0x0221EAE8, 0x02225846, 0x022266E8)
+        for ((name, wild) in listOf("b2_wild_menu" to true, "b2_tr1_before" to false, "b2_tr1_after" to false)) {
+            val ram = dump("$name.bin")
+            assumeTrue("no $name", ram != null)
+            assertEquals(name, wild, NdsFeed.wildBattle(ram!!, game))
+        }
+    }
+
     /** A retail ROM from [romDir] (`-DndsRoms=<dir>`, else the user's ROM folder), or null. */
     private fun rom(name: String): NdsRom? {
         val dir = System.getProperty("ndsRoms") ?: "E:/Thor_AYN_Roms/DS"

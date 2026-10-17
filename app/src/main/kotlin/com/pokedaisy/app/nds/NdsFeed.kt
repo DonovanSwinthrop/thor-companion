@@ -84,6 +84,15 @@ object NdsFeed {
         return (ram[game.flags - NdsMons.RAM_BASE + (f shr 3)].toInt() shr (f and 7)) and 1 == 1
     }
 
+    /** A wild battle is on in [ram]: battlers on the foe's side whose Pokémon carry the player's ID (wild ones do). */
+    fun wildBattle(ram: ByteArray, game: Game): Boolean {
+        val party = NdsMons.party(ram, game.party)
+        if (party.isEmpty()) return false
+        val sides = NdsMons.sides(ram, NdsMons.battlers(ram), party.map { it.pid }.toSet())
+        val tid = party[0].otId
+        return sides.foe.isNotEmpty() && sides.foe.none { b -> b.mon != null && b.mon.otId != tid }
+    }
+
     /** [game]'s badges as a bit field (0 where they aren't mapped). */
     fun badges(ram: ByteArray, game: Game): Int =
         if (game.badges == 0) 0 else ram[game.badges - NdsMons.RAM_BASE].toInt() and 0xFF

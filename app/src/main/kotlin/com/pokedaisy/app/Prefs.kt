@@ -127,6 +127,11 @@ class Prefs(context: Context) {
         set(v) = p.edit().putFloat("scene_speed_surf", v).apply()
 
     /** AUTO-RUN: B held for the player while walking on the field (holding it walks). */
+    /** DS games: in a wild battle R runs away (the pause menu's BATTLE SHORTCUTS). */
+    var ndsBattleShortcuts: Boolean
+        get() = p.getBoolean("nds_battle_shortcuts", true)
+        set(v) = p.edit().putBoolean("nds_battle_shortcuts", v).apply()
+
     var autoRun: Boolean
         get() = p.getBoolean("auto_run", false)
         set(v) = p.edit().putBoolean("auto_run", v).apply()

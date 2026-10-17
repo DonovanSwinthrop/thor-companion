@@ -72,6 +72,13 @@ class NdsActivity : Activity() {
     private var fastForward by mutableStateOf(false)
     private var hasState by mutableStateOf(false)
     private var clockHour by mutableIntStateOf(-1)
+    private var shortcuts by mutableStateOf(true)
+
+    /** A wild battle is on (the feed's last read): R runs away while [shortcuts] is on. */
+    @Volatile private var wildBattle = false
+
+    /** Frames left to hold the stylus on the game's RUN (the battle shortcut), then let go. */
+    private val runTap = java.util.concurrent.atomic.AtomicInteger(0)
     @Volatile private var paused = false
     @Volatile private var ffHeld = false
     private val stateFile by lazy { File(File(filesDir, "nds-states").apply { mkdirs() }, rom.nameWithoutExtension + ".state") }
@@ -79,7 +86,7 @@ class NdsActivity : Activity() {
         ComposeView(this).apply {
             setContent {
                 AppTheme {
-                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, clockHour, ::pick)
+                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, clockHour, shortcuts, ::pick)
                 }
             }
         }
@@ -95,6 +102,7 @@ class NdsActivity : Activity() {
         topView = NdsScreenView(this)
         bottomView = NdsScreenView(this, touch)
         feedGame = if (com.pokedaisy.app.companion.RrOverlay.available(this)) NdsFeed.gameFor(rom) else null
+        shortcuts = Prefs(this).ndsBattleShortcuts
         touchFrame = FrameLayout(this).apply {
             val match = ViewGroup.LayoutParams.MATCH_PARENT
             addView(bottomView, FrameLayout.LayoutParams(match, match))
@@ -244,8 +252,10 @@ class NdsActivity : Activity() {
             bottomView.show(bottom)
             val n = NdsCore.readAudio(sound)
             if (n > 0 && !ff) track.write(sound, 0, n * 2, AudioTrack.WRITE_NON_BLOCKING)
-            if (com.pokedaisy.app.BuildConfig.DEBUG && frames % 60 == 0L) debugDump()
-            if (frames % FEED_EVERY == 0L) feed()
+            // a fast-forward tick runs several frames: act when a multiple was crossed, not hit (it never was at FF)
+            val before = frames
+            if (com.pokedaisy.app.BuildConfig.DEBUG && (before + 1) / 60 != (before - (if (ff) FF_FRAMES - 1 else 0)) / 60) debugDump()
+            if ((before + 1) / FEED_EVERY != (before - (if (ff) FF_FRAMES - 1 else 0)) / FEED_EVERY) feed()
             if (++frames - lastFlush >= 600) {
                 NdsCore.flushSave()   // every ~10 s of game, between frames
                 val now = System.nanoTime()
@@ -270,6 +280,7 @@ class NdsActivity : Activity() {
     private fun feed() {
         val game = feedGame ?: return
         if (!NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
+        wildBattle = runCatching { NdsFeed.wildBattle(feedRam, game) }.getOrDefault(false)
         runCatching { NdsFeed.state(feedRam, game) }.getOrNull()?.let { com.pokedaisy.app.companion.RrOverlay.postDecoded(it) }
     }
 
@@ -302,6 +313,12 @@ class NdsActivity : Activity() {
     /** One frame with the buttons held now plus any tapped since the last two frames. */
     private fun runFrame(top: IntArray, bottom: IntArray): Boolean {
         val tapped = latched.getAndSet(0)
+        // the battle shortcut: the stylus on the game's RUN for a few frames, then off
+        val tap = runTap.get()
+        if (tap > 0) {
+            NdsCore.touch(RUN_X, RUN_Y, tap > 1)
+            runTap.decrementAndGet()
+        }
         NdsCore.setKeys(keys or tapped or pressedLastFrame)
         pressedLastFrame = tapped
         return NdsCore.runFrame(top, bottom)
@@ -316,6 +333,11 @@ class NdsActivity : Activity() {
         }
         if (menuOpen) {
             if (down) menuKey(event.keyCode)
+            return true
+        }
+        // battle shortcut: R in a wild battle taps the game's RUN (its key's release is kept from the game too)
+        if (shortcuts && wildBattle && (event.keyCode == KeyEvent.KEYCODE_BUTTON_R1 || event.keyCode == KeyEvent.KEYCODE_W)) {
+            if (down) runTap.set(RUN_TAP_FRAMES + 1)
             return true
         }
         if (event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
@@ -369,8 +391,10 @@ class NdsActivity : Activity() {
         clockHour = NdsCore.clockHour()
     }
 
-    /** The pause menu's rows: HEAL PARTY only where the game's party is mapped (a pack exists). */
-    private fun menuItems() = NdsMenuItem.entries.filter { it != NdsMenuItem.HEAL_PARTY || feedGame != null }
+    /** The pause menu's rows: HEAL PARTY and BATTLE SHORTCUTS only where the game's party is mapped (a pack exists). */
+    private fun menuItems() = NdsMenuItem.entries.filter {
+        (it != NdsMenuItem.HEAL_PARTY && it != NdsMenuItem.SHORTCUTS) || feedGame != null
+    }
 
     private fun menuKey(code: Int) {
         val items = menuItems()
@@ -408,6 +432,10 @@ class NdsActivity : Activity() {
                 setMenu(false)
             }
             NdsMenuItem.TIME -> stepClock(1)
+            NdsMenuItem.SHORTCUTS -> {
+                shortcuts = !shortcuts
+                Prefs(this).ndsBattleShortcuts = shortcuts
+            }
             NdsMenuItem.SWAP -> {
                 setMenu(false)
                 swap()
@@ -440,6 +468,11 @@ class NdsActivity : Activity() {
         private const val FF_FRAMES = 4
         /** Frames between RUN tab updates (twice a second). */
         private const val FEED_EVERY = 30L
+
+        /** The RUN button on Gen 4 / 5's battle touch screen (bottom middle), in DS pixels, and how long it's held. */
+        private const val RUN_X = 128
+        private const val RUN_Y = 181
+        private const val RUN_TAP_FRAMES = 4
 
         private val KEY_MAP = mapOf(
             KeyEvent.KEYCODE_BUTTON_A to NdsCore.A,
