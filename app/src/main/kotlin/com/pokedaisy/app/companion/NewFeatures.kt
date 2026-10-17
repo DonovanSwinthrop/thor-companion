@@ -37,8 +37,11 @@ object NewFeatures {
     /** SETTINGS > BACKGROUND: a colour behind the companion's tabs instead of the game's art. */
     const val COMPANION_BACKGROUND = "companion_background"
 
+    /** SETTINGS > QUICK MENU > HEAL PARTY: the whole party healed from the QUICK MENU (companion.data.PartyHeal). */
+    const val QUICK_HEAL = "quick_heal"
+
     /** Every feature that gets the tag. */
-    val ALL = listOf(HUD, BATTLE_BUTTONS, GAME_HOTKEYS, COMPANION_WINDOW, HUD_PC, QUICK_MENU, HUD_REPEL, SINGLE_SCREEN, COMPANION_BACKGROUND)
+    val ALL = listOf(HUD, BATTLE_BUTTONS, GAME_HOTKEYS, COMPANION_WINDOW, HUD_PC, QUICK_MENU, HUD_REPEL, SINGLE_SCREEN, COMPANION_BACKGROUND, QUICK_HEAL)
 
     private const val DAYS = 7
     private const val DAY_MS = 24 * 60 * 60 * 1000L

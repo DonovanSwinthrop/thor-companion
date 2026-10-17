@@ -71,6 +71,7 @@ class NdsActivity : Activity() {
     private var menuCursor by mutableIntStateOf(0)
     private var fastForward by mutableStateOf(false)
     private var hasState by mutableStateOf(false)
+    private var clockHour by mutableIntStateOf(-1)
     @Volatile private var paused = false
     @Volatile private var ffHeld = false
     private val stateFile by lazy { File(File(filesDir, "nds-states").apply { mkdirs() }, rom.nameWithoutExtension + ".state") }
@@ -78,7 +79,7 @@ class NdsActivity : Activity() {
         ComposeView(this).apply {
             setContent {
                 AppTheme {
-                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, ::pick)
+                    if (menuOpen) NdsMenu(GameTitles.label(this@NdsActivity, Prefs(this@NdsActivity), rom), menuItems(), menuCursor, fastForward, hasState, clockHour, ::pick)
                 }
             }
         }
@@ -355,7 +356,14 @@ class NdsActivity : Activity() {
             NdsCore.setKeys(0)
             ffHeld = false
             hasState = stateFile.isFile
+            clockHour = NdsCore.clockHour()
         }
+    }
+
+    /** Moves the DS clock by [hours] and shows the new hour; the menu stays open so it can be stepped. */
+    private fun stepClock(hours: Int) {
+        NdsCore.shiftClock(hours)
+        clockHour = NdsCore.clockHour()
     }
 
     /** The pause menu's rows: HEAL PARTY only where the game's party is mapped (a pack exists). */
@@ -366,6 +374,8 @@ class NdsActivity : Activity() {
         when (code) {
             KeyEvent.KEYCODE_DPAD_UP -> menuCursor = (menuCursor + items.size - 1) % items.size
             KeyEvent.KEYCODE_DPAD_DOWN -> menuCursor = (menuCursor + 1) % items.size
+            KeyEvent.KEYCODE_DPAD_LEFT -> if (items[menuCursor] == NdsMenuItem.TIME) stepClock(-1)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> if (items[menuCursor] == NdsMenuItem.TIME) stepClock(1)
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_Z, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> pick(items[menuCursor])
             KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_X -> setMenu(false)
         }
@@ -394,10 +404,7 @@ class NdsActivity : Activity() {
                 }
                 setMenu(false)
             }
-            NdsMenuItem.TIME -> {
-                NdsCore.shiftClock(1)
-                setMenu(false)
-            }
+            NdsMenuItem.TIME -> stepClock(1)
             NdsMenuItem.SWAP -> {
                 setMenu(false)
                 swap()

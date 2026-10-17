@@ -16,6 +16,8 @@ enum class QuickAction(val label: String) {
     ROD(tk("ROD")),
     /** WILD ENCOUNTERS off, or back to what it was. */
     WILD(tk("WILD ENCOUNTERS")),
+    /** Full HP and no status for the whole party (companion.data.PartyHeal), outside a battle. */
+    HEAL(tk("HEAL PARTY")),
     SAVE_STATE(tk("SAVE STATE")),
     LOAD_STATE(tk("LOAD STATE")),
     FF(tk("FF")),

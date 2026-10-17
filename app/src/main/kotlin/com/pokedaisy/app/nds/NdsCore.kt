@@ -56,6 +56,9 @@ object NdsCore {
     /** Moves the DS clock by [hours] (day / night, time-of-day events). */
     @JvmStatic external fun shiftClock(hours: Int): Boolean
 
+    /** The DS clock's hour (0-23), -1 with no game. */
+    @JvmStatic external fun clockHour(): Int
+
     @JvmStatic external fun saveState(path: String): Boolean
     @JvmStatic external fun loadState(path: String): Boolean
 

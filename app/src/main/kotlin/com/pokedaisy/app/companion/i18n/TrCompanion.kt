@@ -257,6 +257,7 @@ internal val trCompanion: Map<String, Tr> = mapOf(
     "TAP TO FLIP THE CARD" to Tr(ja = "タッチで うらがえす", fr = "TOUCHE POUR RETOURNER LA CARTE", de = "TIPPEN ZUM UMDREHEN", it = "TOCCA PER GIRARE LA SCHEDA", es = "TOCA PARA GIRAR LA FICHA", br = "TOQUE PARA VIRAR O CARTÃO", pt = "TOQUE PARA VIRAR O CARTÃO"),
     "TAP TO SEE THE FRONT" to Tr(ja = "タッチで おもてを みる", fr = "TOUCHE POUR VOIR LE RECTO", de = "TIPPEN FÜR DIE VORDERSEITE", it = "TOCCA PER VEDERE IL FRONTE", es = "TOCA PARA VER EL FRENTE", br = "TOQUE PARA VER A FRENTE", pt = "TOQUE PARA VER A FRENTE"),
     // FIELD HUD over the game.
+    "HEAL" to Tr(ja = "かいふく", fr = "SOINS", de = "HEILEN", it = "CURA", es = "CURAR", br = "CURAR", pt = "CURAR"),
     "WILD" to Tr(ja = "やせい", fr = "SAUVAGES", de = "WILDE", it = "SELVATICI", es = "SALVAJES", br = "SELVAGENS", pt = "SELVAGENS"),
     "WILD POKéMON" to Tr(ja = "やせいの ポケモン", fr = "POKéMON SAUVAGES", de = "WILDE POKéMON", it = "POKéMON SELVATICI", es = "POKéMON SALVAJES", br = "POKéMON SELVAGENS", pt = "POKéMON SELVAGENS"),
     "Use on which POKéMON?" to Tr(ja = "どの ポケモンに つかう?", fr = "Sur quel POKéMON ?", de = "Bei welchem POKéMON?", it = "Su quale POKéMON?", es = "¿En qué POKéMON?", br = "Em qual POKéMON?", pt = "Em qual POKéMON?"),

@@ -110,6 +110,7 @@ The quick menu puts the things you'd otherwise dig through menus for under one b
 | `BIKE` | Gets on your bike. While you're riding it says `GET OFF` and gets you off. |
 | `ROD` | Casts your best fishing rod. Face the water first. |
 | `WILD` | Turns `WILD ENCOUNTERS` off, and back on the next time. An `OFF` tag on its corner says they're off. It shows in games where `WILD ENCOUNTERS` works. |
+| `HEAL` | Fills every Pokémon's HP and clears its status, like a Pokémon Center (PP stays as it is). Not during a battle. |
 | `SAVE STATE`, `LOAD STATE` | Saves or loads the current state slot. |
 | `FF` | Turns fast-forward on or off. |
 | `COMPANION` | Opens the companion (on a device with one screen). |

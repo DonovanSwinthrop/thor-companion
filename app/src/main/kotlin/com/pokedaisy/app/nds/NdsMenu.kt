@@ -28,7 +28,7 @@ enum class NdsMenuItem(val label: String) {
     LOAD_STATE("LOAD STATE"),
     FAST_FORWARD("FF"),
     HEAL_PARTY("HEAL PARTY"),
-    TIME("TIME +1 HOUR"),
+    TIME("GAME CLOCK"),
     SWAP("SWAP SCREENS"),
     CLOSE("CLOSE GAME"),
 }
@@ -36,9 +36,10 @@ enum class NdsMenuItem(val label: String) {
 /**
  * The DS game's pause menu (BACK or L3): the OPTION look's title + list over the dimmed game, steered by the
  * D-pad ([selected], moved by [NdsActivity]) or by touch. [hasState] greys LOAD STATE out with no state saved.
+ * The clock row shows the DS clock's [hour] as "< 14:00 >": LEFT / RIGHT step it, A or a tap adds an hour.
  */
 @Composable
-fun NdsMenu(title: String, items: List<NdsMenuItem>, selected: Int, fastForward: Boolean, hasState: Boolean, onPick: (NdsMenuItem) -> Unit) {
+fun NdsMenu(title: String, items: List<NdsMenuItem>, selected: Int, fastForward: Boolean, hasState: Boolean, hour: Int, onPick: (NdsMenuItem) -> Unit) {
     val m = rememberGbaTextMetrics()
     Box(
         Modifier.fillMaxSize().background(Color(0xB0000000))
@@ -50,7 +51,11 @@ fun NdsMenu(title: String, items: List<NdsMenuItem>, selected: Int, fastForward:
             OptionListWindow(m, Modifier.fillMaxWidth()) {
                 OptionRows(
                     rows = items.map { item ->
-                        val value = if (item == NdsMenuItem.FAST_FORWARD) tk(if (fastForward) "ON" else "OFF") else null
+                        val value = when {
+                            item == NdsMenuItem.FAST_FORWARD -> tk(if (fastForward) "ON" else "OFF")
+                            item == NdsMenuItem.TIME && hour >= 0 -> "< %02d:00 >".format(hour)
+                            else -> null
+                        }
                         Triple(tk(item.label), value) { onPick(item) }
                     },
                     m = m,

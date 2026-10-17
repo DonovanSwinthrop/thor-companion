@@ -392,6 +392,16 @@ Java_com_pokedaisy_app_nds_NdsCore_writeRam(JNIEnv* env, jclass, jint addr, jbyt
     return JNI_TRUE;
 }
 
+// The DS clock's hour (0-23), or -1 with no game: the pause menu shows it on its TIME row.
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_nds_NdsCore_clockHour(JNIEnv*, jclass) {
+    std::lock_guard<std::mutex> l(g_lock);
+    if (!g_nds) return -1;
+    int y, mo, d, h, mi, s;
+    g_nds->RTC.GetDateTime(y, mo, d, h, mi, s);
+    return h;
+}
+
 // The DS clock moved by [hours] (the games read it for day / night and the time-of-day events).
 JNIEXPORT jboolean JNICALL
 Java_com_pokedaisy_app_nds_NdsCore_shiftClock(JNIEnv*, jclass, jint hours) {

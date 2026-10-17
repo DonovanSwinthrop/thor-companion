@@ -98,10 +98,15 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
       battle blocks, zone), Black / Blaze Black
 - [x] The DS RUN button no longer translates as "flee" (own label key RUN TAB)
 - [x] Plain Black 2 pack (packs/gen5, same builder; caps from its own leaders)
+- [x] Gen 4 packs from the ROM (packs/gen4: gen4rom.py text / NARCs, build_pack.py): Platinum `pt`, Renegade Platinum `rp`,
+      HeartGold / SoulSilver `hgss` (bosses by trainer class, rivals by starter, wild tables, zone -> place). Need A's Gen 4
+      party / zone reader before the RUN tab can use them. The "Sterling Silver" ROMs on E: are plain SoulSilver (one has a level cap patch only)
 - [x] DS pause menu: HEAL PARTY (HP + status, outside a battle; PP not yet) and TIME +1 HOUR (DS clock); heal checked on
       Black 2 RAM (6/18 -> 18/18, the Pokemon still valid)
-  - [ ] DS cheat menu still to do: infinite repel (needs the repel counter's address), auto-run, heal PP, time choices
-- [ ] GBA extras like Radical Red's: heal party anywhere, change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
+  - [x] DS pause menu GAME CLOCK row: shows the hour, LEFT / RIGHT step it either way (was TIME +1 HOUR)
+  - [ ] DS cheat menu still to do: infinite repel (needs the repel counter's address), auto-run, heal PP
+- [x] GBA QUICK MENU HEAL tile: full HP + no status, outside a battle (PartyHeal; not R.O.W.E. / Quetzal layouts)
+- [ ] GBA extras still to do: change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist); HEAL to check in a real game
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)

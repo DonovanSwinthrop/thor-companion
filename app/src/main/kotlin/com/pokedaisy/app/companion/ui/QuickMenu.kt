@@ -270,6 +270,9 @@ class QuickMenuState {
     }
 }
 
+/** The FULL RESTORE's item id (HEAL's icon). */
+private const val FULL_RESTORE = 19
+
 /** REPEL's kinds the bag holds, weakest first. */
 fun repelKindsIn(s: SnapshotView): List<Int> =
     REPEL_KINDS.map { it.first }.filter { id -> s.items.any { it.itemId == id && it.quantity > 0 } }
@@ -278,7 +281,7 @@ fun repelKindsIn(s: SnapshotView): List<Int> =
 fun quickBlocked(action: QuickAction, s: SnapshotView, repelSteps: Int = 0): String? {
     val field = !s.inBattle
     return when (action) {
-        QuickAction.PC -> if (!field) tr("Not during a battle") else null
+        QuickAction.PC, QuickAction.HEAL -> if (!field) tr("Not during a battle") else null
         QuickAction.FLY -> when {
             !field -> tr("Not during a battle")
             s.party.none { !it.isEgg && it.moves.any { mv -> mv.id == FLY_MOVE } } -> tr("No one in your party knows FLY")
@@ -308,6 +311,7 @@ fun quickBlocked(action: QuickAction, s: SnapshotView, repelSteps: Int = 0): Str
 private fun quickLabel(action: QuickAction, actions: QuickActions): String = when (action) {
     QuickAction.BIKE -> if (actions.riding()) tr("GET OFF") else tr(action.label)
     QuickAction.WILD -> tr("WILD")
+    QuickAction.HEAL -> tr("HEAL")
     else -> tr(action.label)
 }
 
@@ -655,6 +659,8 @@ private fun QuickIcon(action: QuickAction, s: SnapshotView, actions: QuickAction
         QuickAction.REPEL -> item(REPEL_KINDS.map { it.first }.reversed())
         QuickAction.BIKE -> item(KeyItems.BIKES)
         QuickAction.ROD -> item(KeyItems.RODS)
+        // A FULL RESTORE's icon.
+        QuickAction.HEAL -> item(listOf(FULL_RESTORE))
         QuickAction.WILD -> PixelArt(GRASS_ICON, GRASS_COLORS, Modifier.size(size * 0.8f))
         QuickAction.SAVE_STATE -> PixelArt(SAVE_STATE_ICON, STATE_COLORS, Modifier.size(size * 0.8f))
         QuickAction.LOAD_STATE -> PixelArt(LOAD_STATE_ICON, STATE_COLORS, Modifier.size(size * 0.8f))
@@ -681,7 +687,8 @@ fun quickMenuRows(
         SettingRow(tk("LABELS"), onOff(labels), subtitle = "Each action's name under its icon") { setLabels(!labels) },
         groupTitle(tk("SHOW")),
     ) + QuickAction.entries.map { a ->
-        SettingRow(a.label, onOff(a in shown)) { setShown(if (a in shown) shown - a else shown + a) }
+        val badge = if (a == QuickAction.HEAL) NewFeatures.badge(NewFeatures.QUICK_HEAL) else null
+        SettingRow(a.label, onOff(a in shown), labelBadge = badge) { setShown(if (a in shown) shown - a else shown + a) }
     }
 }
 

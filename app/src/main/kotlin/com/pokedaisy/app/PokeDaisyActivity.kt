@@ -398,6 +398,7 @@ class PokeDaisyActivity : Activity() {
                 fieldItemSupport()?.let { s -> com.pokedaisy.app.companion.data.REPEL_ITEMS.any { s.canUse(it) } } == true
             com.pokedaisy.app.companion.QuickAction.BIKE, com.pokedaisy.app.companion.QuickAction.ROD -> keyItemsWork()
             com.pokedaisy.app.companion.QuickAction.WILD -> companionSettings.wildEncountersSupported
+            com.pokedaisy.app.companion.QuickAction.HEAL -> com.pokedaisy.app.companion.data.PartyHeal.supported(com.pokedaisy.app.companion.data.activeNativeConfig)
             com.pokedaisy.app.companion.QuickAction.SAVE_STATE, com.pokedaisy.app.companion.QuickAction.LOAD_STATE,
             com.pokedaisy.app.companion.QuickAction.FF -> true
             // One screen held sideways: the companion's window or side panel (upright, it's always open).
@@ -442,6 +443,16 @@ class PokeDaisyActivity : Activity() {
                 companionSettings.setWildEncounters(next)
                 showHud(com.pokedaisy.app.companion.i18n.tr("WILD ENCOUNTERS") + ": " +
                     com.pokedaisy.app.companion.i18n.tr(com.pokedaisy.app.companion.ui.wildEncountersLabel(next)))
+            }
+            // Between frames on the emu thread, like a bag item's work.
+            com.pokedaisy.app.companion.QuickAction.HEAL -> {
+                val cfg = com.pokedaisy.app.companion.data.activeNativeConfig ?: return
+                engine.requestFieldItemJob(snap.inBattle) { calls, _ ->
+                    val healed = com.pokedaisy.app.companion.data.PartyHeal.heal(cfg, calls)
+                    runOnUiThread {
+                        showHud(com.pokedaisy.app.companion.i18n.tr(if (healed >= 0) "Your party is healed" else "Not during a battle"))
+                    }
+                }
             }
             com.pokedaisy.app.companion.QuickAction.BIKE ->
                 com.pokedaisy.app.companion.data.KeyItems.firstIn(snap.items, com.pokedaisy.app.companion.data.KeyItems.BIKES)?.let(::useKeyItem)
