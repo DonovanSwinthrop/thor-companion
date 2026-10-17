@@ -40,8 +40,11 @@ object NewFeatures {
     /** SETTINGS > QUICK MENU > HEAL PARTY: the whole party healed from the QUICK MENU (companion.data.PartyHeal). */
     const val QUICK_HEAL = "quick_heal"
 
+    /** SETTINGS > BATTLE SHORTCUTS: R runs from a wild battle in one press. */
+    const val BATTLE_SHORTCUTS = "battle_shortcuts"
+
     /** Every feature that gets the tag. */
-    val ALL = listOf(HUD, BATTLE_BUTTONS, GAME_HOTKEYS, COMPANION_WINDOW, HUD_PC, QUICK_MENU, HUD_REPEL, SINGLE_SCREEN, COMPANION_BACKGROUND, QUICK_HEAL)
+    val ALL = listOf(BATTLE_SHORTCUTS, HUD, BATTLE_BUTTONS, GAME_HOTKEYS, COMPANION_WINDOW, HUD_PC, QUICK_MENU, HUD_REPEL, SINGLE_SCREEN, COMPANION_BACKGROUND, QUICK_HEAL)
 
     private const val DAYS = 7
     private const val DAY_MS = 24 * 60 * 60 * 1000L

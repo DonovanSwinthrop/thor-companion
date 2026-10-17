@@ -103,7 +103,7 @@ class NdsActivity : Activity() {
         topView = NdsScreenView(this)
         bottomView = NdsScreenView(this, touch)
         feedGame = if (com.pokedaisy.app.companion.RrOverlay.available(this)) NdsFeed.gameFor(rom) else null
-        shortcuts = Prefs(this).ndsBattleShortcuts
+        shortcuts = Prefs(this).battleShortcuts
         touchFrame = FrameLayout(this).apply {
             val match = ViewGroup.LayoutParams.MATCH_PARENT
             addView(bottomView, FrameLayout.LayoutParams(match, match))
@@ -436,7 +436,7 @@ class NdsActivity : Activity() {
             NdsMenuItem.TIME -> stepClock(1)
             NdsMenuItem.SHORTCUTS -> {
                 shortcuts = !shortcuts
-                Prefs(this).ndsBattleShortcuts = shortcuts
+                Prefs(this).battleShortcuts = shortcuts
             }
             NdsMenuItem.SWAP -> {
                 setMenu(false)

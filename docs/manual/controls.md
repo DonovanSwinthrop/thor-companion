@@ -138,6 +138,10 @@ To use another button, change the `QUICK MENU` hotkey.
 
 A change takes effect the next time you open a game. On a phone held upright the touch controls sit between the game and the companion when there's room; see [Devices](devices.md).
 
+## BATTLE SHORTCUTS
+
+`BATTLE SHORTCUTS` (in the companion's `GAMEPLAY` group, on to start with) makes R run away from a wild battle in one press, from the battle's first menu, without opening anything. Trainer battles aren't affected, anywhere else R does what it always does, and Radical Red keeps its own R. DS games have the same switch in their pause menu, where L also throws your best ball (see [DS games](ds-games.md)).
+
 ## Running: AUTO-RUN and RUN INDOORS
 
 `AUTO-RUN` runs for you. Once your game lets you run, walking on the field runs without you holding B, and holding B walks instead. It leaves B alone everywhere else: menus, battles, conversations, and while you ride a bike, where B does something of its own. The first time you play a game it starts working after you've walked around for a few seconds. On Heart and Soul, SoulGold, Too Many Types 2, Emerald Rogue and Quetzal it can't always tell yet that you're on a bike.

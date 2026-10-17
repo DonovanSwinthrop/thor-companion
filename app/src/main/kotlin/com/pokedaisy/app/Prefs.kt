@@ -127,10 +127,11 @@ class Prefs(context: Context) {
         set(v) = p.edit().putFloat("scene_speed_surf", v).apply()
 
     /** AUTO-RUN: B held for the player while walking on the field (holding it walks). */
-    /** DS games: in a wild battle R runs away (the pause menu's BATTLE SHORTCUTS). */
-    var ndsBattleShortcuts: Boolean
-        get() = p.getBoolean("nds_battle_shortcuts", true)
-        set(v) = p.edit().putBoolean("nds_battle_shortcuts", v).apply()
+    /** BATTLE SHORTCUTS: in a wild battle R runs away (and on DS, L throws the best ball). The DS pause menu and the
+     * companion's GAMEPLAY group flip the same switch. */
+    var battleShortcuts: Boolean
+        get() = p.getBoolean("battle_shortcuts", true)
+        set(v) = p.edit().putBoolean("battle_shortcuts", v).apply()
 
     var autoRun: Boolean
         get() = p.getBoolean("auto_run", false)

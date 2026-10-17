@@ -129,6 +129,7 @@ val SETTING_KEYWORDS: Map<String, String> = mapOf(
     "CLICK SOUND" to "sound effects button click audio",
     "TWEAKS" to "animations bounce blink cursor jump to battle effects motion",
     "SCENE SPEEDS" to "battle speed text speed instant text fast text menu speed overworld speed faster battles quality of life qol bike speed surf speed faster bike faster surfing",
+    "BATTLE SHORTCUTS" to "battle shortcuts run away flee escape r button quick run one press shortcut hotkey ball throw catch",
     "AUTO-RUN" to "auto run autorun running shoes run sprint dash always run hold b",
     "RUN INDOORS" to "run inside buildings indoor running shoes houses",
     "WILD ENCOUNTERS" to "wild encounters encounter rate random battles grass caves repel no encounters fewer battles",

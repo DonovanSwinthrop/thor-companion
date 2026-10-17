@@ -721,6 +721,8 @@ class PokeDaisyActivity : Activity() {
         }
         override val fieldMovesReadable get() = ::engine.isInitialized && engine.fieldMovesKnown
         override val fieldReadable get() = fieldGame != WideScreen.OFF
+        override val battleShortcuts get() = Prefs(this@PokeDaisyActivity).battleShortcuts
+        override fun setBattleShortcuts(on: Boolean) { Prefs(this@PokeDaisyActivity).battleShortcuts = on }
         override val autoRun get() = Prefs(this@PokeDaisyActivity).autoRun
         override fun setAutoRun(on: Boolean) {
             Prefs(this@PokeDaisyActivity).autoRun = on
@@ -1855,6 +1857,24 @@ class PokeDaisyActivity : Activity() {
 
     // --- input ---------------------------------------------------------------
 
+    /** BATTLE SHORTCUTS: the key bound to the GBA's R, in a wild battle at the action menu, runs away in one press
+     * (the battle's RUN, as BATTLE BUTTONS' RUN does); its release is kept from the game too. Null = not taken. */
+    private fun battleShortcutTakes(event: KeyEvent, down: Boolean): Boolean? {
+        if (!::engine.isInitialized || input.buttonFor(event.keyCode) != MgbaCore.Key.R) return null
+        val snap = telemetry.snapshot.value
+        // Radical Red has its own R in battle: leave it to the game
+        if (snap.game == com.pokedaisy.app.companion.data.GameKind.RADICAL_RED) return null
+        val wildAtMenu = snap.inBattle && snap.enemyParty.isEmpty() &&
+            engine.battleInputState == com.pokedaisy.app.companion.data.BATTLE_INPUT_ACTION_SELECT
+        if (!Prefs(this).battleShortcuts || !(wildAtMenu || battleShortcutHeld)) return null
+        battleShortcutHeld = down
+        if (down && event.repeatCount == 0 && !engine.battleInputBusy) battleInput.selectAction(3)
+        return true
+    }
+
+    /** The shortcut's R is down: its release goes nowhere either. */
+    private var battleShortcutHeld = false
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // The companion's rebind waiting for keys: they're its alone - not the game's, the hotkeys' or BACK's.
         if (keyCapture.onKey(event)) return true
@@ -1865,6 +1885,7 @@ class PokeDaisyActivity : Activity() {
         menuKeyTakes(event)?.let { return it }
         quickMenuTakes(event)?.let { return it }
         if (hotkeyTakes(event.keyCode, down)) return true
+        battleShortcutTakes(event, down)?.let { return it }
         if (input.onKey(event.keyCode, down)) {
             if (down && !physicalPadUsed && event.device?.isVirtual == false) {
                 physicalPadUsed = true

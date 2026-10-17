@@ -183,6 +183,9 @@ class EmulatorEngine(
      * the touch battle UI should disable further taps while this is true. */
     val battleInputBusy: Boolean get() = battleInput.isBusy
 
+    /** What the battle's menus are waiting for now (BATTLE_INPUT_*), from the last read. */
+    val battleInputState: Int get() = battleInput.gameState
+
     /** Keep showing the last frame: an automated switch is in the game's party menu (see [BattleInputController.holdFrame]). */
     val holdFrame: Boolean get() = battleInput.holdFrame
 

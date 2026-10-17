@@ -136,6 +136,7 @@ The `SPEED OPTIONS` page:
 | Setting | Choices | What it does | More |
 | --- | --- | --- | --- |
 | `WILD ENCOUNTERS` | **`ON`**, `OFF` | Wild Pokémon jumping out in grass, caves and water, or none. `N/A` in a game where it can't work. | [Controls](controls.md) |
+| `BATTLE SHORTCUTS` | **`ON`**, `OFF` | In a wild battle, R runs away in one press (DS games: L throws your best ball too). | [Controls](controls.md) |
 | `AUTO-RUN` | `ON`, **`OFF`** | Walking on the field runs without holding B; holding B walks instead. | [Controls](controls.md) |
 | `RUN INDOORS` | `ON`, **`OFF`** | Lets you run inside buildings too. `N/A` on Ruby and Sapphire. | [Controls](controls.md) |
 | `CHEATS` | **`OFF`**, or how many are on (a page) | The master switch, then this game's cheats, each flipped live. Codes are added on the top screen. | [Cheats](cheats.md) |

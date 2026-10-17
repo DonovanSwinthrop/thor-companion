@@ -417,6 +417,11 @@ private fun homeRows(
         // B held for the player while walking on the field; holding it walks. Never on a bike or in a menu.
         SettingRow(tk("AUTO-RUN"), if (s.fieldReadable) onOff(s.autoRun) else tk("N/A"), enabled = s.fieldReadable,
             subtitle = "Holding B walks instead") { if (s.fieldReadable) { s.setAutoRun(!s.autoRun); changed() } },
+        // R in a wild battle at the action menu: the battle's own RUN, one press (BattleInputController's RUN).
+        SettingRow(tk("BATTLE SHORTCUTS"), onOff(s.battleShortcuts), subtitle = "R runs from wild battles",
+            labelBadge = com.pokedaisy.app.companion.NewFeatures.badge(com.pokedaisy.app.companion.NewFeatures.BATTLE_SHORTCUTS)) {
+            s.setBattleShortcuts(!s.battleShortcuts); changed()
+        },
         // Every map lets the player run (buildings too); FireRed / Emerald engines.
         SettingRow(tk("RUN INDOORS"), if (s.runIndoorsSupported) onOff(s.runIndoors) else tk("N/A"), enabled = s.runIndoorsSupported,
             subtitle = "Running inside buildings too") { if (s.runIndoorsSupported) { s.setRunIndoors(!s.runIndoors); changed() } },

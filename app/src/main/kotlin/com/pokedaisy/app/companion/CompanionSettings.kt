@@ -44,6 +44,10 @@ interface CompanionSettings {
     /** Whether the running game's field can be read for TEXT SPEED and AUTO-RUN (WIDE's tables know it). */
     val fieldReadable: Boolean get() = false
 
+    /** BATTLE SHORTCUTS: R runs from a wild battle - see [com.pokedaisy.app.Prefs.battleShortcuts]. */
+    val battleShortcuts: Boolean get() = false
+    fun setBattleShortcuts(on: Boolean) {}
+
     /** AUTO-RUN: B held while walking (holding it walks) - see [com.pokedaisy.app.Prefs.autoRun]. */
     val autoRun: Boolean get() = false
     fun setAutoRun(on: Boolean) {}

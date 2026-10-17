@@ -178,6 +178,7 @@ internal val trSettings: Map<String, Tr> = mapOf(
     "BIKE SPEED" to Tr(ja = "じてんしゃ そくど", fr = "VITESSE VÉLO", de = "RADTEMPO", it = "VELOCITÀ BICI", es = "VEL. BICI", br = "VEL. BICICLETA", pt = "VEL. BICICLETA"),
     "SURF SPEED" to Tr(ja = "なみのり そくど", fr = "VITESSE SURF", de = "SURFTEMPO", it = "VELOCITÀ SURF", es = "VEL. SURF", br = "VEL. SURFE", pt = "VEL. SURF"),
     "AUTO-RUN" to Tr(ja = "オートダッシュ", fr = "COURSE AUTO", de = "AUTO-RENNEN", it = "CORSA AUTO", es = "CORRER AUTO", br = "CORRIDA AUTO", pt = "CORRIDA AUTO"),
+    "R runs from wild battles" to Tr(ja = "Rで やせいから にげる", fr = "R pour fuir les combats sauvages", de = "R flieht aus wilden Kämpfen", it = "R per fuggire dalle lotte selvatiche", es = "R para huir de combates salvajes", br = "R foge de batalhas selvagens", pt = "R foge de batalhas selvagens"),
     "Holding B walks instead" to Tr(ja = "Bを おすと あるく", fr = "Maintenir B pour marcher", de = "B halten zum Gehen", it = "Tieni premuto B per camminare", es = "Mantén B para caminar", br = "Segure B para andar", pt = "Mantenha B para andar"),
     "RUN INDOORS" to Tr(ja = "なかでも ダッシュ", fr = "COURIR DEDANS", de = "DRINNEN RENNEN", it = "CORRERE DENTRO", es = "CORRER DENTRO", br = "CORRER DENTRO", pt = "CORRER DENTRO"),
     "WILD ENCOUNTERS" to Tr(ja = "やせいの ポケモン", fr = "POKéMON SAUVAGES", de = "WILDE POKéMON", it = "POKéMON SELVATICI", es = "POKéMON SALVAJES", br = "POKéMON SELVAGENS", pt = "POKéMON SELVAGENS"),
