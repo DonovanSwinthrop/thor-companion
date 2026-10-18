@@ -510,7 +510,7 @@ class NdsActivity : Activity() {
                 val game = feedGame
                 if (game != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
                     // not in a battle: the battle keeps its own copy of the HP
-                    if (NdsMons.battlers(feedRam).isEmpty()) NdsMons.healParty(feedRam, NdsFeed.partyAddr(feedRam, game), movePp, game.gen4, NdsCore::writeRam)
+                    if (!NdsFeed.inBattle(feedRam, game)) NdsMons.healParty(feedRam, NdsFeed.partyAddr(feedRam, game), movePp, game.gen4, NdsCore::writeRam)
                 }
                 setMenu(false)
             }

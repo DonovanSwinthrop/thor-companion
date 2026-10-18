@@ -26,6 +26,10 @@ The face buttons, shoulders, START, SELECT and the D-pad are the DS's own: A, B,
 
 A DS game saves to its own `.sav` file, kept and backed up the same way as your other games' saves (see [Saves and backups](saves.md)). The game writes it every few seconds while you play, and again when you leave.
 
+## The RUN tab
+
+For some games a small `RUN TAB` button sits on the touch screen. It opens a page with your party, what you can find in the area you're in, and your next big fight. It supports Black, Blaze Black, Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver. It follows your battles too, in Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver: during a fight its Battle page shows both sides' Pokémon and how much HP they have left. Tap `BACK` to close it.
+
 ## The pause menu
 
 Press BACK (or L3) to pause. The menu has:
