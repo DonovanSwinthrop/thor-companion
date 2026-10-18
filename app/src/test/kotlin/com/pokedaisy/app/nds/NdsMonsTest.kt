@@ -154,6 +154,17 @@ class NdsMonsTest {
     }
 
     @Test
+    fun blackZoneFollowsTheMap() {
+        // the same save, walked from the Gear Station's platform (68) up the escalator into its hall (66)
+        val platform = dump("bw_gear.bin")
+        val hall = dump("bw_out4.bin")
+        assumeTrue("no Black dumps", platform != null && hall != null)
+        fun zone(ram: ByteArray) = (ram[0x2350B0].toInt() and 0xFF) or ((ram[0x2350B1].toInt() and 0xFF) shl 8)
+        assertEquals(68, zone(platform!!))
+        assertEquals(66, zone(hall!!))
+    }
+
+    @Test
     fun soulSilverPartyMapAndNature() {
         // SoulSilver (US) on a finished save: the save block's address at 0x02111880, party +0xA8, map +0x1244
         val ss = rom("Pokémon SoulSilver Version.nds")
