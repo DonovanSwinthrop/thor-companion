@@ -338,7 +338,7 @@ class NdsMonsTest {
             assertEquals(22, foe.ability)                                       // Intimidate
             assertEquals(atkStage, sides.player.single().stages!![0])          // Intimidate, then a stat-lowering move
             assertEquals(true, NdsFeed.inBattle(ram, game))
-            assertEquals(false, NdsFeed.wildBattle(ram, game))                 // shortcuts stay off in Gen 4 for now
+            assertEquals(true, NdsFeed.wildBattle(ram, game))                  // Platinum's battle screen takes the shortcuts
             val state = NdsFeed.state(ram, game)!!
             assertEquals(1, state.getInt("inBattle"))
             assertEquals(0, state.getInt("battleType"))                        // wild: the foe carries the player's ID
@@ -346,5 +346,20 @@ class NdsMonsTest {
         }
         // after the battle (the Giratina fainted, back on the field): no battle left over
         dump("pt_after.bin")?.let { ram -> assertEquals(false, NdsFeed.inBattle(ram, game)) }
+    }
+
+    @Test
+    fun platinumBestBallFromItsOwnPocket() {
+        // a wild Ralts; the bag's Poke Balls pocket: Poke x1, Premier x1, Nest x49, Great x4, Quick x253, Master x1
+        val game = NdsFeed.Game("pt", 0xB4, 0x1294, bag = 0xD00, base = 0x02101D40, gen4 = true, tid = 0x8C, bagSlots = 15)
+        val ram = dump("pt_wild3.bin")
+        assumeTrue("no pt_wild3.bin", ram != null)
+        val bag = NdsFeed.bagAddr(ram!!, game)
+        assertEquals(2, NdsShortcuts.bestBall(ram, bag, game.bagSlots))         // Ultra (7th; Master never thrown)
+        val taps = NdsShortcuts.ball(ram, bag, game.bagSlots)!!
+        assertEquals(5, taps.size)                                                // BAG, POKE BALLS, next page, slot, USE
+        assertEquals(64, taps[3].x)                                               // page 2's first slot: checked on
+        assertEquals(32, taps[3].y)                                               // screen ("used one Ultra Ball!")
+        assertEquals(true, NdsFeed.wildBattle(ram, game))
     }
 }

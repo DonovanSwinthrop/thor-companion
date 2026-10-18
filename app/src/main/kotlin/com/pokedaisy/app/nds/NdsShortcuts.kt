@@ -39,8 +39,9 @@ object NdsShortcuts {
     private val RUN = Tap(128, 181)
     // the bag slides in over ~1 s: a tap before it's up is lost (the next one then lands on the wrong pocket)
     private val BAG = Tap(39, 168, wait = 75)
-    private val BALLS_POCKET = Tap(192, 47, wait = 50)
-    private val NEXT_PAGE = Tap(59, 174, wait = 20)
+    // Platinum's pocket and pages slide in more slowly than Black 2's: a page turn tapped too soon is lost
+    private val BALLS_POCKET = Tap(192, 47, wait = 90)
+    private val NEXT_PAGE = Tap(59, 174, wait = 40)
     private val USE = Tap(107, 175)
     private val SLOT_X = intArrayOf(64, 192)
     private val SLOT_Y = intArrayOf(32, 80, 128)
@@ -59,9 +60,9 @@ object NdsShortcuts {
      * The taps that throw the best ball in the items pocket at [bag] (u16 item, u16 count pairs; Gen 5 keeps balls
      * there, and the battle bag's POKé BALLS page lists them in that order, six a page), or null with none to throw.
      */
-    fun ball(ram: ByteArray, bag: Int): List<Tap>? {
-        val balls = balls(ram, bag)
-        val best = bestBall(ram, bag) ?: return null
+    fun ball(ram: ByteArray, bag: Int, slots: Int = 310): List<Tap>? {
+        val balls = balls(ram, bag, slots)
+        val best = bestBall(ram, bag, slots) ?: return null
         val index = balls.indexOf(best)
         val slot = index % 6
         return buildList {
@@ -74,13 +75,17 @@ object NdsShortcuts {
     }
 
     /** The best ball's item id in the items pocket at [bag] (what [ball] throws), or null. */
-    fun bestBall(ram: ByteArray, bag: Int): Int? = balls(ram, bag).let { b -> BALL_PRIORITY.firstOrNull { it in b } }
+    fun bestBall(ram: ByteArray, bag: Int, slots: Int = 310): Int? = balls(ram, bag, slots).let { b -> BALL_PRIORITY.firstOrNull { it in b } }
 
-    /** The balls in the items pocket at [bag] (310 slots of u16 item, u16 count), in bag order. */
-    private fun balls(ram: ByteArray, bag: Int): List<Int> {
+    /**
+     * The balls in the pocket at [bag] ([slots] slots of u16 item, u16 count; Gen 5's items pocket has 310, Gen 4's own
+     * Poké Balls pocket 15), in bag order. Nothing below main RAM (a Gen 4 bag before its save block is known).
+     */
+    private fun balls(ram: ByteArray, bag: Int, slots: Int = 310): List<Int> {
         val off = bag - NdsMons.RAM_BASE
         val out = ArrayList<Int>()
-        for (i in 0 until 310) {
+        if (off < 0) return out
+        for (i in 0 until slots) {
             val o = off + 4 * i
             if (o < 0 || o + 4 > ram.size) break
             val id = (ram[o].toInt() and 0xFF) or ((ram[o + 1].toInt() and 0xFF) shl 8)

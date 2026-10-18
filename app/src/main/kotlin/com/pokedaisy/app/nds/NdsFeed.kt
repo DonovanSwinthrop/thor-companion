@@ -17,10 +17,15 @@ object NdsFeed {
                val base: Int = 0,
                val gen4: Boolean = false,
                /** Gen 4: the player's own trainer ID, an offset from [base] (0: use the party's IDs). */
-               val tid: Int = 0)
+               val tid: Int = 0,
+               /** How many slots the pocket at [bag] has (Gen 5: the items pocket; Gen 4: the Poké Balls pocket). */
+               val bagSlots: Int = 310)
 
     /** Where [game]'s party is now (its count is the u32 before it); 0 if the save isn't loaded. */
     fun partyAddr(ram: ByteArray, game: Game): Int = game.party + baseOf(ram, game)
+
+    /** Where [game]'s bag pocket for balls is now (an address for Gen 5, an offset from [Game.base] for Gen 4). */
+    fun bagAddr(ram: ByteArray, game: Game): Int = if (game.bag == 0) 0 else game.bag + baseOf(ram, game)
 
     /** Where [game]'s current map number is now; 0 if the save isn't loaded. */
     fun zoneAddr(ram: ByteArray, game: Game): Int = game.zone + baseOf(ram, game)
@@ -45,6 +50,16 @@ object NdsFeed {
     private const val PT_ZONE = 0x1294
     /** The player's trainer ID (u16, SID after it): found beside the party in Platinum's save block (pt_wild1 / pt_out). */
     private const val PT_TID = 0x8C
+    /** The Poké Balls pocket (u16 item, u16 count; the battle bag's POKé BALLS page lists it in this order): found by a
+     *  100% save's own bag, Poké / Premier / Nest / Great / Quick / Master (pt_wild3). */
+    private const val PT_BALLS = 0xD00
+    private const val PT_BALL_SLOTS = 15
+
+    /**
+     * Gen 4 games whose battle screen the shortcuts were checked on: Platinum's RUN, BAG, POKé BALLS, the six ball slots,
+     * the next-page arrow and USE sit where Black 2's do (to a DS pixel or two), so the same taps work.
+     */
+    private val GEN4_SHORTCUTS = setOf("pt", "rp")
 
     /**
      * HeartGold / SoulSilver (US): the save data's address is at 0x02111880 (the same block Action Replay codes reach
@@ -104,8 +119,8 @@ object NdsFeed {
             code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
-            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true, tid = PT_TID)
-            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true, tid = PT_TID)
+            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, bag = PT_BALLS, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
+            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, bag = PT_BALLS, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
             code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, base = HGSS_BASE, gen4 = true, tid = HGSS_TID)
             else -> null
         }
@@ -181,11 +196,11 @@ object NdsFeed {
     }
 
     /**
-     * A wild battle is on in [ram] (the battle shortcuts' gate). Off in Gen 4 until the shortcuts' taps are checked
-     * on its battle screen: they press Black 2's positions.
+     * A wild battle is on in [ram] (the battle shortcuts' gate). Off in a Gen 4 game whose battle screen hasn't been
+     * checked ([GEN4_SHORTCUTS]): the shortcuts press Black 2's positions.
      */
     fun wildBattle(ram: ByteArray, game: Game): Boolean {
-        if (game.gen4) return false
+        if (game.gen4 && game.pack !in GEN4_SHORTCUTS) return false
         val party = NdsMons.party(ram, partyAddr(ram, game), game.gen4)
         if (party.isEmpty()) return false
         return wild(ram, game, sides(ram, game, party), party)
