@@ -400,9 +400,13 @@ class NdsActivity : Activity() {
             if (down) taps.play(NdsShortcuts.run)
             return true
         }
-        val bagAt = feedGame?.bag ?: 0
-        if (shortcuts && wildBattle && bagAt != 0 && (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 || event.keyCode == KeyEvent.KEYCODE_Q)) {
-            if (down && !taps.busy && NdsCore.readRam(NdsMons.RAM_BASE, shortcutRam)) NdsShortcuts.ball(shortcutRam, bagAt)?.let(taps::play)
+        val ballGame = feedGame
+        if (shortcuts && wildBattle && ballGame != null && ballGame.bag != 0 && (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 || event.keyCode == KeyEvent.KEYCODE_Q)) {
+            // Platinum's bag moves with its save block: read RAM first, then resolve the address from it
+            if (down && !taps.busy && NdsCore.readRam(NdsMons.RAM_BASE, shortcutRam)) {
+                val bagAt = NdsFeed.bagAddr(shortcutRam, ballGame)
+                if (bagAt != 0) NdsShortcuts.ball(shortcutRam, bagAt, ballGame.bagSlots)?.let(taps::play)
+            }
             return true
         }
         if (event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
