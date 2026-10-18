@@ -362,4 +362,13 @@ class NdsMonsTest {
         assertEquals(32, taps[3].y)                                               // screen ("used one Ultra Ball!")
         assertEquals(true, NdsFeed.wildBattle(ram, game))
     }
+
+    @Test
+    fun platinumRepelCounter() {
+        // field, before any Repel; a Repel just used; about ten steps on
+        val game = NdsFeed.Game("pt", 0xB4, 0x1294, repel = 0x8087, base = 0x02101D40, gen4 = true, tid = 0x8C)
+        val dumps = listOf("pt_after", "pt_rep1", "pt_rep2").map { dump("$it.bin") }
+        assumeTrue("no Platinum repel dumps", dumps.all { it != null })
+        assertEquals(listOf(0, 100, 89), dumps.map { NdsFeed.repelSteps(it!!, game) })
+    }
 }
