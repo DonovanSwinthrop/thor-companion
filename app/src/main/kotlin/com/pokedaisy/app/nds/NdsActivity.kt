@@ -114,6 +114,9 @@ class NdsActivity : Activity() {
     /** INFINITE REPEL: the feed tops the game's repel counter up while it's on. */
     private var infiniteRepel by mutableStateOf(false)
 
+    /** INFINITE REPEL has been keeping the game's repel step counter topped up (so switching it off clears it). */
+    @Volatile private var repelHeld = false
+
     /** A wild battle is on (the feed's last read): R runs away while [shortcuts] is on. */
     @Volatile private var wildBattle = false
 
@@ -338,10 +341,14 @@ class NdsActivity : Activity() {
         if (!NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
         wildBattle = runCatching { NdsFeed.wildBattle(feedRam, game) }.getOrDefault(false)
         // INFINITE REPEL: never let the steps run low (the game then never asks to use another)
-        if (infiniteRepel && game.repel != 0 && NdsFeed.repelSteps(feedRam, game) < REPEL_TOP / 2) {
-            // Gen 4's counter moves with the save block (an offset): resolve it from RAM, skip the write if it isn't loaded
-            val at = NdsFeed.repelAddr(feedRam, game)
-            if (at != 0) NdsCore.writeRam(at, byteArrayOf(REPEL_TOP.toByte()))
+        if (infiniteRepel && game.repel != 0) {
+            // while it's on, the game's step counter is ours: switching off clears it ([repelHeld])
+            repelHeld = true
+            if (NdsFeed.repelSteps(feedRam, game) < REPEL_TOP / 2) {
+                // Gen 4's counter moves with the save block (an offset): resolve it from RAM, skip the write if it isn't loaded
+                val at = NdsFeed.repelAddr(feedRam, game)
+                if (at != 0) NdsCore.writeRam(at, byteArrayOf(REPEL_TOP.toByte()))
+            }
         }
         runCatching { NdsFeed.state(feedRam, game) }.getOrNull()?.let { com.pokedaisy.app.companion.RrOverlay.postDecoded(it) }
     }
@@ -540,8 +547,12 @@ class NdsActivity : Activity() {
                 // switched off: the map's own encounter rates come back (the emulation is parked while the menu is open)
                 val game = feedGame
                 val e = enc
-                if (!infiniteRepel && game != null && e != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
-                    runCatching { e.restore(feedRam, NdsFeed.zone(feedRam, game), NdsCore::writeRam) }
+                if (!infiniteRepel && game != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
+                    if (e != null) runCatching { e.restore(feedRam, NdsFeed.zone(feedRam, game), NdsCore::writeRam) }
+                    // the step counter we kept topped up goes to 0 at once (no 100+ more steps, no "wore off" message)
+                    val at = NdsFeed.repelAddr(feedRam, game)
+                    if (repelHeld && at != 0) NdsCore.writeRam(at, byteArrayOf(0))
+                    repelHeld = false
                 }
             }
             NdsMenuItem.SHORTCUTS -> {
