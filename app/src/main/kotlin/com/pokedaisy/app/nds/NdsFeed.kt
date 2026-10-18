@@ -15,7 +15,9 @@ object NdsFeed {
                val repel: Int = 0,
                /** Gen 4: the save data is on the heap; [party] and [zone] are offsets from the address stored here. */
                val base: Int = 0,
-               val gen4: Boolean = false)
+               val gen4: Boolean = false,
+               /** Gen 4: the player's own trainer ID, an offset from [base] (0: use the party's IDs). */
+               val tid: Int = 0)
 
     /** Where [game]'s party is now (its count is the u32 before it); 0 if the save isn't loaded. */
     fun partyAddr(ram: ByteArray, game: Game): Int = game.party + baseOf(ram, game)
@@ -41,6 +43,8 @@ object NdsFeed {
     private const val PT_BASE = 0x02101D40
     private const val PT_PARTY = 0xB4
     private const val PT_ZONE = 0x1294
+    /** The player's trainer ID (u16, SID after it): found beside the party in Platinum's save block (pt_wild1 / pt_out). */
+    private const val PT_TID = 0x8C
 
     /**
      * HeartGold / SoulSilver (US): the save data's address is at 0x02111880 (the same block Action Replay codes reach
@@ -51,6 +55,8 @@ object NdsFeed {
     private const val HGSS_BASE = 0x02111880
     private const val HGSS_PARTY = 0xA8
     private const val HGSS_ZONE = 0x1244
+    /** The player's trainer ID: SoulSilver's six party Pokémon all carry it (ss_field1). */
+    private const val HGSS_TID = 0x84
 
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
@@ -98,9 +104,9 @@ object NdsFeed {
             code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
-            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true)
-            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true)
-            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, base = HGSS_BASE, gen4 = true)
+            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true, tid = PT_TID)
+            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, base = PT_BASE, gen4 = true, tid = PT_TID)
+            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, base = HGSS_BASE, gen4 = true, tid = HGSS_TID)
             else -> null
         }
     }
@@ -144,13 +150,45 @@ object NdsFeed {
         return (ram[game.flags - NdsMons.RAM_BASE + (f shr 3)].toInt() shr (f and 7)) and 1 == 1
     }
 
-    /** A wild battle is on in [ram]: battlers on the foe's side whose Pokémon carry the player's ID (wild ones do). */
+    /** The battle's two sides: Gen 5 by its labelled blocks, Gen 4 by its battle-slot blocks ([NdsMons.gen4Sides]). */
+    fun sides(ram: ByteArray, game: Game, party: List<NdsMons.Mon>): NdsMons.Sides =
+        if (game.gen4) NdsMons.gen4Sides(ram, party)
+        else NdsMons.sides(ram, NdsMons.battlers(ram), party.map { it.pid }.toSet())
+
+    /**
+     * A wild battle: the foe's Pokémon carry the player's own ID (wild ones are made that way; a trainer's carry
+     * theirs). "The player's ID" is any the party carries: the lead may be traded (a Platinum save's Giratina is).
+     */
+    private fun wild(ram: ByteArray, game: Game, sides: NdsMons.Sides, party: List<NdsMons.Mon>): Boolean {
+        val ids = playerIds(ram, game, party)
+        return sides.foe.isNotEmpty() && sides.foe.all { b -> b.mon == null || b.mon.otId in ids }
+    }
+
+    /** The player's trainer ID where the save holds it ([Game.tid]), else every ID the party carries. */
+    private fun playerIds(ram: ByteArray, game: Game, party: List<NdsMons.Mon>): Set<Int> {
+        if (game.tid != 0) {
+            val b = baseOf(ram, game)
+            val o = b + game.tid - NdsMons.RAM_BASE
+            if (b > 0 && o >= 0 && o + 2 <= ram.size) return setOf((ram[o].toInt() and 0xFF) or ((ram[o + 1].toInt() and 0xFF) shl 8))
+        }
+        return party.map { it.otId }.toSet()
+    }
+
+    /** A battle (wild or trainer) is on in [ram]: HEAL PARTY waits for it to end (the battle keeps its own HP). */
+    fun inBattle(ram: ByteArray, game: Game): Boolean {
+        val party = NdsMons.party(ram, partyAddr(ram, game), game.gen4)
+        return party.isNotEmpty() && sides(ram, game, party).foe.isNotEmpty()
+    }
+
+    /**
+     * A wild battle is on in [ram] (the battle shortcuts' gate). Off in Gen 4 until the shortcuts' taps are checked
+     * on its battle screen: they press Black 2's positions.
+     */
     fun wildBattle(ram: ByteArray, game: Game): Boolean {
+        if (game.gen4) return false
         val party = NdsMons.party(ram, partyAddr(ram, game), game.gen4)
         if (party.isEmpty()) return false
-        val sides = NdsMons.sides(ram, NdsMons.battlers(ram), party.map { it.pid }.toSet())
-        val tid = party[0].otId
-        return sides.foe.isNotEmpty() && sides.foe.none { b -> b.mon != null && b.mon.otId != tid }
+        return wild(ram, game, sides(ram, game, party), party)
     }
 
     /** Steps left on [game]'s repel (0: none, or not mapped). */
@@ -171,12 +209,12 @@ object NdsFeed {
         if (party.isEmpty()) return null
         val zoneOff = zoneAddr(ram, game) - NdsMons.RAM_BASE
         val zone = (ram[zoneOff].toInt() and 0xFF) or ((ram[zoneOff + 1].toInt() and 0xFF) shl 8)
-        val battlers = NdsMons.battlers(ram)
-        val sides = NdsMons.sides(ram, battlers, party.map { it.pid }.toSet())
+        val sides = sides(ram, game, party)
         val inBattle = sides.foe.isNotEmpty()
-        val playerTid = party[0].otId
-        val trainer = sides.foe.any { b -> b.mon != null && b.mon.otId != playerTid }
-        fun battler(b: NdsMons.Battler?) = b?.mon?.let { mon(it, b.hp, b.maxHp, b.level, b.ability) } ?: JSONObject.NULL
+        val trainer = inBattle && !wild(ram, game, sides, party)
+        fun battler(b: NdsMons.Battler?) = b?.mon?.let { m ->
+            mon(m, b.hp, b.maxHp, b.level, b.ability).apply { b.stages?.let { put("stages", JSONArray(it)) } }
+        } ?: JSONObject.NULL
         val bat = JSONArray().put(battler(sides.player.firstOrNull())).put(battler(sides.foe.firstOrNull()))
             .put(JSONObject.NULL).put(JSONObject.NULL)
         return JSONObject()

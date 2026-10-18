@@ -318,4 +318,33 @@ class NdsMonsTest {
             assertEquals(b.maxHp, a.maxHp)
         }
     }
+
+    @Test
+    fun platinumWildBattleBlocks() {
+        // Platinum (US), 100% save, a wild Snubbull (Lv 19) against the Giratina (Lv 1); then one hit each way
+        val game = NdsFeed.Game("pt", 0xB4, 0x1294, base = 0x02101D40, gen4 = true, tid = 0x8C)   // the save's own ID: the Giratina is traded
+        val before = dump("pt_wild1.bin")
+        val after = dump("pt_wild2.bin")
+        assumeTrue("no Platinum battle dumps", before != null && after != null)
+        for ((ram, foeHp, atkStage) in listOf(Triple(before!!, 56, -1), Triple(after!!, 55, -3))) {
+            val party = NdsMons.party(ram, NdsFeed.partyAddr(ram, game), gen4 = true)
+            val sides = NdsMons.gen4Sides(ram, party)
+            assertEquals(487, sides.player.single().species)                  // Giratina, slot 0
+            val foe = sides.foe.single()
+            assertEquals(209, foe.species)                                     // Snubbull, slot 1
+            assertEquals(19, foe.level)
+            assertEquals(56, foe.maxHp)
+            assertEquals(foeHp, foe.hp)                                         // 56, then 55 after the hit
+            assertEquals(22, foe.ability)                                       // Intimidate
+            assertEquals(atkStage, sides.player.single().stages!![0])          // Intimidate, then a stat-lowering move
+            assertEquals(true, NdsFeed.inBattle(ram, game))
+            assertEquals(false, NdsFeed.wildBattle(ram, game))                 // shortcuts stay off in Gen 4 for now
+            val state = NdsFeed.state(ram, game)!!
+            assertEquals(1, state.getInt("inBattle"))
+            assertEquals(0, state.getInt("battleType"))                        // wild: the foe carries the player's ID
+            assertEquals(209, state.getJSONArray("battlersDec").getJSONObject(1).getInt("sp"))
+        }
+        // after the battle (the Giratina fainted, back on the field): no battle left over
+        dump("pt_after.bin")?.let { ram -> assertEquals(false, NdsFeed.inBattle(ram, game)) }
+    }
 }
