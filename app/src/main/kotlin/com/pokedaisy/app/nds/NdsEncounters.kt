@@ -15,16 +15,23 @@ package com.pokedaisy.app.nds
  *    +0x14 low 13 bits), files in `a/1/2/7` (BW2) or `a/1/2/6` (BW): 232 bytes a season (one or four): 8 rate bytes
  *    (grass, dark grass, shaking grass, surf, rippling surf, fishing, rippling fishing, a flag) then the slots. Checked:
  *    Route 19 (map 437, file 128) in every Black 2 dump there, at 0x0223B7C0.
- * HeartGold / SoulSilver: not yet.
+ *  - HeartGold / SoulSilver: map headers in the game code in RAM (0x020F6BE0, 24 bytes a map, file u8 +0x00, 0xFF none;
+ *    day / night music u16 at +0x0C / +0x0E, checked before trusting an entry), files in `a/0/3/7` (HeartGold) or
+ *    `a/1/3/6` (SoulSilver), 196 bytes: grass, surf, Rock Smash rate bytes +0..2, the three rods +3..5. A town with only
+ *    water has no grass slots, so the whole file after the rates is matched. Checked: SoulSilver map 56 -> file 100 ->
+ *    one copy at 0x022A1CA0 (ssr3).
  */
 class NdsEncounters(private val rom: NdsRom, private val game: NdsFeed.Game) {
 
     private val platinum = game.pack in setOf("pt", "rp")
     private val gen5 = game.pack in setOf("b2", "bb2r", "b1", "bbk")
+    private val hgss = game.pack == "hgss"
 
     private val files: List<ByteArray>? by lazy {
         val path = when {
             platinum -> PT_ENC
+            hgss && rom.code.startsWith("IPK") -> "a/0/3/7"
+            hgss -> "a/1/3/6"
             gen5 && rom.code.startsWith("IRB") -> "a/1/2/6"
             gen5 -> "a/1/2/7"
             else -> null
@@ -38,7 +45,7 @@ class NdsEncounters(private val rom: NdsRom, private val game: NdsFeed.Game) {
     private var foundAt = -1
     private var foundKey: ByteArray? = null
 
-    val supported get() = (platinum || gen5) && files != null && (platinum || gen5Zones != null)
+    val supported get() = (platinum || hgss || gen5) && files != null && (!gen5 || gen5Zones != null)
 
     /** Keeps the current map's encounter rates at 0 (every few frames while INFINITE REPEL is on); true when blocked. */
     fun block(ram: ByteArray, zone: Int, write: (Int, ByteArray) -> Boolean): Boolean {
@@ -55,9 +62,12 @@ class NdsEncounters(private val rom: NdsRom, private val game: NdsFeed.Game) {
         for ((off, len) in rates()) write(NdsMons.RAM_BASE + t.at + off, t.rom.copyOfRange(off, off + len))
     }
 
-    /** Which bytes are rates (offset, length): grass, surf, Rock Smash for Platinum; the five non-fishing ones for Gen 5. */
-    private fun rates(): List<Pair<Int, Int>> =
-        if (platinum) listOf(0x00 to 4, 0xCC to 4, 0xF8 to 4) else listOf(0 to 1, 1 to 1, 2 to 1, 3 to 1, 4 to 1)
+    /** Which bytes are rates (offset, length): grass, surf, Rock Smash for Gen 4; the five non-fishing ones for Gen 5. */
+    private fun rates(): List<Pair<Int, Int>> = when {
+        platinum -> listOf(0x00 to 4, 0xCC to 4, 0xF8 to 4)
+        hgss -> listOf(0 to 1, 1 to 1, 2 to 1)
+        else -> listOf(0 to 1, 1 to 1, 2 to 1, 3 to 1, 4 to 1)
+    }
 
     /** The loaded table: where it is in RAM and the ROM's bytes for it (that season's, for Gen 5). */
     private class Table(val at: Int, val rom: ByteArray)
@@ -67,13 +77,14 @@ class NdsEncounters(private val rom: NdsRom, private val game: NdsFeed.Game) {
         if (id < 0) return null
         val file = files?.getOrNull(id) ?: return null
         // the candidates: the whole file (Platinum), or each season's 232 bytes (Gen 5)
-        val parts = if (platinum) listOf(file) else (0 until file.size / GEN5_SEASON).map {
+        val parts = if (!gen5) listOf(file) else (0 until file.size / GEN5_SEASON).map {
             file.copyOfRange(it * GEN5_SEASON, (it + 1) * GEN5_SEASON)
         }
         for (part in parts) {
             val skip = if (platinum) 4 else 8                     // after the rates (which may be 0 already)
-            if (part.size < skip + KEY_BYTES) continue
-            val key = part.copyOfRange(skip, skip + KEY_BYTES)
+            val keyBytes = if (hgss) part.size - skip else KEY_BYTES
+            if (keyBytes <= 0 || part.size < skip + keyBytes) continue
+            val key = part.copyOfRange(skip, skip + keyBytes)
             if (key.all { it.toInt() == 0 }) continue             // an empty table matches anywhere: never write it
             if (foundKey?.contentEquals(key) == true && matches(ram, foundAt + skip, key)) return Table(foundAt, part)
             val i = indexOf(ram, key)
@@ -94,6 +105,13 @@ class NdsEncounters(private val rom: NdsRom, private val game: NdsFeed.Game) {
             val o = PT_HEADERS - NdsMons.RAM_BASE + zone * 24 + 0x0E
             if (o < 0 || o + 2 > ram.size) return -1
             u16(ram, o).takeIf { it != 0xFFFF } ?: return -1
+        } else if (hgss) {
+            if (zone >= HGSS_MAPS) return -1
+            val o = HGSS_HEADERS - NdsMons.RAM_BASE + zone * 24
+            if (o < 0 || o + 24 > ram.size) return -1
+            // HeartGold's table is taken to sit where SoulSilver's does: an entry without music ids isn't one
+            if (u16(ram, o + 0x0C) !in 1000..1300 || u16(ram, o + 0x0E) !in 1000..1300) return -1
+            (ram[o].toInt() and 0xFF).takeIf { it != 0xFF } ?: return -1
         } else {
             val z = gen5Zones ?: return -1
             val o = zone * 48 + 0x14
@@ -126,6 +144,8 @@ class NdsEncounters(private val rom: NdsRom, private val game: NdsFeed.Game) {
         private const val PT_ENC = "fielddata/encountdata/pl_enc_data.narc"
         private const val PT_HEADERS = 0x020E601C
         private const val PT_MAPS = 593
+        private const val HGSS_HEADERS = 0x020F6BE0
+        private const val HGSS_MAPS = 540
         private const val GEN5_SEASON = 232
         /** How many bytes after the rates must match: Platinum's twelve grass slots (96 B), Gen 5's twelve (48 B). */
         private const val KEY_BYTES = 48

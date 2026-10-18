@@ -464,4 +464,40 @@ class NdsMonsTest {
         assertEquals(0xFF, NdsFeed.badges(ss!!, hgss))
         assertEquals(true, NdsFeed.state(p, pt)!!.getString("flags").endsWith("ff"))
     }
+
+    @Test
+    fun soulSilverRepelAndBalls() {
+        // field before a Repel (5 poked into the bag), the Repel just used, a bike ride on; the bag's balls: one Master
+        val dumps = listOf("ssr1", "ssr2", "ssr3").map { dump("$it.bin") }
+        assumeTrue("no SoulSilver repel dumps", dumps.all { it != null })
+        val game = NdsFeed.gameFor(File.createTempFile("hgss", ".nds").apply { deleteOnExit(); writeBytes(ByteArray(12) + "IPGE".toByteArray()) })!!
+        assertEquals(listOf(0, 100, 77), dumps.map { NdsFeed.repelSteps(it!!, game) })
+        val ram = dumps[0]!!
+        val o = NdsFeed.bagAddr(ram, game) - NdsMons.RAM_BASE
+        assertEquals(listOf(1, 1, 0), listOf(o, o + 2, o + 4).map { (ram[it].toInt() and 0xFF) or ((ram[it + 1].toInt() and 0xFF) shl 8) })
+        assertEquals(null, NdsShortcuts.bestBall(ram, NdsFeed.bagAddr(ram, game), game.bagSlots))   // a Master is never thrown
+    }
+
+    @Test
+    fun soulSilverEncounterRatesGoToZeroAndBack() {
+        // SoulSilver in a town by the water (map 56, encounter file 100: surf only, so no grass slots to match on)
+        val ss = rom("Pokémon SoulSilver Version.nds")
+        val ram = dump("ssr3.bin")
+        assumeTrue("no SoulSilver ROM / dump", ss != null && ram != null)
+        val game = NdsFeed.gameFor(File.createTempFile("hgss", ".nds").apply { deleteOnExit(); writeBytes(ByteArray(12) + "IPGE".toByteArray()) })!!
+        val copy = ram!!.copyOf()
+        val write = { a: Int, bytes: ByteArray -> System.arraycopy(bytes, 0, copy, a - NdsMons.RAM_BASE, bytes.size); true }
+        val enc = NdsEncounters(ss!!, game)
+        assertEquals(true, enc.supported)
+        val zone = NdsFeed.zone(copy, game)
+        assertEquals(56, zone)
+        fun rates() = (0 until 6).map { copy[0x2A1CA0 + it].toInt() and 0xFF }
+        assertEquals(listOf(0, 15, 0, 25, 50, 75), rates())
+        assertEquals(true, enc.block(copy, zone, write))
+        assertEquals(listOf(0, 0, 0, 25, 50, 75), rates())                // the rods kept
+        assertEquals(true, enc.block(copy, zone, write))
+        enc.restore(copy, zone, write)
+        assertEquals(listOf(0, 15, 0, 25, 50, 75), rates())
+        assertEquals(0, ram.indices.count { ram[it] != copy[it] })
+    }
 }

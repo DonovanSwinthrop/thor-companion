@@ -104,6 +104,11 @@ object NdsFeed {
     private const val HGSS_FLAGS = 0x10D4
     /** Johto's badges, a bit each: the same trainer card layout as Platinum's (0xFF on a finished save, ss_field1). */
     private const val HGSS_BADGES = 0x8E
+    /** The Poké Balls pocket (PKHeX's 0xD04 + the header; 24 slots): ss_field1's Master Ball in slot 0, Berries before it. */
+    private const val HGSS_BALLS = 0xD14
+    private const val HGSS_BALL_SLOTS = 24
+    /** The repel's steps left (a byte): a Repel set it 0 -> 100, a bike ride took it to 77 (ssr1 / 2 / 3). */
+    private const val HGSS_REPEL = 0x6919
 
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
@@ -155,8 +160,8 @@ object NdsFeed {
                 trainerFlags = GEN4_TRAINER_FLAGS)
             code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,
                 trainerFlags = GEN4_TRAINER_FLAGS)
-            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, flags = HGSS_FLAGS, badges = HGSS_BADGES, base = HGSS_BASE, gen4 = true,
-                tid = HGSS_TID, trainerFlags = GEN4_TRAINER_FLAGS)
+            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, flags = HGSS_FLAGS, badges = HGSS_BADGES, bag = HGSS_BALLS, repel = HGSS_REPEL,
+                base = HGSS_BASE, gen4 = true, tid = HGSS_TID, bagSlots = HGSS_BALL_SLOTS, trainerFlags = GEN4_TRAINER_FLAGS)
             else -> null
         }
     }
