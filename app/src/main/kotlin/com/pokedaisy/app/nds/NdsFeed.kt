@@ -27,6 +27,12 @@ object NdsFeed {
     /** Where [game]'s bag pocket for balls is now (an address for Gen 5, an offset from [Game.base] for Gen 4). */
     fun bagAddr(ram: ByteArray, game: Game): Int = if (game.bag == 0) 0 else game.bag + baseOf(ram, game)
 
+    /** [game]'s current map number (the zone), or -1 before a save is loaded. */
+    fun zone(ram: ByteArray, game: Game): Int {
+        val o = zoneAddr(ram, game) - NdsMons.RAM_BASE
+        return if (o < 0 || o + 2 > ram.size) -1 else (ram[o].toInt() and 0xFF) or ((ram[o + 1].toInt() and 0xFF) shl 8)
+    }
+
     /** Where [game]'s current map number is now; 0 if the save isn't loaded. */
     fun zoneAddr(ram: ByteArray, game: Game): Int = game.zone + baseOf(ram, game)
 
@@ -54,6 +60,8 @@ object NdsFeed {
      *  100% save's own bag, Poké / Premier / Nest / Great / Quick / Master (pt_wild3). */
     private const val PT_BALLS = 0xD00
     private const val PT_BALL_SLOTS = 15
+    /** The repel's steps left (a byte in the save block): a Repel set it to 100, ten steps took it to 89 (pt_rep1 / 2). */
+    private const val PT_REPEL = 0x8087
 
     /**
      * Gen 4 games whose battle screen the shortcuts were checked on: Platinum's RUN, BAG, POKé BALLS, the six ball slots,
@@ -119,8 +127,8 @@ object NdsFeed {
             code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
-            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, bag = PT_BALLS, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
-            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, bag = PT_BALLS, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
+            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
+            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
             code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, base = HGSS_BASE, gen4 = true, tid = HGSS_TID)
             else -> null
         }
@@ -206,9 +214,15 @@ object NdsFeed {
         return wild(ram, game, sides(ram, game, party), party)
     }
 
+    /** Where [game]'s repel step counter (a byte) is now: an address for Gen 5, an offset from [Game.base] for Gen 4. */
+    fun repelAddr(ram: ByteArray, game: Game): Int = if (game.repel == 0) 0 else game.repel + baseOf(ram, game)
+
     /** Steps left on [game]'s repel (0: none, or not mapped). */
-    fun repelSteps(ram: ByteArray, game: Game): Int =
-        if (game.repel == 0) 0 else ram[game.repel - NdsMons.RAM_BASE].toInt() and 0xFF
+    fun repelSteps(ram: ByteArray, game: Game): Int {
+        val a = repelAddr(ram, game)
+        val o = a - NdsMons.RAM_BASE
+        return if (a == 0 || o < 0 || o >= ram.size) 0 else ram[o].toInt() and 0xFF
+    }
 
     /** [game]'s badges as a bit field (0 where they aren't mapped). */
     fun badges(ram: ByteArray, game: Game): Int =
