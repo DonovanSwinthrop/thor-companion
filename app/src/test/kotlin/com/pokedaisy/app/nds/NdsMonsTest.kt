@@ -423,4 +423,17 @@ class NdsMonsTest {
         val t = town!!.copyOf()
         assertEquals(false, enc.block(t, NdsFeed.zone(t, game)) { _, _ -> error("wrote to a town") })
     }
+
+    @Test
+    fun gen4BadgesOnFinishedSaves() {
+        // both saves have every badge; the byte follows the trainer card's money
+        val pt = NdsFeed.Game("pt", 0xB4, 0x1294, badges = 0x96, base = 0x02101D40, gen4 = true, tid = 0x8C)
+        val hgss = NdsFeed.Game("hgss", 0xA8, 0x1244, badges = 0x8E, base = 0x02111880, gen4 = true, tid = 0x84)
+        val p = dump("pt_out.bin")
+        val ss = dump("ss_field1.bin")
+        assumeTrue("no Platinum / SoulSilver dumps", p != null && ss != null)
+        assertEquals(0xFF, NdsFeed.badges(p!!, pt))
+        assertEquals(0xFF, NdsFeed.badges(ss!!, hgss))
+        assertEquals(true, NdsFeed.state(p, pt)!!.getString("flags").endsWith("ff"))
+    }
 }

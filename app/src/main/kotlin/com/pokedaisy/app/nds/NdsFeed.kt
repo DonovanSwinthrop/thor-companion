@@ -62,6 +62,8 @@ object NdsFeed {
     private const val PT_BALL_SLOTS = 15
     /** The repel's steps left (a byte in the save block): a Repel set it to 100, ten steps took it to 89 (pt_rep1 / 2). */
     private const val PT_REPEL = 0x8087
+    /** The badges, a bit each (gym order): the trainer card's byte after the money (0xFF on a finished save, pt_out). */
+    private const val PT_BADGES = 0x96
 
     /**
      * Gen 4 games whose battle screen the shortcuts were checked on: Platinum's RUN, BAG, POKé BALLS, the six ball slots,
@@ -80,6 +82,8 @@ object NdsFeed {
     private const val HGSS_ZONE = 0x1244
     /** The player's trainer ID: SoulSilver's six party Pokémon all carry it (ss_field1). */
     private const val HGSS_TID = 0x84
+    /** Johto's badges, a bit each: the same trainer card layout as Platinum's (0xFF on a finished save, ss_field1). */
+    private const val HGSS_BADGES = 0x8E
 
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
@@ -127,9 +131,9 @@ object NdsFeed {
             code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
-            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
-            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
-            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, base = HGSS_BASE, gen4 = true, tid = HGSS_TID)
+            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
+            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
+            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, badges = HGSS_BADGES, base = HGSS_BASE, gen4 = true, tid = HGSS_TID)
             else -> null
         }
     }
@@ -226,7 +230,10 @@ object NdsFeed {
 
     /** [game]'s badges as a bit field (0 where they aren't mapped). */
     fun badges(ram: ByteArray, game: Game): Int =
-        if (game.badges == 0) 0 else ram[game.badges - NdsMons.RAM_BASE].toInt() and 0xFF
+        badgesAddr(ram, game).let { a -> if (a == 0 || a - NdsMons.RAM_BASE !in ram.indices) 0 else ram[a - NdsMons.RAM_BASE].toInt() and 0xFF }
+
+    /** Where [game]'s badge byte is now: an address for Gen 5, an offset from [Game.base] for Gen 4; 0 if not mapped. */
+    fun badgesAddr(ram: ByteArray, game: Game): Int = if (game.badges == 0) 0 else game.badges + baseOf(ram, game)
 
     private fun hex(ram: ByteArray, off: Int, len: Int) = buildString(len * 2) {
         for (i in off until off + len) append("%02x".format(ram[i].toInt() and 0xFF))
@@ -257,7 +264,7 @@ object NdsFeed {
             .put("battlersDec", bat)
             // unmapped flags: nothing counts as beaten, so Next starts at the first fight
             .put("flags", (if (game.flags != 0) hex(ram, game.flags - NdsMons.RAM_BASE, FLAG_BYTES) else "00".repeat(FLAG_BYTES)) +
-                (if (game.badges != 0) hex(ram, game.badges - NdsMons.RAM_BASE, 1) else "00"))
+                "%02x".format(badges(ram, game)))
             .put("trainerA", 0).put("trainerB", 0).put("mode", 0).put("outcome", 0)
     }
 }
