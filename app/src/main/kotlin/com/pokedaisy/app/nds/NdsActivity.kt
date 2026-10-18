@@ -300,6 +300,7 @@ class NdsActivity : Activity() {
             val before = frames
             if (com.pokedaisy.app.BuildConfig.DEBUG && (before + 1) / 60 != (before - (if (ff) FF_FRAMES - 1 else 0)) / 60) { debugDump(); debugPoke() }
             if ((before + 1) / FEED_EVERY != (before - (if (ff) FF_FRAMES - 1 else 0)) / FEED_EVERY) feed()
+            if (infiniteRepel && (before + 1) / ENC_EVERY != (before - (if (ff) FF_FRAMES - 1 else 0)) / ENC_EVERY) blockEncounters()
             if (++frames - lastFlush >= 600) {
                 NdsCore.flushSave()   // every ~10 s of game, between frames
                 val now = System.nanoTime()
@@ -320,6 +321,17 @@ class NdsActivity : Activity() {
     /** Each move's base PP, from the ROM's own move table (HEAL PARTY fills PP with it); null if it can't be read. */
     private val movePp by lazy { runCatching { NdsRom(rom).movePp() }.getOrNull() }
 
+    /** INFINITE REPEL's no-wild-encounters part (Platinum, Black, White and their hacks): see [NdsEncounters]. Null where it can't. */
+    private val enc by lazy { feedGame?.let { g -> runCatching { NdsEncounters(NdsRom(rom), g) }.getOrNull()?.takeIf { it.supported } } }
+
+    /** Keeps the current map's wild encounter rates at 0 (a fresh map reloads them, so every few frames, not just with the feed). */
+    private fun blockEncounters() {
+        val game = feedGame ?: return
+        val e = enc ?: return
+        if (!NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
+        runCatching { e.block(feedRam, NdsFeed.zone(feedRam, game), NdsCore::writeRam) }
+    }
+
     /** The RUN tab's state, twice a second (emu thread, between frames). */
     private fun feed() {
         val game = feedGame ?: return
@@ -327,7 +339,9 @@ class NdsActivity : Activity() {
         wildBattle = runCatching { NdsFeed.wildBattle(feedRam, game) }.getOrDefault(false)
         // INFINITE REPEL: never let the steps run low (the game then never asks to use another)
         if (infiniteRepel && game.repel != 0 && NdsFeed.repelSteps(feedRam, game) < REPEL_TOP / 2) {
-            NdsCore.writeRam(game.repel, byteArrayOf(REPEL_TOP.toByte()))
+            // Gen 4's counter moves with the save block (an offset): resolve it from RAM, skip the write if it isn't loaded
+            val at = NdsFeed.repelAddr(feedRam, game)
+            if (at != 0) NdsCore.writeRam(at, byteArrayOf(REPEL_TOP.toByte()))
         }
         runCatching { NdsFeed.state(feedRam, game) }.getOrNull()?.let { com.pokedaisy.app.companion.RrOverlay.postDecoded(it) }
     }
@@ -467,7 +481,7 @@ class NdsActivity : Activity() {
             NdsMenuItem.HEAL_PARTY -> feedGame != null
             // the shortcuts need the battle and the bag mapped (Gen 5 so far)
             NdsMenuItem.SHORTCUTS -> (feedGame?.bag ?: 0) != 0
-            NdsMenuItem.REPEL -> (feedGame?.repel ?: 0) != 0
+            NdsMenuItem.REPEL -> (feedGame?.repel ?: 0) != 0 || enc != null
             // Gen 5 keeps the nature in its own byte; Gen 4's is the PID (not yet)
             NdsMenuItem.NATURE -> feedGame != null
             else -> true
@@ -523,6 +537,12 @@ class NdsActivity : Activity() {
             NdsMenuItem.REPEL -> {
                 infiniteRepel = !infiniteRepel
                 Prefs(this).setInfiniteRepel(rom.name, infiniteRepel)
+                // switched off: the map's own encounter rates come back (the emulation is parked while the menu is open)
+                val game = feedGame
+                val e = enc
+                if (!infiniteRepel && game != null && e != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
+                    runCatching { e.restore(feedRam, NdsFeed.zone(feedRam, game), NdsCore::writeRam) }
+                }
             }
             NdsMenuItem.SHORTCUTS -> {
                 shortcuts = !shortcuts
@@ -560,6 +580,7 @@ class NdsActivity : Activity() {
         private const val FF_FRAMES = 4
         /** Frames between RUN tab updates (twice a second). */
         private const val FEED_EVERY = 30L
+        private const val ENC_EVERY = 8L
 
         /** INFINITE REPEL's top-up: a Max Repel's steps, rewritten once half are walked. */
         private const val REPEL_TOP = 250
