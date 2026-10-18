@@ -55,7 +55,7 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [ ] Unbound live battle on a real fight (the battle dump had no foe)
   - [x] Unbound Items tab (843 item balls / hidden items / gifts from the ROM's map data; a search, no "by now" yet) and Dex tab (stats, abilities,
         egg groups, evolutions, level-up moves from the ROM; checked in a browser)
-  - [ ] Unbound Dex: TM / tutor / egg moves, move accuracy / PP / descriptions, ability descriptions; "by now" for Items (bosses carry no area);
+  - [ ] Unbound Dex (TM / tutor / egg compat tables not located: a vanilla TM list is left at 0x0845A5A4 but Unbound's has 96+ TMs; needs CanMonLearnTMHM's code or the FireRed literal-pool trick): TM / tutor / egg moves, move accuracy / PP / descriptions, ability descriptions; "by now" for Items (bosses carry no area);
         answers trained to the cap
 - [x] Emerald Imperium 1.3.1 (docs zip on hand)
   - [x] Decoded feed: the app sends PokeDaisy's own decoding (party, foes, battlers, flags) for the expansion games,
@@ -116,6 +116,12 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
         Renegade Platinum, HeartGold, SoulSilver (new PID keeping gender / ability / shininess); checked in the game's own summary
         on Platinum and SoulSilver
   - [x] DS HEAL PARTY waits for Gen 4 battles too (NdsFeed.inBattle)
+  - [x] Gen 4 gym badges in the feed (Platinum base+0x96, HGSS Johto base+0x8E; Claude A) and doneFlags for the gym leaders in the pt / rp / hgss packs
+        (badge n = flag 3072 + n; HGSS in game order, Jasmine before Pryce): the RUN tab's Next follows the badges (checked in a browser with fed
+        badge bytes: Platinum Roark -> Gardenia -> Fantina ... -> Elite Four; SoulSilver Falkner ... Jasmine, Pryce, Clair, Janine)
+  - [x] DS battle shortcuts in Platinum / Renegade Platinum (R run, L best ball with the bag resolved from RAM; Claude A + B)
+  - [x] INFINITE REPEL blocks every wild encounter (Platinum, Black / White and hacks: NdsEncounters), Platinum's step counter by offset; NOT live-tested yet
+  - [ ] Kanto badges for HGSS Next; Black / Blaze Black trainer flags
   - [x] Overlay fixes (outside git): Next tab no longer crashes when no starter is owned; team-helper names in full; damage over 999% shows 999+;
         Team page says the PC isn't read on DS games
   - [x] Five tests that only failed on a Windows checkout fixed (File.renameTo over an existing file in SaveBackups / LibraryOrder /
