@@ -92,10 +92,12 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
       gyms / Elite Four / Iris with Redux's Normal caps, Hugh's battles by your starter, Colress / Bianca / Ghetsis
 - [x] RUN button on the touch screen (bottom right): the RUN tab over the DS touch screen, BACK to return. Checked on
       the test device with Black 2 RAM: live wild battle (damage, turn order), Route 19's table, dupes, met places
-- [ ] DS trainer-beaten flags / badge count (Next starts at the first fight until then): needs one dump right after
-      beating a single trainer, and one after a gym
-- [ ] Packs for plain Black 2, Platinum / Renegade Platinum, HGSS / Sterling Silver (Gen 4 readers: party address,
-      battle blocks, zone), Black / Blaze Black
+- [x] DS trainer-beaten flags / badge count for Black 2 / BB2R (see below); [ ] still to do for Black / Blaze Black and Gen 4
+- [x] DS player reads the party and map in Black, Blaze Black (party 0x022349B4, zone +0x6FC; zone seen only at the Gear Station),
+      Platinum / Renegade Platinum (save pointer 0x02101D40) and HeartGold / SoulSilver (0x02111880); RUN tab pages checked
+      on all five (screenshots in thor-companion-SCREENS); Gen 4 battles in the RUN tab: Claude A's commit 3f2e73a, checked
+      on a wild Platinum battle
+- [ ] Sterling Silver pack (both ROMs on E: are plain SoulSilver)
 - [x] The DS RUN button no longer translates as "flee" (own label key RUN TAB)
 - [x] Plain Black 2 pack (packs/gen5, same builder; caps from its own leaders)
 - [x] Black / Blaze Black packs `b1` / `bbk` (packs/gen5, same builder): bosses, caps, rivals, names, zones, wild tables (BW1's zone table is Black 2's: wild +0x14, place +0x1A; Route 1 = zone 317). DS player needs IRBO detection first
@@ -108,7 +110,15 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [x] DS BATTLE SHORTCUTS: R runs from wild battles (taps the game's RUN), L = best ball, both checked in Black 2 on the emulator
   - [x] Black 2 / BB2R RUN tab Next follows the game: trainer flags (1488 + id, 0x02225846) and gym leaders by badge (0x022266E8)
   - [x] DS INFINITE REPEL (Black 2 / BB2R), checked in the emulator; auto-run parked (no reliable field flag)
-  - [x] DS NATURE: change a party Pokemon's nature, stats recomputed (Black 2 / BB2R; Gen 4 needs a PID change, not yet)
+  - [x] DS NATURE: change a party Pokemon's nature, stats recomputed: Black, Blaze Black, Black 2, BB2R (nature byte), Platinum,
+        Renegade Platinum, HeartGold, SoulSilver (new PID keeping gender / ability / shininess); checked in the game's own summary
+        on Platinum and SoulSilver
+  - [x] DS HEAL PARTY waits for Gen 4 battles too (NdsFeed.inBattle)
+  - [x] Overlay fixes (outside git): Next tab no longer crashes when no starter is owned; team-helper names in full; damage over 999% shows 999+;
+        Team page says the PC isn't read on DS games
+  - [x] Five tests that only failed on a Windows checkout fixed (File.renameTo over an existing file in SaveBackups / LibraryOrder /
+        BestEffortStore; CRLF in PerformanceGuards / SiteDataExport tests)
+  - [x] Manual: DS RUN tab section, NATURE for all eight games
 - [x] GBA QUICK MENU HEAL tile: full HP + no status, outside a battle (PartyHeal; not R.O.W.E. / Quetzal layouts)
 - [ ] GBA extras still to do: change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist); HEAL to check in a real game
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
