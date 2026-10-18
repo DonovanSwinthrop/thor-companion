@@ -52,7 +52,9 @@ object NdsMons {
     /** A battler: the live numbers, plus the battle's copy of the Pokémon. */
     class Battler(val species: Int, val hp: Int, val maxHp: Int, val ability: Int, val level: Int, val mon: Mon?,
                   /** The block's address the battle's party arrays point at. */
-                  val addr: Long)
+                  val addr: Long,
+                  /** Gen 4: stat stages atk, def, spe, spa, spd, accuracy, evasion (-6..+6); null where not read. */
+                  val stages: IntArray? = null)
 
     /** Both sides' battlers, each side's Pokémon on the field first. */
     class Sides(val player: List<Battler>, val foe: List<Battler>)
@@ -344,6 +346,96 @@ object NdsMons {
             o += 4
         }
         return side
+    }
+
+    /**
+     * Gen 4's battlers. The battle keeps a plain block per battle slot ([GEN4_BATTLER_BYTES] apart; slots 0 and 2 are
+     * yours, 1 and 3 the foe's, so the Pokémon on the field are the slots themselves): species +0, attack / defense /
+     * speed / sp. atk / sp. def u16 +2, moves +0x0C, IVs +0x14, stat stages +0x18 (8 bytes, 6 = unchanged; index 0
+     * unused), ability +0x27, PP +0x2C, level +0x34, HP u32 +0x4C, max HP u32 +0x50, PID +0x68, OT ID +0x74.
+     * No label marks them, so a party Pokémon's species followed by its five battle stats finds its block (the
+     * stats are the party's own until a level-up). Checked on Platinum (US) wild battles: a hit took the foe's HP
+     * from 56 to 55 at +0x4C, Intimidate and a stat-lowering move moved +0x19. The full Pokémon (item, nature, EVs)
+     * comes from the record whose PID the block names. Empty outside a battle (see [gen4BlockValid]).
+     */
+    fun gen4Sides(ram: ByteArray, party: List<Mon>): Sides {
+        val pids = party.map { it.pid }.toSet()
+        var slot0 = -1
+        search@ for (m in party) {
+            val st = m.stats ?: continue
+            val pat = ByteArray(12)
+            put16(pat, 0, m.species)
+            for (k in 0 until 5) put16(pat, 2 + 2 * k, st[1 + k])
+            var i = indexOf(ram, pat, 0)
+            while (i >= 0) {
+                if (gen4BlockValid(ram, i) && u32(ram, i + 0x68) in pids) {
+                    // this one may be slot 2 of a double battle: then slot 0 is two blocks back
+                    val back = i - 2 * GEN4_BATTLER_BYTES
+                    slot0 = if (back >= 0 && gen4BlockValid(ram, back) && u32(ram, back + 0x68) in pids) back else i
+                    break@search
+                }
+                i = indexOf(ram, pat, i + 1)
+            }
+        }
+        if (slot0 < 0) return Sides(emptyList(), emptyList())
+        val slots = (0 until 4).map { k -> slot0 + k * GEN4_BATTLER_BYTES }
+            .map { o -> if (o + GEN4_BATTLER_BYTES <= ram.size && gen4BlockValid(ram, o)) gen4Battler(ram, o) else null }
+        return Sides(listOfNotNull(slots[0], slots[2]), listOfNotNull(slots[1], slots[3]))
+    }
+
+    const val GEN4_BATTLER_BYTES = 0xC0
+
+    /** A plausible battle block at [o]: a species, a level, HP within its max. */
+    private fun gen4BlockValid(ram: ByteArray, o: Int): Boolean {
+        if (o < 0 || o + GEN4_BATTLER_BYTES > ram.size) return false
+        val species = u16(ram, o)
+        val level = ram[o + 0x34].toInt() and 0xFF
+        val hp = u32(ram, o + 0x4C)
+        val max = u32(ram, o + 0x50)
+        return species in 1..493 && level in 1..100 && max in 1L..999L && hp <= max
+    }
+
+    private fun gen4Battler(ram: ByteArray, o: Int): Battler {
+        val pid = u32(ram, o + 0x68)
+        val species = u16(ram, o)
+        val level = ram[o + 0x34].toInt() and 0xFF
+        val hp = u32(ram, o + 0x4C).toInt()
+        val max = u32(ram, o + 0x50).toInt()
+        val ability = ram[o + 0x27].toInt() and 0xFF
+        val moves = IntArray(4) { u16(ram, o + 0x0C + 2 * it) }
+        val pp = IntArray(4) { ram[o + 0x2C + it].toInt() and 0xFF }
+        val stats = intArrayOf(max, u16(ram, o + 2), u16(ram, o + 4), u16(ram, o + 6), u16(ram, o + 8), u16(ram, o + 0x0A))
+        val stages = IntArray(7) { (ram[o + 0x19 + it].toInt() and 0xFF) - 6 }
+        // the full record (item, nature, EVs, where it was met) by its PID; the block's live numbers win
+        val rec = gen4Record(ram, pid, species)
+        val ivWord = u32(ram, o + 0x14)
+        val mon = Mon(
+            pid = pid, species = species, item = rec?.item ?: 0, otId = u16(ram, o + 0x74), ability = ability,
+            nature = (pid % 25).toInt(), moves = moves, pp = pp,
+            ivs = IntArray(6) { ((ivWord ushr (5 * it)) and 31).toInt() }, evs = rec?.evs ?: IntArray(6),
+            isEgg = false, metLocation = rec?.metLocation ?: 0, metLevel = rec?.metLevel ?: 0,
+            level = level, hp = hp, maxHp = max, stats = stats, status = rec?.status ?: 0,
+        )
+        return Battler(species, hp, max, ability, level, mon, RAM_BASE.toLong() + o, stages)
+    }
+
+    /** The party-format record with [pid] and [species] anywhere in RAM, or null. */
+    private fun gen4Record(ram: ByteArray, pid: Long, species: Int): Mon? {
+        if (pid == 0L) return null
+        val pat = ByteArray(4)
+        put16(pat, 0, (pid and 0xFFFF).toInt())
+        put16(pat, 2, ((pid ushr 16) and 0xFFFF).toInt())
+        var i = indexOf(ram, pat, 0)
+        while (i >= 0) {
+            if (i % 4 == 0) decode(ram, i, gen4 = true)?.takeIf { it.species == species }?.let { return it }
+            i = indexOf(ram, pat, i + 1)
+        }
+        return null
+    }
+
+    private fun put16(b: ByteArray, o: Int, v: Int) {
+        b[o] = v.toByte()
+        b[o + 1] = (v ushr 8).toByte()
     }
 
     private fun indexOf(hay: ByteArray, needle: ByteArray, from: Int): Int {
