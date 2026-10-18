@@ -24,8 +24,12 @@ The first time you open it, it asks how you're playing (see below).
 - **Battle**: in a battle, both sides' Pokémon with their items and abilities, the turn order, and a table of what every move does both ways. In a double battle it warns you when both foes together could knock one of yours out. Outside a battle, **Future bosses** shows every fight still ahead.
 - **Next**: your next required fight, its team, your level cap, and your best answer to each of its Pokémon, trained to the cap. **Theory craft** lets you try any of your Pokémon against it.
 - **Team**: your party and boxes, and the team helper (below).
-- **Dex**, **Items** (Radical Red only): every Pokémon's data, and where to find items, TMs and tutors.
+- **Dex**, **Items** (Radical Red and Unbound): every Pokémon's data, and where to find items, TMs and tutors. In Unbound the Dex shows stats, abilities, egg groups, evolutions and the moves a Pokémon learns by levelling, and Items lists every item ball, hidden item and gift, searchable by name.
 - **Lines**: a turn by turn plan for the fight you're in. It's off until you ask for it, so it never spoils a fight you want to work out yourself.
+
+## How it looks
+
+The tab comes in two styles, picked in its settings under `THEME`. `Pixel` (the default) draws every page as a chunky pixel window with the app's own pixel font, and has seven palettes to choose from: Platinum, Night, Black, Navy, Purple, Teal and Bright. `Classic` is the smooth dark look the tab started with, with its own colour themes. In both you can set your own `Accent colour`, and `Palette's own` (or `Theme's own`) puts it back. Your choice switches at once and is remembered.
 
 ## Nuzlocke or playthrough
 
