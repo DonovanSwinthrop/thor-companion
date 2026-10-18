@@ -12,7 +12,7 @@ import java.io.File
 class PerformanceGuardsTest {
     private val src = listOf(File("src/main/kotlin"), File("app/src/main/kotlin")).first { it.isDirectory }
     private val appDir = File(src, "com/pokedaisy/app")
-    private fun read(path: String) = File(appDir, path).readText()
+    private fun read(path: String) = File(appDir, path).readText().lines().joinToString("\n")   // a Windows checkout's autocrlf
     private fun kotlinFiles() = src.walkTopDown().filter { it.isFile && it.extension == "kt" }
 
     @Test

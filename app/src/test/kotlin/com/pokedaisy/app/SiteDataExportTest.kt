@@ -164,7 +164,7 @@ class SiteDataExportTest {
         assertTrue("${out.path} is missing - run with UPDATE_SITE_DATA=1", out.isFile)
         assertEquals(
             "${out.path} is stale: UPDATE_SITE_DATA=1 ./gradlew :app:testDebugUnitTest --tests '*SiteDataExportTest'",
-            json, out.readText(),
+            json, out.readText().lines().joinToString("\n"),   // a Windows checkout's autocrlf
         )
     }
 }

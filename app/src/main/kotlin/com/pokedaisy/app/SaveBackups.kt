@@ -38,7 +38,9 @@ object SaveBackups {
         val out = File(dir, "${save.nameWithoutExtension}.backup-$stamp.${save.extension}")
         val tmp = File(dir, "${out.name}.tmp")
         tmp.writeBytes(bytes)
-        if (!tmp.renameTo(out)) { tmp.delete(); return null }
+        // two backups in one second share a name: replace explicitly (File.renameTo refuses on Windows, overwrites elsewhere)
+        val moved = runCatching { java.nio.file.Files.move(tmp.toPath(), out.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }.isSuccess
+        if (!moved) { tmp.delete(); return null }
         (listOf(out) + existing).drop(KEEP).forEach { it.delete() }
         out
     }.onFailure { Log.w("pokedaisy", "save backup failed: $it") }.getOrNull()

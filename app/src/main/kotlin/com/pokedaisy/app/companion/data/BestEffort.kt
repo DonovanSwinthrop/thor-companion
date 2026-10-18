@@ -589,7 +589,7 @@ object BestEffortStore {
             tmp.writeText(entries.values.joinToString("") { e ->
                 "${e.sha1}\t${e.id}\t${if (e.full) "FULL" else "PARTIAL"}\t${e.off.joinToString(",") { it.name }}\t${e.source.name}\t${if (e.verified) 1 else 0}\n"
             })
-            tmp.renameTo(f)
+            runCatching { java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }   // File.renameTo won't replace a file on Windows
         }
     }
 

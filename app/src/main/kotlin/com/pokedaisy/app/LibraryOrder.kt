@@ -70,7 +70,7 @@ object RomAdded {
             val f = file(context)
             val tmp = File(f.parentFile, "${f.name}.tmp")
             tmp.writeText(entries.entries.joinToString("") { (path, e) -> "$path\t${e.millis}\t${if (e.initial) 1 else 0}\n" })
-            tmp.renameTo(f)
+            runCatching { java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }   // File.renameTo won't replace a file on Windows
         }
     }
 }
