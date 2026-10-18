@@ -19,13 +19,22 @@ object NdsFeed {
                /** Gen 4: the player's own trainer ID, an offset from [base] (0: use the party's IDs). */
                val tid: Int = 0,
                /** How many slots the pocket at [bag] has (Gen 5: the items pocket; Gen 4: the Poké Balls pocket). */
-               val bagSlots: Int = 310)
+               val bagSlots: Int = 310,
+               /** Trainer N is beaten when event flag [trainerFlags] + N is set. */
+               val trainerFlags: Int = TRAINER_FLAG_BASE)
 
     /** Where [game]'s party is now (its count is the u32 before it); 0 if the save isn't loaded. */
     fun partyAddr(ram: ByteArray, game: Game): Int = game.party + baseOf(ram, game)
 
     /** Where [game]'s bag pocket for balls is now (an address for Gen 5, an offset from [Game.base] for Gen 4). */
     fun bagAddr(ram: ByteArray, game: Game): Int = if (game.bag == 0) 0 else game.bag + baseOf(ram, game)
+
+    /** Where [game]'s event flags are now (an address for Gen 5, an offset from [Game.base] for Gen 4); 0 if unknown. */
+    fun flagsAddr(ram: ByteArray, game: Game): Int {
+        if (game.flags == 0) return 0
+        val a = game.flags + baseOf(ram, game)
+        return if (a - NdsMons.RAM_BASE in 0..ram.size - FLAG_BYTES) a else 0
+    }
 
     /** [game]'s current map number (the zone), or -1 before a save is loaded. */
     fun zone(ram: ByteArray, game: Game): Int {
@@ -56,6 +65,15 @@ object NdsFeed {
     private const val PT_ZONE = 0x1294
     /** The player's trainer ID (u16, SID after it): found beside the party in Platinum's save block (pt_wild1 / pt_out). */
     private const val PT_TID = 0x8C
+    /**
+     * Platinum's event flags (pokeplatinum's VarsFlags, 2912 bits; the general block's 0xFEC, as PKHeX has it). Trainer
+     * N is beaten when flag 0x550 + N is set (pokeheartgold's TRAINER_FLAG_BASE, the same here). Checked on a finished
+     * save: the journal's "Beat Allison at Route 212" (trainer 96, rematches 736-738) set; the scripted fights (gym
+     * leaders, the rival, Galactic, Elite Four, Champion) never set theirs, so those blocks of ids read 0 among set
+     * neighbours. The packs follow the bosses by badges instead.
+     */
+    private const val PT_FLAGS = 0x1000
+    private const val GEN4_TRAINER_FLAGS = 0x550
     /** The Poké Balls pocket (u16 item, u16 count; the battle bag's POKé BALLS page lists it in this order): found by a
      *  100% save's own bag, Poké / Premier / Nest / Great / Quick / Master (pt_wild3). */
     private const val PT_BALLS = 0xD00
@@ -82,6 +100,8 @@ object NdsFeed {
     private const val HGSS_ZONE = 0x1244
     /** The player's trainer ID: SoulSilver's six party Pokémon all carry it (ss_field1). */
     private const val HGSS_TID = 0x84
+    /** HeartGold / SoulSilver's event flags (PKHeX's 0x10C4 + the 0x10 header): same rule as [PT_FLAGS], same pattern. */
+    private const val HGSS_FLAGS = 0x10D4
     /** Johto's badges, a bit each: the same trainer card layout as Platinum's (0xFF on a finished save, ss_field1). */
     private const val HGSS_BADGES = 0x8E
 
@@ -131,9 +151,12 @@ object NdsFeed {
             code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
-            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
-            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS)
-            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, badges = HGSS_BADGES, base = HGSS_BASE, gen4 = true, tid = HGSS_TID)
+            code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,
+                trainerFlags = GEN4_TRAINER_FLAGS)
+            code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,
+                trainerFlags = GEN4_TRAINER_FLAGS)
+            code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, flags = HGSS_FLAGS, badges = HGSS_BADGES, base = HGSS_BASE, gen4 = true,
+                tid = HGSS_TID, trainerFlags = GEN4_TRAINER_FLAGS)
             else -> null
         }
     }
@@ -172,9 +195,10 @@ object NdsFeed {
 
     /** Whether [game]'s trainer [id] is beaten in [ram] (false where the flags aren't mapped). */
     fun trainerBeaten(ram: ByteArray, game: Game, id: Int): Boolean {
-        if (game.flags == 0) return false
-        val f = TRAINER_FLAG_BASE + id
-        return (ram[game.flags - NdsMons.RAM_BASE + (f shr 3)].toInt() shr (f and 7)) and 1 == 1
+        val at = flagsAddr(ram, game)
+        if (at == 0) return false
+        val f = game.trainerFlags + id
+        return (ram[at - NdsMons.RAM_BASE + (f shr 3)].toInt() shr (f and 7)) and 1 == 1
     }
 
     /** The battle's two sides: Gen 5 by its labelled blocks, Gen 4 by its battle-slot blocks ([NdsMons.gen4Sides]). */
@@ -263,7 +287,7 @@ object NdsFeed {
             .put("enemyDec", JSONArray().apply { if (trainer) sides.foe.forEach { b -> b.mon?.let { put(mon(it, b.hp, b.maxHp, b.level, b.ability)) } } })
             .put("battlersDec", bat)
             // unmapped flags: nothing counts as beaten, so Next starts at the first fight
-            .put("flags", (if (game.flags != 0) hex(ram, game.flags - NdsMons.RAM_BASE, FLAG_BYTES) else "00".repeat(FLAG_BYTES)) +
+            .put("flags", flagsAddr(ram, game).let { if (it != 0) hex(ram, it - NdsMons.RAM_BASE, FLAG_BYTES) else "00".repeat(FLAG_BYTES) } +
                 "%02x".format(badges(ram, game)))
             .put("trainerA", 0).put("trainerB", 0).put("mode", 0).put("outcome", 0)
     }

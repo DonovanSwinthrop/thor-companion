@@ -154,6 +154,23 @@ class NdsMonsTest {
     }
 
     @Test
+    fun gen4TrainerFlags() {
+        // Platinum's finished save: the journal says "Beat Allison at Route 212" (trainer 96; 736-738 her rematches);
+        // scripted fights (Elite Four 261, the rival 470) never set a trainer flag. SoulSilver: trainer 4 beaten, the
+        // rival's first fight (1) scripted.
+        val pt = dump("pt_after.bin")
+        val ss = dump("ss_field1.bin")
+        assumeTrue("no Gen 4 dumps", pt != null && ss != null)
+        fun game(code: String) = NdsFeed.gameFor(File.createTempFile("gen4", ".nds").apply {
+            deleteOnExit(); writeBytes(ByteArray(12) + code.toByteArray())
+        })!!
+        val plat = game("CPUE")
+        assertEquals(listOf(true, true, false, false), listOf(96, 736, 261, 470).map { NdsFeed.trainerBeaten(pt!!, plat, it) })
+        val hgss = game("IPGE")
+        assertEquals(listOf(true, false), listOf(4, 1).map { NdsFeed.trainerBeaten(ss!!, hgss, it) })
+    }
+
+    @Test
     fun blackZoneFollowsTheMap() {
         // the same save, walked from the Gear Station's platform (68) up the escalator into its hall (66)
         val platform = dump("bw_gear.bin")
