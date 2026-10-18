@@ -38,7 +38,9 @@ object NdsShortcuts {
     // Black 2's battle touch screen
     private val RUN = Tap(128, 181)
     // the bag slides in over ~1 s: a tap before it's up is lost (the next one then lands on the wrong pocket)
-    private val BAG = Tap(39, 168, wait = 75)
+    // Platinum's first bag of a battle took over 75 frames to take touches (the POKé BALLS tap was lost and the
+    // slot tap opened HP/PP RESTORE); later ones are quicker
+    private val BAG = Tap(39, 168, wait = 150)
     // Platinum's pocket and pages slide in more slowly than Black 2's: a page turn tapped too soon is lost
     private val BALLS_POCKET = Tap(192, 47, wait = 90)
     private val NEXT_PAGE = Tap(59, 174, wait = 40)
