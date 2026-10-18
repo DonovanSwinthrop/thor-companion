@@ -53,8 +53,10 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [x] App: RUN tab + live feed for Unbound (same memory layout as Radical Red); checked on PokeDaisy's Unbound RAM
         dump (party, map, next fight) and in the app on your ROM
   - [ ] Unbound live battle on a real fight (the battle dump had no foe)
-  - [ ] Unbound Dex + Items tabs (needs learnsets / item locations from the ROM; until then hidden, answers at
-        current levels instead of trained to the cap)
+  - [x] Unbound Items tab (843 item balls / hidden items / gifts from the ROM's map data; a search, no "by now" yet) and Dex tab (stats, abilities,
+        egg groups, evolutions, level-up moves from the ROM; checked in a browser)
+  - [ ] Unbound Dex: TM / tutor / egg moves, move accuracy / PP / descriptions, ability descriptions; "by now" for Items (bosses carry no area);
+        answers trained to the cap
 - [x] Emerald Imperium 1.3.1 (docs zip on hand)
   - [x] Decoded feed: the app sends PokeDaisy's own decoding (party, foes, battlers, flags) for the expansion games,
         since their memory isn't Radical Red's (RrOverlay.decodedState, RrOverlayDecodedTest on the RAM fixtures)
@@ -64,8 +66,8 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] Sword & Shield Ultimate Plus: pack built from the ROM alone (packs/rom_pack.py): 1240/1242 species, the 8 gyms
       in badge order with caps (Milo 20 ... Raihan 48), Hop / Bede / Marnie and 130+ notable trainers, wild by place,
       the hack's own stats and move powers in the damage engine. RUN tab checked in the app on your ROM
-  - [ ] Its trainers' natures / EVs (the ROM only stores them for custom sets) and default moves for trainers without
-        custom moves (needs the learnset reader)
+  - [x] Its trainers' natures / EVs: not in the ROM (records hold IV, level, species, item, moves only); needs the hack's own docs
+  - [ ] Default moves for trainers without custom moves (needs the learnset reader; Unbound's reader exists now)
 - [x] SoulGold v1.2 (your ROM is v1.2b)
   - [x] Pack from the ROM (packs/soulgold): Normal + Hard boss teams, Johto gyms (Chuck / Jasmine / Pryce by how
         many of the others you've beaten), League, Kanto, the rival by your starter, Rockets; beaten by badge / Hall
