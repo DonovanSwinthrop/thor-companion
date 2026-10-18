@@ -55,8 +55,10 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [ ] Unbound live battle on a real fight (the battle dump had no foe)
   - [x] Unbound Items tab (843 item balls / hidden items / gifts from the ROM's map data; a search, no "by now" yet) and Dex tab (stats, abilities,
         egg groups, evolutions, level-up moves from the ROM; checked in a browser)
-  - [ ] Unbound Dex (TM / tutor / egg compat tables not located: a vanilla TM list is left at 0x0845A5A4 but Unbound's has 96+ TMs; needs CanMonLearnTMHM's code or the FireRed literal-pool trick): TM / tutor / egg moves, move accuracy / PP / descriptions, ability descriptions; "by now" for Items (bosses carry no area);
-        answers trained to the cap
+  - [x] Unbound Dex TMs and egg moves from the ROM: TM list 0x09A42B2A (TM01-120 + HM01-08), compatibility 0x09650484 (16-byte bit field
+        per species), egg moves 0x099F1374 (20000 + species markers); checked in a browser (Charizard 58 TMs incl. Fly, 16 egg moves)
+  - [ ] Unbound Dex: tutor moves (not stored as the usual bit field; a 64-move tutor list sits at 0x082AB0B0), move accuracy / PP /
+        descriptions, ability descriptions; "by now" for Items
 - [x] Emerald Imperium 1.3.1 (docs zip on hand)
   - [x] Decoded feed: the app sends PokeDaisy's own decoding (party, foes, battlers, flags) for the expansion games,
         since their memory isn't Radical Red's (RrOverlay.decodedState, RrOverlayDecodedTest on the RAM fixtures)
