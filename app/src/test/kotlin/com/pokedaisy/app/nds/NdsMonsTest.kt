@@ -397,4 +397,30 @@ class NdsMonsTest {
         val diff = (ram.indices).count { ram[it] != copy[it] }
         assertEquals(0, diff)
     }
+
+    @Test
+    fun black2EncounterRatesGoToZeroAndBack() {
+        // Black 2 on Route 19 (map 437, encounter file 128): rates at 0x0223B7C0, then the slots
+        val b2 = rom("Pokémon Black Version 2.nds")
+        val ram = dump("b2_wild2.bin")
+        val town = dump("b2_tepig.bin")                              // Aspertia City: an empty table
+        assumeTrue("no Black 2 ROM / dumps", b2 != null && ram != null && town != null)
+        val game = NdsFeed.Game("b2", 0x0221E3EC, 0x0221EAE8)
+        val copy = ram!!.copyOf()
+        val write = { a: Int, bytes: ByteArray -> System.arraycopy(bytes, 0, copy, a - NdsMons.RAM_BASE, bytes.size); true }
+        val enc = NdsEncounters(b2!!, game)
+        assertEquals(true, enc.supported)
+        val zone = NdsFeed.zone(copy, game)
+        assertEquals(437, zone)
+        fun rates() = (0 until 8).map { copy[0x23B7C0 + it].toInt() and 0xFF }
+        assertEquals(listOf(1, 0, 1, 10, 1, 50, 1, 128), rates())
+        assertEquals(true, enc.block(copy, zone, write))
+        assertEquals(listOf(0, 0, 0, 0, 0, 50, 1, 128), rates())          // fishing and the flag kept
+        enc.restore(copy, zone, write)
+        assertEquals(listOf(1, 0, 1, 10, 1, 50, 1, 128), rates())
+        assertEquals(0, ram.indices.count { ram[it] != copy[it] })
+        // a town with no wild Pokemon: nothing found, nothing written
+        val t = town!!.copyOf()
+        assertEquals(false, enc.block(t, NdsFeed.zone(t, game)) { _, _ -> error("wrote to a town") })
+    }
 }
