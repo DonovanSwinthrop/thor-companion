@@ -371,4 +371,30 @@ class NdsMonsTest {
         assumeTrue("no Platinum repel dumps", dumps.all { it != null })
         assertEquals(listOf(0, 100, 89), dumps.map { NdsFeed.repelSteps(it!!, game) })
     }
+
+    @Test
+    fun platinumEncounterRatesGoToZeroAndBack() {
+        // Platinum on map 356 (encounter file 150): its table is loaded at 0x022A15A8, grass rate 30
+        val pt = rom("Pokémon Platinum Version.nds")
+        val ram = dump("pt_rep2.bin")
+        assumeTrue("no Platinum ROM / dump", pt != null && ram != null)
+        val game = NdsFeed.Game("pt", 0xB4, 0x1294, base = 0x02101D40, gen4 = true, tid = 0x8C)
+        val copy = ram!!.copyOf()
+        val write = { a: Int, bytes: ByteArray -> System.arraycopy(bytes, 0, copy, a - NdsMons.RAM_BASE, bytes.size); true }
+        val enc = NdsEncounters(pt!!, game)
+        assertEquals(true, enc.supported)
+        val zoneAt = NdsFeed.zoneAddr(copy, game) - NdsMons.RAM_BASE
+        val zone = (copy[zoneAt].toInt() and 0xFF) or ((copy[zoneAt + 1].toInt() and 0xFF) shl 8)
+        assertEquals(356, zone)
+        fun rate() = (copy[0x2A15A8].toInt() and 0xFF)
+        assertEquals(30, rate())
+        assertEquals(true, enc.block(copy, zone, write))
+        assertEquals(0, rate())
+        assertEquals(true, enc.block(copy, zone, write))           // found again with its rate already 0
+        enc.restore(copy, zone, write)
+        assertEquals(30, rate())
+        // nothing else in RAM changed but the three rates
+        val diff = (ram.indices).count { ram[it] != copy[it] }
+        assertEquals(0, diff)
+    }
 }

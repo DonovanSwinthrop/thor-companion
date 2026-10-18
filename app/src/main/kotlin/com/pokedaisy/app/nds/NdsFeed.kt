@@ -27,6 +27,12 @@ object NdsFeed {
     /** Where [game]'s bag pocket for balls is now (an address for Gen 5, an offset from [Game.base] for Gen 4). */
     fun bagAddr(ram: ByteArray, game: Game): Int = if (game.bag == 0) 0 else game.bag + baseOf(ram, game)
 
+    /** [game]'s current map number (the zone), or -1 before a save is loaded. */
+    fun zone(ram: ByteArray, game: Game): Int {
+        val o = zoneAddr(ram, game) - NdsMons.RAM_BASE
+        return if (o < 0 || o + 2 > ram.size) -1 else (ram[o].toInt() and 0xFF) or ((ram[o + 1].toInt() and 0xFF) shl 8)
+    }
+
     /** Where [game]'s current map number is now; 0 if the save isn't loaded. */
     fun zoneAddr(ram: ByteArray, game: Game): Int = game.zone + baseOf(ram, game)
 
