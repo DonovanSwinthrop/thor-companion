@@ -500,4 +500,23 @@ class NdsMonsTest {
         assertEquals(listOf(0, 15, 0, 25, 50, 75), rates())
         assertEquals(0, ram.indices.count { ram[it] != copy[it] })
     }
+
+    @Test
+    fun soulSilverTrainerBattles() {
+        // Route 15: a Bird Keeper's Doduo (Lv 39), then another's Noctowl (Lv 48), against the Typhlosion; the field between
+        val game = NdsFeed.gameFor(File.createTempFile("hgss", ".nds").apply { deleteOnExit(); writeBytes(ByteArray(12) + "IPGE".toByteArray()) })!!
+        val dumps = listOf("ss_trainer1", "ss_trainer2", "ssg0").map { dump("$it.bin") }
+        assumeTrue("no SoulSilver battle dumps", dumps.all { it != null })
+        for ((ram, foe) in listOf(dumps[0]!! to Triple(84, 39, 78), dumps[1]!! to Triple(164, 48, 156))) {
+            val party = NdsMons.party(ram, NdsFeed.partyAddr(ram, game), gen4 = true)
+            val sides = NdsFeed.sides(ram, game, party)
+            assertEquals(157, sides.player.single().species)
+            val f = sides.foe.single()
+            assertEquals(foe, Triple(f.species, f.level, f.maxHp))
+            assertEquals(true, NdsFeed.inBattle(ram, game))
+            assertEquals(8, NdsFeed.state(ram, game)!!.getInt("battleType"))  // a trainer's: their own ID
+            assertEquals(foe.first, NdsFeed.state(ram, game)!!.getJSONArray("enemyDec").getJSONObject(0).getInt("sp"))
+        }
+        assertEquals(false, NdsFeed.inBattle(dumps[2]!!, game))
+    }
 }
