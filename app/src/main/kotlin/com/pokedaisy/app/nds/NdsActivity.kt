@@ -116,6 +116,8 @@ class NdsActivity : Activity() {
 
     /** INFINITE REPEL has been keeping the game's repel step counter topped up (so switching it off clears it). */
     @Volatile private var repelHeld = false
+    /** Loop passes until a LOAD STATE's encounter restore runs again (0 = none): see the LOAD_STATE pick. */
+    @Volatile private var restoreIn = 0L
 
     /** A wild battle is on (the feed's last read): R runs away while [shortcuts] is on. */
     @Volatile private var wildBattle = false
@@ -306,6 +308,9 @@ class NdsActivity : Activity() {
             if (com.pokedaisy.app.BuildConfig.DEBUG && (before + 1) / 60 != (before - (if (ff) FF_FRAMES - 1 else 0)) / 60) { debugDump(); debugPoke() }
             if ((before + 1) / FEED_EVERY != (before - (if (ff) FF_FRAMES - 1 else 0)) / FEED_EVERY) feed()
             if (infiniteRepel && (before + 1) / ENC_EVERY != (before - (if (ff) FF_FRAMES - 1 else 0)) / ENC_EVERY) blockEncounters()
+            if (restoreIn > 0 && --restoreIn == 0L) {
+                if (!infiniteRepel) { repelHeld = stateRepelMark.isFile; restoreEncounters(clearCounter = true) }
+            }
             if (++frames - lastFlush >= 600) {
                 NdsCore.flushSave()   // every ~10 s of game, between frames
                 val now = System.nanoTime()
@@ -552,6 +557,9 @@ class NdsActivity : Activity() {
                 if (!infiniteRepel) {
                     repelHeld = stateRepelMark.isFile
                     restoreEncounters(clearCounter = true)
+                    // and again once the loaded game has run a moment: once on Black 2 the first pass found nothing
+                    // to put back (no battle in 80 steps; fine on a rerun), as if it read the RAM before the load took
+                    restoreIn = RESTORE_AFTER_LOAD
                 }
                 setMenu(false)
             }
@@ -612,6 +620,8 @@ class NdsActivity : Activity() {
         /** Frames between RUN tab updates (twice a second). */
         private const val FEED_EVERY = 30L
         private const val ENC_EVERY = 8L
+        /** Frames after a LOAD STATE before its encounter restore runs a second time. */
+        private const val RESTORE_AFTER_LOAD = 30L
 
         /** INFINITE REPEL's top-up: a Max Repel's steps, rewritten once half are walked. */
         private const val REPEL_TOP = 250
