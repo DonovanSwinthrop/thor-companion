@@ -43,8 +43,11 @@ object NewFeatures {
     /** SETTINGS > BATTLE SHORTCUTS: R runs from a wild battle in one press. */
     const val BATTLE_SHORTCUTS = "battle_shortcuts"
 
+    /** The WILD tab (this map's wild Pokémon, REPEL steps, INFINITE REPEL): its row in SETTINGS > TAB BAR. */
+    const val WILD_TAB = "wild_tab"
+
     /** Every feature that gets the tag. */
-    val ALL = listOf(BATTLE_SHORTCUTS, HUD, BATTLE_BUTTONS, GAME_HOTKEYS, COMPANION_WINDOW, HUD_PC, QUICK_MENU, HUD_REPEL, SINGLE_SCREEN, COMPANION_BACKGROUND, QUICK_HEAL)
+    val ALL = listOf(WILD_TAB, BATTLE_SHORTCUTS, HUD, BATTLE_BUTTONS, GAME_HOTKEYS, COMPANION_WINDOW, HUD_PC, QUICK_MENU, HUD_REPEL, SINGLE_SCREEN, COMPANION_BACKGROUND, QUICK_HEAL)
 
     private const val DAYS = 7
     private const val DAY_MS = 24 * 60 * 60 * 1000L

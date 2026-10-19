@@ -1760,7 +1760,9 @@ class PokeDaisyActivity : Activity() {
             val engine by hudEngine.collectAsState()
             val idle = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
             val onField by (engine?.onField ?: idle).collectAsState()
-            val shown = hudOn.value && !hudUpright.value && onField && snap.hasData && !snap.unsupported && !snap.inBattle
+            // One screen only (the user's call, 2026-10-19): with a second screen the top screen stays free, since the
+            // companion there already has the party, MAP, BAG and WILD.
+            val shown = hudOn.value && hudSingleScreen.value && !hudUpright.value && onField && snap.hasData && !snap.unsupported && !snap.inBattle
             // One screen, the companion's panel closed: its open button joins the HUD's, and the edge tab steps aside
             // (for BATTLE BUTTONS' party window too, which sits in that corner). As the window it stays put while the
             // window is up too (under its dim): it doesn't vanish from the HUD the player sees around it.

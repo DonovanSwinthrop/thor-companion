@@ -3,7 +3,7 @@ title: The companion at a glance
 summary: What the bottom screen shows, how the tab bar works, and what the companion's SETTINGS tab holds.
 section: companion
 order: 1
-keywords: [bottom screen, second screen, tabs, tab bar, overview, back button, click, sound, language, translation, close, restart, reset, gear]
+keywords: [bottom screen, second screen, tabs, tab bar, wild, encounters, endless spray, overview, back button, click, sound, language, translation, close, restart, reset, gear]
 ---
 
 The companion is everything on the bottom screen while a game runs. It reads your game as you play, so your party, bag, location and battles are always up to date without opening a single menu on the top screen. It's drawn in the game's own menu style: FireRed's party screen in FireRed, Emerald's in Emerald, and each supported hack's own look where it has one.
@@ -19,12 +19,12 @@ Along the bottom of the companion is a row of tabs, with the SETTINGS gear at th
 | `PARTY` | Your team, and a full summary for each Pokémon. See [Party and summaries](party.md). |
 | `DEX` | Your Pokédex with seen and caught marks. See [Pokédex](dex.md). |
 | `MAP` | The region map with you on it. See [Map](map.md). |
+| `WILD` | The wild Pokémon where you are, and a switch that keeps them all away. See [The WILD tab](#the-wild-tab) below. |
 | `BAG` | Every pocket of your bag. See [Bag](bag.md). |
-| `GUIDE` | Hints, the next boss and what's around you. See [Guide](guide.md). |
 
-A few more are off the bar to begin with: `CARD` (your [trainer card](trainer-card.md)), `STATES` (save states) and `CHEEVOS` ([RetroAchievements](achievements.md)).
+A few more are off the bar to begin with: `GUIDE` (hints, the next boss and what's around you, see [Guide](guide.md)), `CARD` (your [trainer card](trainer-card.md)), `STATES` (save states) and `CHEEVOS` ([RetroAchievements](achievements.md)). If you kept the old bar (with `GUIDE` on it and no `WILD`), it changes to this one by itself; a bar you picked yourself stays as you left it.
 
-Some tabs only appear when the game has what they need. `DEX` needs the game's Pokédex data and `GUIDE` needs a guide for that game, so a game without them has fewer tabs. The bag tab also takes the game's own word for it: `PACK` in Crystal, Crystal Clear and Prism, `CUBE` in Unbound, `INVENTORY` in R.O.W.E., `POCKETS` in Super Mariomon, `BAG` everywhere else.
+Some tabs only appear when the game has what they need. `DEX` needs the game's Pokédex data, `GUIDE` needs a guide for that game and `WILD` needs the game's own encounter tables (the same games whose `GUIDE` has a `HERE` page), so a game without them has fewer tabs. The bag tab also takes the game's own word for it: `PACK` in Crystal, Crystal Clear and Prism, `CUBE` in Unbound, `INVENTORY` in R.O.W.E., `POCKETS` in Super Mariomon, `BAG` everywhere else.
 
 ### Choosing your tabs
 
@@ -37,6 +37,14 @@ Your choice is shared by every game. A tab the running game doesn't have shows `
 ### Tabs that aren't on the bar
 
 Hidden tabs are still one tap away. At the bottom of SETTINGS, under the list of options, there's a second row of tab chips: every tab you left off the bar. Tap one to open it. While it's open the gear stays lit, and BACK takes you back to SETTINGS.
+
+### The WILD tab
+
+`WILD` lists the wild Pokémon of the map you're on, sorted by how you meet them: in grass or caves, surfing, with each fishing rod and with rock smashing. Each one shows its icon, its name, the levels it turns up at and how often, and a ball once you've caught one. Every Pokémon is named, even ones you haven't seen yet. Under the list, a line counts how many of them you've caught. The list changes by itself as you walk onto another map.
+
+At the top, in games where `WILD ENCOUNTERS` works (see [Controls](controls.md)), there's the endless spray switch. Turn it `ON` and no wild Pokémon jump out at you in grass, caves or water, at any level; turn it `OFF` and they're back. It's the same switch as `WILD ENCOUNTERS` in SETTINGS, the other way round: the spray `ON` is `WILD ENCOUNTERS` `OFF`. While an item that keeps wild Pokémon away is working in the game, its steps left show here too.
+
+With two screens this tab is where the [HUD](hud.md)'s wild list and steps left live, so the top screen stays all game.
 
 ### The BATTLE tab
 

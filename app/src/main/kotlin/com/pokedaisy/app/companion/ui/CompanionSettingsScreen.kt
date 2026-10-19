@@ -152,7 +152,10 @@ fun CompanionSettingsScreen(
                         val shown = id in settings.companionTabs
                         // A tab this game doesn't have (DEX, GUIDE) keeps its setting for the games that do.
                         if (id !in availableTabs) return@map SettingRow(companionTabLabel(id), tk("N/A")) {}
-                        SettingRow(companionTabLabel(id), if (shown) tk("SHOWN") else tk("HIDDEN")) {
+                        SettingRow(
+                            companionTabLabel(id), if (shown) tk("SHOWN") else tk("HIDDEN"),
+                            labelBadge = if (id == "WILD") NewFeatures.badge(NewFeatures.WILD_TAB) else null,
+                        ) {
                             val now = settings.companionTabs
                             when {
                                 shown -> setTabs(settings, now - id, onTabsChanged)
@@ -442,8 +445,10 @@ private fun homeRows(
         // EXPAND only: whether a conversation, sign, menu or picture over the field pulls the zoom in (battles always do).
         SettingRow(tk("AUTO ZOOM IN"), onOff(s.expandZoomOnText), subtitle = "1x on dialogue, signs, menus") { s.setExpandZoomOnText(!s.expandZoomOnText); changed() }
             .takeIf { s.gameAspect == GameAspect.WIDE },
-        // The party, a minimap, the balls and BAG / WILD over the game on the field: its own page (layout, look, size, parts).
-        SettingRow(tk("HUD"), onOff(s.fieldHud), labelBadge = NewFeatures.badge(NewFeatures.HUD), opensPage = true, subtitle = "Party, minimap and bag over the game") { navigate(Page.FIELD_HUD) },
+        // One screen: the party, a minimap, the balls and BAG / WILD over the game on the field: its own page (layout, look,
+        // size, parts). With a second screen the top screen stays free (the companion has it all).
+        SettingRow(tk("HUD"), onOff(s.fieldHud), labelBadge = NewFeatures.badge(NewFeatures.HUD), opensPage = true, subtitle = "Party, minimap and bag over the game") { navigate(Page.FIELD_HUD) }
+            .takeIf { !s.usesSecondScreen },
         // One screen: FIGHT, POKéMON and RUN in the room beside a battle (BattleButtons).
         SettingRow(
             tk("BATTLE BUTTONS"), onOff(s.battleButtons), subtitle = "FIGHT, POKéMON and RUN beside a battle",

@@ -144,6 +144,24 @@ fun hudWild(enc: MapEncounters?, dex: PokedexState?): List<HudWild> {
     }
 }
 
+/** This map's wild Pokémon as [hudWild] lists them, read off the UI thread; null = no ROM tables for this game. The HUD's
+ * WILD panel and the WILD tab both show it. */
+@Composable
+internal fun rememberWildHere(snapshot: SnapshotView): List<HudWild>? {
+    val live = snapshot.guideTables
+    val wildSet = live?.wildSetOf(snapshot.mapGroup, snapshot.mapNum, snapshot.progress) ?: 0
+    val read by produceState(
+        live?.let { GuideRomSource.cachedEncounters(it, snapshot.mapGroup, snapshot.mapNum, wildSet) },
+        live, snapshot.mapGroup, snapshot.mapNum, wildSet,
+    ) {
+        if (live != null) value = withContext(Dispatchers.IO) {
+            snapshot.pokedex?.let { PokedexSource.nationalOf(it.tables, 1) } // warm the species -> dex number map
+            GuideRomSource.encounters(live, snapshot.mapGroup, snapshot.mapNum, wildSet)
+        }
+    }
+    return if (live == null) null else remember(read, snapshot.pokedex) { hudWild(read, snapshot.pokedex) }
+}
+
 /** SETTINGS > HUD's page, the same on both screens: the switch, LAYOUT / LOOK / SIZE, then which parts show. */
 fun fieldHudRows(
     on: Boolean,
@@ -314,19 +332,8 @@ fun FieldHud(
     val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(if (shown) 220 else 120), label = "field-hud")
     if (alpha == 0f && !shown) return
 
-    // This map's wild Pokémon, read off the UI thread (null: no ROM tables for this game, so no WILD button).
-    val live = snapshot.guideTables
-    val wildSet = live?.wildSetOf(snapshot.mapGroup, snapshot.mapNum, snapshot.progress) ?: 0
-    val read by produceState(
-        live?.let { GuideRomSource.cachedEncounters(it, snapshot.mapGroup, snapshot.mapNum, wildSet) },
-        live, snapshot.mapGroup, snapshot.mapNum, wildSet,
-    ) {
-        if (live != null) value = withContext(Dispatchers.IO) {
-            snapshot.pokedex?.let { PokedexSource.nationalOf(it.tables, 1) } // warm the species -> dex number map
-            GuideRomSource.encounters(live, snapshot.mapGroup, snapshot.mapNum, wildSet)
-        }
-    }
-    val wildHere = wild ?: if (live == null) null else remember(read, snapshot.pokedex) { hudWild(read, snapshot.pokedex) }
+    // This map's wild Pokémon (null: no ROM tables for this game, so no WILD button).
+    val wildHere = wild ?: rememberWildHere(snapshot)
 
     // SIZE: a density whose GBA pixel (rememberGbaTextMetrics' 20dp / 16) is exactly the wanted whole screen pixels.
     val base = LocalDensity.current
@@ -1251,7 +1258,7 @@ private fun HudBagPanel(
     }
 }
 
-/** WILD: this map's wild Pokémon by method - icon, name (??? until seen), levels, how often, a ball once caught. */
+/** WILD: this map's wild Pokémon by method - icon, name, levels, how often, a ball once caught. */
 @Composable
 private fun HudWildPanel(snapshot: SnapshotView, wild: List<HudWild>, m: GbaTextMetrics, dock: Boolean, top: Boolean, inset: PaddingValues, onClose: () -> Unit) {
     val u = m.u
@@ -1269,12 +1276,10 @@ private fun HudWildPanel(snapshot: SnapshotView, wild: List<HudWild>, m: GbaText
                     GbaText(tr(method), c.accent, c.accentShadow, small, Modifier.padding(top = u * 2))
                     list.forEach { w ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            // An unseen Pokémon stays hidden, like GUIDE > HERE's.
-                            Box(Modifier.size(icon), contentAlignment = Alignment.Center) {
-                                if (w.seen) HudSpecies(spriteAsset("pokemon", w.species), icon) else GbaText("?", c.muted, c.shadow, m)
-                            }
+                            // Every one named, seen or not (the user's call, 2026-10-19), like the WILD tab.
+                            Box(Modifier.size(icon), contentAlignment = Alignment.Center) { HudSpecies(spriteAsset("pokemon", w.species), icon) }
                             Spacer(Modifier.width(u * 2))
-                            GbaText(if (w.seen) speciesName(w.species) else "???", c.text, c.shadow, m, Modifier.weight(1f))
+                            GbaText(speciesName(w.species), c.text, c.shadow, m, Modifier.weight(1f))
                             if (w.caught) {
                                 PixelArt(PixelIcons.pokeBall, CAUGHT_BALL, Modifier.size(u * 9))
                                 Spacer(Modifier.width(u * 4))
@@ -1302,7 +1307,7 @@ private fun pocketLabel(pocket: Int) = when (pocket) {
 
 // ---- Pixel art ----------------------------------------------------------------------------------
 
-private val CAUGHT_BALL = mapOf('K' to Color(0xFF202020), 'R' to Color(0xFFE83028), 'W' to Color.White, 'H' to Color(0xFFF8A8A0))
+internal val CAUGHT_BALL = mapOf('K' to Color(0xFF202020), 'R' to Color(0xFFE83028), 'W' to Color.White, 'H' to Color(0xFFF8A8A0))
 
 /** A satchel: K outline, B leather, L its light edge, Y the buckle. */
 private val BAG_ICON = listOf(

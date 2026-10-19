@@ -157,7 +157,7 @@ Both show `N/A` on a game PokeDaisy can't read the field of yet.
 - **`ON`** (the default) leaves the game's own rate.
 - **`OFF`** turns them off completely.
 
-Only random encounters change. Fishing, moves that lure wild Pokémon out and battles the story sets up still happen, and items that keep wild Pokémon away work as usual on top. The change applies at once, no restart needed.
+Only random encounters change. Fishing, moves that lure wild Pokémon out and battles the story sets up still happen, and items that keep wild Pokémon away work as usual on top. The change applies at once, no restart needed. The companion's `WILD` tab has the same switch at its top, as the endless spray (spray `ON` is `WILD ENCOUNTERS` `OFF`); see [The WILD tab](companion.md#the-wild-tab).
 
 It works on the original games in every language and on almost every supported hack, including the ones rebuilt from newer source code like SoulGold, Lazarus and Recharged Yellow. On Emerald Rogue and Quetzal it shows `N/A`.
 

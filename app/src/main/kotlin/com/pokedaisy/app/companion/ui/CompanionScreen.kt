@@ -102,6 +102,8 @@ fun CompanionScreen(
     initialMonIndex: Int? = null,
     /** The CARD tab opens on the card's back - for screenshot tests too. */
     initialCardBack: Boolean = false,
+    /** The WILD tab's list as given, not read from the ROM - for screenshot tests. */
+    previewWild: List<HudWild>? = null,
     /** SETTINGS opens on this sub-page ("CHEATS") - for screenshot tests, which can't tap. */
     initialSettingsPage: String? = null,
     /** SETTINGS' row to open on (its English label): the cursor on it, scrolled to - SWAP SCREENS after a swap. */
@@ -207,6 +209,8 @@ fun CompanionScreen(
         // GUIDE tab: page, reveals and scroll position, kept across tab switches.
         val guideUi = remember { GuideUiState() }
         val guide = rememberGuide(game, dex, snapshot.guideTables)
+        // WILD tab: this map's wild Pokémon (null: no ROM tables for this game, so no tab).
+        val wildHere = previewWild ?: rememberWildHere(snapshot)
         // The GUIDE's AI notice, once per game; GO BACK returns to [backTab].
         var noticeAccepted by remember { mutableStateOf(game == null || settings?.guideNoticeAccepted(game.name) != false) }
 
@@ -228,6 +232,7 @@ fun CompanionScreen(
             when (id) {
                 "DEX" -> dex != null || id in cachedTabs
                 "GUIDE" -> guide != null || id in cachedTabs
+                "WILD" -> wildHere != null
                 "CARD" -> card != null && cardArt?.style == card.style || id in cachedTabs
                 "ACHIEVEMENTS" -> achievements != null
                 // The nuzlocke overlay: Radical Red only, and only in a build that carries its files.
@@ -493,6 +498,8 @@ fun CompanionScreen(
                             TrainerCardScreen(card, cardArt, Modifier.fillMaxSize(), initialBack = initialCardBack)
                         } else if (tab == "NUZLOCKE") {
                             RrOverlayPane(com.pokedaisy.app.companion.RrOverlay.gameParam(game) ?: "rr", Modifier.fillMaxSize())
+                        } else if (tab == "WILD" && wildHere != null) {
+                            WildScreen(snapshot, wildHere, itemUse, settings)
                         } else if (tab == "MAP") {
                             MapScreen(snapshot, modifier = Modifier.fillMaxSize(), fly = fly)
                         } else if (tab == "PARTY") {
@@ -662,6 +669,7 @@ internal fun companionTabLabel(id: String): String = when (id) {
     "PARTY" -> tr("PARTY")
     "DEX" -> tr("DEX")
     "MAP" -> tr("MAP")
+    "WILD" -> tr("WILD")
     "GUIDE" -> tr("GUIDE")
     "CARD" -> tr("CARD")
     "STATES" -> tr("STATES")

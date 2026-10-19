@@ -303,8 +303,9 @@ interface CompanionSettings {
  * battle runs) and SETTINGS (the way to the hidden ones) are always there.
  * CARD (the TRAINER CARD) and ACHIEVEMENTS (RetroAchievements) start off the
  * bar, under SETTINGS > TOOLS. */
-val COMPANION_TABS = listOf("NUZLOCKE", "PARTY", "DEX", "MAP", "ITEMS", "GUIDE", "CARD", "STATES", "ACHIEVEMENTS")
-val DEFAULT_COMPANION_TABS = listOf("PARTY", "DEX", "MAP", "ITEMS", "GUIDE")
+val COMPANION_TABS = listOf("NUZLOCKE", "PARTY", "DEX", "MAP", "WILD", "ITEMS", "GUIDE", "CARD", "STATES", "ACHIEVEMENTS")
+// WILD on the bar, GUIDE under TOOLS (the user's call, 2026-10-19: the top screen's HUD moved down here).
+val DEFAULT_COMPANION_TABS = listOf("PARTY", "DEX", "MAP", "WILD", "ITEMS")
 
 /** Tabs next to SETTINGS: six chips in all is as many as fit. During a
  * battle BATTLE takes the last chosen tab's place. */

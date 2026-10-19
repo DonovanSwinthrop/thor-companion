@@ -6,7 +6,9 @@ order: 4
 keywords: [field hud, heads up display, overlay, minimap, mini map, party, hp, status, balls, bag, wild, encounters, overworld, legends, single screen]
 ---
 
-Modern Pokémon games keep the important things on screen while you explore: your team, where you are, what you're carrying. The HUD does the same for the classic games. It's most useful on a device with one screen, where the companion is tucked away until you open it, but it works with two screens too.
+Modern Pokémon games keep the important things on screen while you explore: your team, where you are, what you're carrying. The HUD does the same for the classic games on a device with one screen, where the companion is tucked away until you open it.
+
+With two screens there's no HUD: the top screen is all game, and the bottom screen already has your party, the map, the bag and the wild Pokémon in its tabs (`PARTY`, `MAP`, `BAG` and `WILD`). Its row only shows in Settings on a device with one screen, or with `SINGLE SCREEN` on.
 
 It's on by default. Turn it off, or change how it looks, in `HUD`, in the `SCREEN` group of Settings on either screen.
 
@@ -20,7 +22,7 @@ It's on by default. Turn it off, or change how it looks, in `HUD`, in the `SCREE
 | Steps left | While an item that keeps wild Pokémon away is working, a window by your balls shows its icon and the steps it has left, counting down as you walk, over a bar that drains from green to yellow to red. The count turns gold for the last 20 steps, and the window goes when the effect wears off. It shows for the games whose [bag](bag.md) can use those items. | Open the bag. |
 | `PC` | Your game's own PC, opened right where you stand, so you can withdraw or deposit Pokémon without walking to a Pokémon Center. The small arrow on its corner means it opens the game's own screen, not one of the HUD's. It shows for the games whose [bag](bag.md) has the `PC` button. | |
 | `BAG` | A compact bag: the pockets as tabs and your items as a grid with counts. Pick an item to read about it, and `USE` it where the companion can. | |
-| `WILD` | This area's wild Pokémon: by grass, water, fishing rod or rock, with their levels and how often they show up. Ones you haven't seen stay `???`, and a ball marks the ones you've caught. The red number on the button counts the ones you haven't caught yet. | |
+| `WILD` | This area's wild Pokémon: by grass, water, fishing rod or rock, with their levels and how often they show up. Every one is named, even ones you haven't seen yet, and a ball marks the ones you've caught. The red number on the button counts the ones you haven't caught yet. | |
 
 The game keeps running while the map, bag, wild list or a summary is open. Tap anywhere around it, or press `BACK`, to close it. With the `GLASS` and `WHITE GLASS` looks these open in see-through panels too.
 

@@ -398,8 +398,12 @@ class Prefs(context: Context) {
      * reached from its SETTINGS tab. */
     var companionTabs: List<String>
         get() = p.getString("companion_tabs", null)?.split(",")?.filter { it.isNotBlank() }
+            // A bar saved as the old default (before WILD, 2026-10-19) takes the new one: WILD in, GUIDE to TOOLS.
+            ?.takeIf { it != OLD_DEFAULT_TABS }
             ?: com.pokedaisy.app.companion.DEFAULT_COMPANION_TABS
         set(v) = p.edit().putString("companion_tabs", v.joinToString(",")).apply()
+
+    private val OLD_DEFAULT_TABS = listOf("PARTY", "DEX", "MAP", "ITEMS", "GUIDE")
 
     /** Games whose GUIDE notice ("written with AI help, may be wrong") was accepted. */
     fun guideNoticeAccepted(game: String): Boolean = game in guideNoticeGames()
