@@ -23,7 +23,9 @@ object NdsFeed {
                /** Trainer N is beaten when event flag [trainerFlags] + N is set. */
                val trainerFlags: Int = TRAINER_FLAG_BASE,
                /** Gen 4: how many event variables (u16, ids 0x4000 up) sit just before [flags]; 0: not sent. */
-               val varCount: Int = 0)
+               val varCount: Int = 0,
+               /** Gen 5: the player's position block (zone u16, then x and y as 16.16 fixed point, tiles at + 6 / + 0xE); 0: none. */
+               val pos: Int = 0)
 
     /** Where [game]'s party is now (its count is the u32 before it); 0 if the save isn't loaded. */
     fun partyAddr(ram: ByteArray, game: Game): Int = game.party + baseOf(ram, game)
@@ -61,9 +63,16 @@ object NdsFeed {
     /**
      * Gen 4's position on the map, in tiles (x, y), or null (Gen 5: not mapped). The save block keeps it right after the
      * map: x u32 at the map + 8, y at + 0xC (SoulSilver live: two tiles up took y 435 -> 433; Platinum: a Pokemon
-     * Center's 12, 4). The test walker reads it from the debug state to stay on a patch of grass.
+     * Center's 12, 4). Black 2 keeps it in a block of its own ([Game.pos]: two steps up took y 697 -> 695, two left x 60 -> 58).
+     * The test walker reads it from the debug state to stay on a patch of grass.
      */
     fun position(ram: ByteArray, game: Game): Pair<Int, Int>? {
+        if (game.pos != 0) {
+            // only while the block names the map we're on (it can lag a warp)
+            val o = game.pos - NdsMons.RAM_BASE
+            if (o < 0 || o + 0x10 > ram.size || u16(ram, o) != zone(ram, game)) return null
+            return u16(ram, o + 6) to u16(ram, o + 0xE)
+        }
         if (!game.gen4) return null
         val o = zoneAddr(ram, game) - NdsMons.RAM_BASE
         if (game.base == 0 || o < 0 || o + 0x10 > ram.size) return null
@@ -75,6 +84,8 @@ object NdsFeed {
         val v = u32(ram, game.base - NdsMons.RAM_BASE).toInt()
         return if (v in NdsMons.RAM_BASE until NdsMons.RAM_BASE + ram.size - 0x2000) v else Int.MIN_VALUE / 2
     }
+
+    private fun u16(b: ByteArray, o: Int): Int = (b[o].toInt() and 0xFF) or ((b[o + 1].toInt() and 0xFF) shl 8)
 
     private fun u32(b: ByteArray, o: Int): Long =
         (b[o].toLong() and 0xFF) or ((b[o + 1].toLong() and 0xFF) shl 8) or ((b[o + 2].toLong() and 0xFF) shl 16) or ((b[o + 3].toLong() and 0xFF) shl 24)
@@ -142,6 +153,7 @@ object NdsFeed {
     /** Black 2 (US) and the hacks built on it: the party and the current zone in the save data (RAM dumps). */
     private const val B2_PARTY = 0x0221E3EC
     private const val B2_ZONE = 0x0221EAE8
+    private const val B2_POS = 0x0223B444
 
     /**
      * Black / White (US): the party at 0x022349B4 (count before it) and the zone 0x6FC after it, Black 2's layout.
@@ -183,8 +195,8 @@ object NdsFeed {
         return when {
             code == "IRBO" && "blaze" in name -> Game("bbk", B1_PARTY, B1_ZONE)
             code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
-            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
-            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
+            code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL, pos = B2_POS)
+            code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL, pos = B2_POS)
             code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,
                 trainerFlags = GEN4_TRAINER_FLAGS, varCount = PT_VARS)
             code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,

@@ -540,6 +540,11 @@ class NdsMonsTest {
             val pt = NdsFeed.Game("pt", 0xB4, 0x1294, base = 0x02101D40, gen4 = true)
             assertEquals(12 to 4, NdsFeed.position(ram, pt))
         }
+        // Black 2 on a route: up, up, left, left; then a gym inside
+        val b2 = NdsFeed.gameFor(File.createTempFile("bw2", ".nds").apply { deleteOnExit(); writeBytes(ByteArray(12) + "IREO".toByteArray()) })!!
+        val walk = (0..4).map { dump("b2p$it.bin") }
+        if (walk.all { it != null }) assertEquals(listOf(60 to 697, 60 to 696, 60 to 694, 59 to 694, 58 to 694), walk.map { NdsFeed.position(it!!, b2) })
+        dump("b2_gym1_before.bin")?.let { assertEquals(15 to 19, NdsFeed.position(it, b2)) }
     }
 
     @Test
