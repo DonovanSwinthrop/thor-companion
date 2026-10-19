@@ -102,6 +102,9 @@ it. You can also check from **Settings > VERSION**.
   - Touch buttons to fight, switch or run without reaching for the controls (FireRed and Emerald).
 - **MAP** - the game's region map with you on it. Tap any place to name it,
   or search the list of every town and route.
+- **WILD** - the wild Pokémon where you are, by grass, water, rods and rocks, with levels, odds and a ball on
+  the ones you've caught; the steps left on a Repel; and **INFINITE REPEL**, a switch that keeps random wild
+  battles away.
 - **DEX** - seen / caught marks and full entries: sprite,
   types, stats, abilities, dex text, plus how it evolves (and from what, the
   whole family, method by method), where it's caught in the wild (by route and
@@ -135,12 +138,14 @@ under LANGUAGE in either Settings screen. Species, move and item names and the G
   screen's Settings) sets a pace that stays, per game: 0.25×, 0.5×, 1×, 1.5×, 2×, 3× or 4×.
 - **Real-time clock** for the games that use one (Ruby, Sapphire, Emerald and ROM hacks):
   day and night, berries, tides and daily events follow the device's clock, and saves keep it.
+  **GAME CLOCK** (bottom screen's Settings > GAMEPLAY) moves that clock forward to the hour you pick.
 - **Fast-forward music** that keeps playing the song at its normal speed, instead of chipmunk sound.
 - **Save states** on hotkeys, with undo.
 - **Rewind** (optional, Settings > REWIND): hold the REWIND HOLD hotkey (R on a keyboard; pick a pad button in
   HOTKEYS) to play the last ~20 seconds backwards. It never touches your save file.
 - **Status bar** (optional): game, location, money, clock and battery above the game.
-- **HUD** (Settings > HUD, on by default): your party (levels, HP, status), a minimap, your Poké Balls and
+- **HUD** (one screen, Settings > HUD, on by default; with two screens the top screen stays all game and the
+  bottom screen's tabs have it all): your party (levels, HP, status), a minimap, your Poké Balls and
   BAG / WILD buttons on the game screen while you walk around, like a modern Pokémon game. A tap opens a Pokémon's
   summary, the whole map (with FLY), a compact bag with USE, or the area's wild Pokémon; the game keeps running under
   them. Three layouts (corners, side rails, a bottom dock), two looks (see-through glass or the app's windows), three
