@@ -122,15 +122,26 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
         (badge n = flag 3072 + n; HGSS in game order, Jasmine before Pryce): the RUN tab's Next follows the badges (checked in a browser with fed
         badge bytes: Platinum Roark -> Gardenia -> Fantina ... -> Elite Four; SoulSilver Falkner ... Jasmine, Pryce, Clair, Janine)
   - [x] DS battle shortcuts in Platinum / Renegade Platinum (R run, L best ball with the bag resolved from RAM; Claude A + B)
-  - [x] INFINITE REPEL blocks every wild encounter (Platinum, Black / White and hacks: NdsEncounters), Platinum's step counter by offset; NOT live-tested yet
-  - [ ] Kanto badges for HGSS Next; Black / Blaze Black trainer flags
+  - [x] INFINITE REPEL blocks every wild encounter (Platinum, Black / White, HGSS and hacks: NdsEncounters), Platinum's step counter by offset;
+        live on Platinum: ON = no battle, OFF = the counter cleared and a battle within ~25 steps
+  - [x] DS LOAD STATE: a state saved with INFINITE REPEL on, loaded with it off, gets its map's rates back and its step counter cleared
+        (a .repel mark beside the state); live on Platinum: battle within 11 steps
+  - [x] Gen 4 story bosses in the RUN tab's Next (Elite Four, Champion, rivals, Galactic / Rockets, HGSS Kanto leaders): doneAny from event
+        flags / variables (Claude A's map, B's overlay + pack wiring); live: Platinum and SoulSilver finished saves read Champion
+  - [x] DS GAME CLOCK: the game's clock and day / night follow (Platinum 17:00 -> 22:00: Pokétch and night tint)
+  - [ ] Black / Blaze Black trainer flags: CUT for the release (needs an early-game Black save to find them)
   - [x] Overlay fixes (outside git): Next tab no longer crashes when no starter is owned; team-helper names in full; damage over 999% shows 999+;
         Team page says the PC isn't read on DS games
   - [x] Five tests that only failed on a Windows checkout fixed (File.renameTo over an existing file in SaveBackups / LibraryOrder /
         BestEffortStore; CRLF in PerformanceGuards / SiteDataExport tests)
   - [x] Manual: DS RUN tab section, NATURE for all eight games
 - [x] GBA QUICK MENU HEAL tile: full HP + no status, outside a battle (PartyHeal; not R.O.W.E. / Quetzal layouts)
-- [ ] GBA extras still to do: change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist); HEAL to check in a real game
+- [x] GBA HEAL checked in a real game (Emerald): greyed in battle ("Not during a battle"), healed on the field, kept after an in-game save
+      and a restart; R = run in one press at Emerald's action menu
+- [x] Two screens: the top screen is just the game (the HUD shows on one-screen devices only); new WILD companion tab (this map's wild
+      Pokemon, every one named, Repel steps, INFINITE REPEL = WILD ENCOUNTERS OFF), on the default bar; checked in Radical Red and Emerald
+- [x] Debug builds write the test walker's state for every GBA game (map, x / y, battle, party)
+- [ ] GBA extras still to do: change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
