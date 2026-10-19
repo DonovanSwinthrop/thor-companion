@@ -545,6 +545,10 @@ class NdsMonsTest {
         val walk = (0..4).map { dump("b2p$it.bin") }
         if (walk.all { it != null }) assertEquals(listOf(60 to 697, 60 to 696, 60 to 694, 59 to 694, 58 to 694), walk.map { NdsFeed.position(it!!, b2) })
         dump("b2_gym1_before.bin")?.let { assertEquals(15 to 19, NdsFeed.position(it, b2)) }
+        // Black at the Gear Station: down, down, left
+        val b1 = NdsFeed.gameFor(File.createTempFile("bw1", ".nds").apply { deleteOnExit(); writeBytes(ByteArray(12) + "IRBO".toByteArray()) })!!
+        val station = (0..3).map { dump("b1_pos$it.bin") }
+        if (station.all { it != null }) assertEquals(listOf(11 to 15, 11 to 16, 11 to 17, 10 to 17), station.map { NdsFeed.position(it!!, b1) })
     }
 
     @Test

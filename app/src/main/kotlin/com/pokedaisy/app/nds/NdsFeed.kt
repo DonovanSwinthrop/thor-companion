@@ -161,6 +161,8 @@ object NdsFeed {
      */
     private const val B1_PARTY = 0x022349B4
     private const val B1_ZONE = 0x022350B0
+    /** Black's position block, laid out like Black 2's (Gear Station: two steps down took y 15 -> 17, one left x 11 -> 10). */
+    private const val B1_POS = 0x0224F90C
 
     /**
      * Black 2 (US)'s event flags (the save's EventWork flags, mirrored in RAM). Trainer N's "beaten" flag is
@@ -193,8 +195,8 @@ object NdsFeed {
             ?.copyOfRange(12, 16)?.toString(Charsets.US_ASCII) ?: return null
         val name = rom.name.lowercase()
         return when {
-            code == "IRBO" && "blaze" in name -> Game("bbk", B1_PARTY, B1_ZONE)
-            code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE)
+            code == "IRBO" && "blaze" in name -> Game("bbk", B1_PARTY, B1_ZONE, pos = B1_POS)
+            code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE, pos = B1_POS)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL, pos = B2_POS)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL, pos = B2_POS)
             code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,
