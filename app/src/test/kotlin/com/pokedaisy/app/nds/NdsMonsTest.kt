@@ -541,4 +541,29 @@ class NdsMonsTest {
             assertEquals(12 to 4, NdsFeed.position(ram, pt))
         }
     }
+
+    @Test
+    fun gen4EventVariables() {
+        // story fights move a variable on (pret's scripts): the finished saves read past each one
+        fun game(code: String, name: String = "x") = NdsFeed.gameFor(File.createTempFile(name, ".nds").apply {
+            deleteOnExit(); writeBytes(ByteArray(12) + code.toByteArray()) })!!
+        fun v(st: org.json.JSONObject, id: Int): Int {
+            val h = st.getString("vars"); val i = (id - 0x4000) * 4
+            return Integer.parseInt(h.substring(i + 2, i + 4) + h.substring(i, i + 2), 16)
+        }
+        dump("pt_after.bin")?.let { ram ->
+            val st = NdsFeed.state(ram, game("CPUE", "plat"))!!
+            assertEquals(0x120 * 4, st.getString("vars").length)
+            assertEquals(14, v(st, 0x4055))   // Distortion World: past the Cyrus fight (10) and Giratina
+            assertEquals(2, v(st, 0x407B))    // Route 209 gate: rival beaten
+            assertEquals(6, v(st, 0x407C))    // Pastoria: rival (2), the gym, the lakes
+        }
+        dump("ss_field1.bin")?.let { ram ->
+            val st = NdsFeed.state(ram, game("IPGE", "hgss"))!!
+            assertEquals(0x170 * 4, st.getString("vars").length)
+            assertEquals(4, v(st, 0x4073))    // Cherrygrove: the first rival fight
+            assertEquals(2, v(st, 0x4075))    // Azalea: the second
+            assertEquals(10, v(st, 0x40AC))   // the Rocket Hideout done (Petrel 4, Ariana with Lance 9)
+        }
+    }
 }
