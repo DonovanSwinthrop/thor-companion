@@ -95,6 +95,17 @@ class DualScreenPresentation(
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
         (host as? Activity)?.dispatchKeyEvent(event) ?: super.dispatchKeyEvent(event)
 
+    /** When this screen was last touched ([touchedRecently]). */
+    private var lastTouch = 0L
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        lastTouch = android.os.SystemClock.uptimeMillis()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** Touched within the last moment: a focus the game's activity just lost went to this screen's display. */
+    val touchedRecently get() = android.os.SystemClock.uptimeMillis() - lastTouch < 1500
+
     override fun onStart() {
         super.onStart()
         goFullScreen()
@@ -108,6 +119,19 @@ class DualScreenPresentation(
     }
 
     companion object {
+        /**
+         * A tap on the second screen makes its display the focused one even though this window never takes focus
+         * (FLAG_NOT_FOCUSABLE): on devices with a launcher on that display (the emulator's), the launcher then got the
+         * controller's keys and the game stopped hearing them until the top screen was touched. Call from the game's
+         * activity when it loses window focus right after such a tap: its task comes back to the front of the main
+         * display, and with it the keys. Does nothing on a device where the tap never took the focus.
+         */
+        fun reclaimFocus(activity: Activity) {
+            val am = activity.getSystemService(android.app.ActivityManager::class.java) ?: return
+            runCatching { am.moveTaskToFront(activity.taskId, 0) }
+                .onFailure { android.util.Log.w("pokedaisy", "focus back to the game failed", it) }
+        }
+
         /** The companion, for a second screen (or the main one, swapped). */
         fun companionView(
             context: Context,

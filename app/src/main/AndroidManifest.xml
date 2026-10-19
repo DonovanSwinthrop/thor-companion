@@ -29,6 +29,9 @@
          chose to SHARE (BestEffortShare: one Firestore write, the fields it showed). ASK FOR SUPPORT and
          the footer links only open a browser. Nothing else. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- DualScreenPresentation.reclaimFocus: the game's task back to the front after a tap on the second screen
+         handed key focus to that display's launcher. -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
 
     <!-- In-app update: hands a downloaded release APK to Android's installer (AppUpdateFlow). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

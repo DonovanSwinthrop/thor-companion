@@ -1385,6 +1385,12 @@ class PokeDaisyActivity : Activity() {
         }
     }
 
+    // A tap on the companion's screen handed the keys to that display (its launcher, on the emulator): take them back.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus && presentation?.touchedRecently == true) window.decorView.post { DualScreenPresentation.reclaimFocus(this) }
+    }
+
     override fun onResume() {
         super.onResume()
         // The game's task brought up on the bottom screen (the app's icon tapped there): back to the top one, so the
