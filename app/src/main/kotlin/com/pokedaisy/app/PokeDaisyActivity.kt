@@ -1282,7 +1282,7 @@ class PokeDaisyActivity : Activity() {
                 if (snap.connected && com.pokedaisy.app.companion.RrOverlay.gameParam(snap.game) != null) {
                     if (com.pokedaisy.app.companion.RrOverlay.decoded(snap.game)) com.pokedaisy.app.companion.RrOverlay.sampleDecoded(snap)
                     else com.pokedaisy.app.companion.RrOverlay.sample(com.pokedaisy.app.companion.data.InProcessReader)
-                }
+                } else if (BuildConfig.DEBUG) com.pokedaisy.app.companion.RrOverlay.mirrorPlain(snap)   // the test walker's state
                 if (snap.connected) battleSwitchAddrs = switchAddrsFor(snap.game)
                 // The menus' cursors, so a FIGHT / move tap goes straight to its cell (NativeConfig.actionCursor).
                 if (snap.connected) battleCursorAddrs = telemetry.knownCursorAddrs()

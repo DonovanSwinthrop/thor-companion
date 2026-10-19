@@ -104,6 +104,22 @@ object RrOverlay {
             tmp.renameTo(java.io.File(dir, "run-state.json"))
         }
     }
+    /**
+     * Debug builds, a GBA game with no RUN tab (plain Emerald, FireRed...): a small state for the test walker alone (not
+     * the overlay's): map, x / y, battle (battleType 8 = a trainer's, from the foe's party, which only trainer battles
+     * fill), the party. Emu thread, after [com.pokedaisy.app.companion.TelemetryStore.refresh].
+     */
+    fun mirrorPlain(s: com.pokedaisy.app.companion.data.SnapshotView) {
+        if (debugDir == null || !s.connected || s.party.isEmpty()) return
+        val state = runCatching {
+            JSONObject().put("map", org.json.JSONArray().put(s.mapGroup).put(s.mapNum)).put("x", s.x).put("y", s.y)
+                .put("inBattle", s.inBattle).put("battleType", if (s.inBattle && s.enemyParty.isNotEmpty()) 8 else 0)
+                .put("partyCount", s.party.size).put("party", org.json.JSONArray().apply { s.party.forEach { put(monJson(it)) } })
+                .put("frame", s.frameCounter)
+        }.getOrNull() ?: return
+        lastState = JSONObject().put("type", "state").put("state", state).toString()
+        mirror()
+    }
     @Volatile private var lastPc: String? = null
     private var samples = 0
     private var frame = 0
