@@ -145,7 +145,8 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
-- [ ] Blaze Black Reduxx, Blaze Black 2 Redux, Renegade Platinum, Sterling Silver packs
+- [x] Blaze Black, Blaze Black 2 Redux, Renegade Platinum packs (bbk, bb2r, rp)
+- [ ] Blaze Black Reduxx: gets the Blaze Black pack by its file name; whether its trainers and wild data match is unchecked. Sterling Silver: both ROMs on E: are plain SoulSilver, so no pack
 
 ## Stage 5: 3DS
 - [ ] Floating button + companion over Azahar's bottom screen
