@@ -28,7 +28,7 @@ A DS game saves to its own `.sav` file, kept and backed up the same way as your 
 
 ## The RUN tab
 
-For some games a small `RUN TAB` button sits on the touch screen. It opens a page with your party, what you can find in the area you're in, and your next big fight. It supports Black, Blaze Black, Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver. It follows your battles too, in Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver: during a fight its Battle page shows both sides' Pokémon and how much HP they have left. Its Next page follows your gym badges, so it moves on to the next gym leader after each win, in Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver (Johto's gyms in the last two). Tap `BACK` to close it.
+For some games a small `RUN TAB` button sits on the touch screen. It opens a page with your party, what you can find in the area you're in, and your next big fight. It supports Black, Blaze Black, Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver. It follows your battles too, in Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver: during a fight its Battle page shows both sides' Pokémon and how much HP they have left. Its Next page follows your progress, so it moves on to the next big fight after each win, in Black 2, Blaze Black 2 Redux, Platinum, Renegade Platinum, HeartGold and SoulSilver: gym leaders by their badges, and in the last four the Elite Four, the Champion, your rival and the villain team's bosses too (and Kanto's gym leaders in HeartGold and SoulSilver). Tap `BACK` to close it.
 
 ## The pause menu
 
