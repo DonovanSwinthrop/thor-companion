@@ -140,7 +140,7 @@ A change takes effect the next time you open a game. On a phone held upright the
 
 ## BATTLE SHORTCUTS
 
-`BATTLE SHORTCUTS` (in the companion's `GAMEPLAY` group, on to start with) makes R run away from a wild battle in one press, from the battle's first menu, without opening anything. Trainer battles aren't affected, anywhere else R does what it always does, and Radical Red keeps its own R. DS games have the same switch in their pause menu (`SHORTCUTS`), where L also throws your best ball (see [DS games](ds-games.md)).
+`BATTLE SHORTCUTS` (in the companion's `GAMEPLAY` group, on to start with) makes R run away from a wild battle in one press, from the battle's first menu, without opening anything. Press it once the battle's menu (`FIGHT`, `BAG` and so on) is showing: a press while the battle is still starting is ignored, so press it again. Trainer battles aren't affected, anywhere else R does what it always does, and Radical Red keeps its own R. DS games have the same switch in their pause menu (`SHORTCUTS`), where L also throws your best ball (see [DS games](ds-games.md)).
 
 ## Running: AUTO-RUN and RUN INDOORS
 
