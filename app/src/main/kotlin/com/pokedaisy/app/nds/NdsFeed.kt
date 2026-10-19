@@ -21,7 +21,9 @@ object NdsFeed {
                /** How many slots the pocket at [bag] has (Gen 5: the items pocket; Gen 4: the Poké Balls pocket). */
                val bagSlots: Int = 310,
                /** Trainer N is beaten when event flag [trainerFlags] + N is set. */
-               val trainerFlags: Int = TRAINER_FLAG_BASE)
+               val trainerFlags: Int = TRAINER_FLAG_BASE,
+               /** Gen 4: how many event variables (u16, ids 0x4000 up) sit just before [flags]; 0: not sent. */
+               val varCount: Int = 0)
 
     /** Where [game]'s party is now (its count is the u32 before it); 0 if the save isn't loaded. */
     fun partyAddr(ram: ByteArray, game: Game): Int = game.party + baseOf(ram, game)
@@ -34,6 +36,17 @@ object NdsFeed {
         if (game.flags == 0) return 0
         val a = game.flags + baseOf(ram, game)
         return if (a - NdsMons.RAM_BASE in 0..ram.size - FLAG_BYTES) a else 0
+    }
+
+    /**
+     * Where [game]'s event variables are now (Gen 4: the block just before the flags; variable 0x4000 + i at + 2i), 0 if
+     * not mapped. Most story fights (rivals, Team Galactic / Rocket) move a variable on, not a flag: the packs follow
+     * them by "variable >= n" (worked out from the pret decompilations' scripts).
+     */
+    fun varsAddr(ram: ByteArray, game: Game): Int {
+        if (game.varCount == 0) return 0
+        val a = flagsAddr(ram, game)
+        return if (a == 0) 0 else a - game.varCount * 2
     }
 
     /** [game]'s current map number (the zone), or -1 before a save is loaded. */
@@ -115,6 +128,9 @@ object NdsFeed {
     private const val HGSS_TID = 0x84
     /** HeartGold / SoulSilver's event flags (PKHeX's 0x10C4 + the 0x10 header): same rule as [PT_FLAGS], same pattern. */
     private const val HGSS_FLAGS = 0x10D4
+    /** The event variables before the flags: Platinum 0x120 (PKHeX's work area 0xDAC..0xFEC), HGSS 0x170 (0xDE4..0x10C4). */
+    private const val PT_VARS = 0x120
+    private const val HGSS_VARS = 0x170
     /** Johto's badges, a bit each: the same trainer card layout as Platinum's (0xFF on a finished save, ss_field1). */
     private const val HGSS_BADGES = 0x8E
     /** The Poké Balls pocket (PKHeX's 0xD04 + the header; 24 slots): ss_field1's Master Ball in slot 0, Berries before it. */
@@ -170,11 +186,12 @@ object NdsFeed {
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL)
             code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,
-                trainerFlags = GEN4_TRAINER_FLAGS)
+                trainerFlags = GEN4_TRAINER_FLAGS, varCount = PT_VARS)
             code == "CPUE" -> Game("pt", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,
-                trainerFlags = GEN4_TRAINER_FLAGS)
+                trainerFlags = GEN4_TRAINER_FLAGS, varCount = PT_VARS)
             code == "IPKE" || code == "IPGE" -> Game("hgss", HGSS_PARTY, HGSS_ZONE, flags = HGSS_FLAGS, badges = HGSS_BADGES, bag = HGSS_BALLS, repel = HGSS_REPEL,
-                base = HGSS_BASE, gen4 = true, tid = HGSS_TID, bagSlots = HGSS_BALL_SLOTS, trainerFlags = GEN4_TRAINER_FLAGS)
+                base = HGSS_BASE, gen4 = true, tid = HGSS_TID, bagSlots = HGSS_BALL_SLOTS, trainerFlags = GEN4_TRAINER_FLAGS,
+                varCount = HGSS_VARS)
             else -> null
         }
     }
@@ -309,6 +326,8 @@ object NdsFeed {
             // unmapped flags: nothing counts as beaten, so Next starts at the first fight
             .put("flags", flagsAddr(ram, game).let { if (it != 0) hex(ram, it - NdsMons.RAM_BASE, FLAG_BYTES) else "00".repeat(FLAG_BYTES) } +
                 "%02x".format(badges(ram, game)))
+            // Gen 4's event variables (u16 little-endian, 0x4000 first): the packs' "variable >= n" bosses
+            .apply { varsAddr(ram, game).let { if (it != 0) put("vars", hex(ram, it - NdsMons.RAM_BASE, game.varCount * 2)) } }
             .put("trainerA", 0).put("trainerB", 0).put("mode", 0).put("outcome", 0)
     }
 }
