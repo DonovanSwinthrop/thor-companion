@@ -518,5 +518,27 @@ class NdsMonsTest {
             assertEquals(foe.first, NdsFeed.state(ram, game)!!.getJSONArray("enemyDec").getJSONObject(0).getInt("sp"))
         }
         assertEquals(false, NdsFeed.inBattle(dumps[2]!!, game))
+        // the walker's wild Muk (Lv 30) on the same route: wild, so the R / L shortcuts take it
+        dump("ss_wild1.bin")?.let { ram ->
+            val party = NdsMons.party(ram, NdsFeed.partyAddr(ram, game), gen4 = true)
+            assertEquals(89 to 30, NdsFeed.sides(ram, game, party).foe.single().let { it.species to it.level })
+            assertEquals(true, NdsFeed.wildBattle(ram, game))
+            assertEquals(0, NdsFeed.state(ram, game)!!.getInt("battleType"))
+        }
+        dumps.forEach { assertEquals(false, NdsFeed.wildBattle(it!!, game)) }
+    }
+
+    @Test
+    fun gen4Position() {
+        // SoulSilver on Route 15: up, up, then left (each hold went 1 to 3 tiles); Platinum in a Pokemon Center
+        val hgss = NdsFeed.gameFor(File.createTempFile("hgss", ".nds").apply { deleteOnExit(); writeBytes(ByteArray(12) + "IPGE".toByteArray()) })!!
+        val dumps = (0..3).map { dump("ss_pos$it.bin") }
+        assumeTrue("no SoulSilver position dumps", dumps.all { it != null })
+        assertEquals(listOf(1169 to 435, 1169 to 433, 1169 to 430, 1167 to 430), dumps.map { NdsFeed.position(it!!, hgss) })
+        assertEquals(435, NdsFeed.state(dumps[0]!!, hgss)!!.getInt("y"))
+        dump("pt_pc.bin")?.let { ram ->
+            val pt = NdsFeed.Game("pt", 0xB4, 0x1294, base = 0x02101D40, gen4 = true)
+            assertEquals(12 to 4, NdsFeed.position(ram, pt))
+        }
     }
 }

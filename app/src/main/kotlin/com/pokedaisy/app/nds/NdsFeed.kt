@@ -45,6 +45,18 @@ object NdsFeed {
     /** Where [game]'s current map number is now; 0 if the save isn't loaded. */
     fun zoneAddr(ram: ByteArray, game: Game): Int = game.zone + baseOf(ram, game)
 
+    /**
+     * Gen 4's position on the map, in tiles (x, y), or null (Gen 5: not mapped). The save block keeps it right after the
+     * map: x u32 at the map + 8, y at + 0xC (SoulSilver live: two tiles up took y 435 -> 433; Platinum: a Pokemon
+     * Center's 12, 4). The test walker reads it from the debug state to stay on a patch of grass.
+     */
+    fun position(ram: ByteArray, game: Game): Pair<Int, Int>? {
+        if (!game.gen4) return null
+        val o = zoneAddr(ram, game) - NdsMons.RAM_BASE
+        if (game.base == 0 || o < 0 || o + 0x10 > ram.size) return null
+        return u32(ram, o + 8).toInt() to u32(ram, o + 0xC).toInt()
+    }
+
     private fun baseOf(ram: ByteArray, game: Game): Int {
         if (game.base == 0) return 0
         val v = u32(ram, game.base - NdsMons.RAM_BASE).toInt()
@@ -85,9 +97,10 @@ object NdsFeed {
 
     /**
      * Gen 4 games whose battle screen the shortcuts were checked on: Platinum's RUN, BAG, POKé BALLS, the six ball slots,
-     * the next-page arrow and USE sit where Black 2's do (to a DS pixel or two), so the same taps work.
+     * the next-page arrow and USE sit where Black 2's do (to a DS pixel or two), so the same taps work. HeartGold /
+     * SoulSilver's battle screen has the same FIGHT / BAG / RUN / POKéMON layout (a wild Muk on Route 15, ss_wild1).
      */
-    private val GEN4_SHORTCUTS = setOf("pt", "rp")
+    private val GEN4_SHORTCUTS = setOf("pt", "rp", "hgss")
 
     /**
      * HeartGold / SoulSilver (US): the save data's address is at 0x02111880 (the same block Action Replay codes reach
@@ -287,6 +300,8 @@ object NdsFeed {
             .put("inBattle", if (inBattle) 1 else 0)
             .put("battleType", if (trainer) 8 else 0)
             .put("zone", zone).put("mapsec", 0).put("mapName", "")
+            .put("repel", repelSteps(ram, game))
+            .apply { position(ram, game)?.let { (x, y) -> put("x", x).put("y", y) } }
             .put("partyCount", party.size)
             .put("partyDec", JSONArray().apply { party.forEach { put(mon(it)) } })
             .put("enemyDec", JSONArray().apply { if (trainer) sides.foe.forEach { b -> b.mon?.let { put(mon(it, b.hp, b.maxHp, b.level, b.ability)) } } })

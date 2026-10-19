@@ -86,6 +86,24 @@ object RrOverlay {
     }
     private var web: WebView? = null
     @Volatile private var lastState: String? = null
+
+    /** Debug builds ([com.pokedaisy.app.PokeDaisyApp]): the latest state also goes to `run-state.json` here, for the
+     * test walker (`~/tools/ndswork/walk.py`) to read over adb without dumping RAM. */
+    @Volatile var debugDir: java.io.File? = null
+    @Volatile private var mirrored = 0L
+
+    private fun mirror() {
+        val dir = debugDir ?: return
+        val now = System.currentTimeMillis()
+        if (now - mirrored < 250) return
+        mirrored = now
+        val text = lastState ?: return
+        runCatching {
+            val tmp = java.io.File(dir, "run-state.json.tmp")
+            tmp.writeText(text)
+            tmp.renameTo(java.io.File(dir, "run-state.json"))
+        }
+    }
     @Volatile private var lastPc: String? = null
     private var samples = 0
     private var frame = 0
@@ -99,6 +117,7 @@ object RrOverlay {
         if (!inEwram(runCatching { reader.u32(STORAGE_PTR) }.getOrDefault(0L))) return
         lastState = JSONObject().put("type", "state").put("state", state).toString()
         post(lastState!!)
+        mirror()
         // The PC is ~70 KB of hex: every 5th sample is plenty (boxes change only in the game's PC).
         if (samples++ % 5 == 0) {
             runCatching { buildPc(reader) }.getOrNull()?.let {
@@ -121,6 +140,7 @@ object RrOverlay {
         val state = runCatching { decodedState(s) }.getOrNull() ?: return
         lastState = JSONObject().put("type", "state").put("state", state).toString()
         post(lastState!!)
+        mirror()
         if (samples++ % 5 == 0) {
             post(JSONObject().put("type", "clock").put("hour", Calendar.getInstance().get(Calendar.HOUR_OF_DAY)).toString())
         }
@@ -130,6 +150,7 @@ object RrOverlay {
     fun postDecoded(state: JSONObject) {
         lastState = JSONObject().put("type", "state").put("state", state).toString()
         post(lastState!!)
+        mirror()
         if (samples++ % 5 == 0) {
             post(JSONObject().put("type", "clock").put("hour", Calendar.getInstance().get(Calendar.HOUR_OF_DAY)).toString())
         }

@@ -12,5 +12,7 @@ class PokeDaisyApp : Application() {
         prefs.appOpenCount = (prefs.appOpenCount + 1).coerceAtMost(1000)
         CrashReports.apply(prefs.crashReportsEnabled)
         ScreenScraperClient.enabled = FeatureFlags.screenScraper(this)
+        // the test walker reads the RUN tab's state from files/run-state.json
+        if (BuildConfig.DEBUG) com.pokedaisy.app.companion.RrOverlay.debugDir = filesDir
     }
 }
