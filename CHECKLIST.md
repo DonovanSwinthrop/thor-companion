@@ -142,7 +142,7 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
       Pokemon, every one named, Repel steps, INFINITE REPEL = WILD ENCOUNTERS OFF), on the default bar; checked in Radical Red and Emerald
 - [x] Debug builds write the test walker's state for every GBA game (map, x / y, battle, party)
 - [ ] GBA extras still to do: change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
-- [ ] Touching the bottom screen on the test device sent keys to the launcher behind it: check on the Thor
+- [x] Touching the bottom screen handed key focus to that display's launcher (emulator): fixed, the game takes it back (DualScreenPresentation.reclaimFocus); still to see on the Thor
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
 - [x] Blaze Black, Blaze Black 2 Redux, Renegade Platinum packs (bbk, bb2r, rp)
