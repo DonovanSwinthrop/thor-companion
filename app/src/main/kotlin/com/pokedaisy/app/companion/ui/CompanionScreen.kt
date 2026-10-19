@@ -774,13 +774,35 @@ private fun ShoulderHint(letter: String, onClick: () -> Unit) {
 internal fun TabChip(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val m = rememberTabMetrics()
     TabChipShell(selected, m, modifier.fillMaxHeight().alpha(if (enabled) 1f else 0.4f), onClick, enabled) {
-        GbaText(
+        // A long word (WILD in French, Italian, Spanish, Portuguese) narrows its letters rather than being cut short.
+        FittedChipText(
             label,
             if (selected) OptionColors.value else OptionColors.label,
             if (selected) OptionColors.valueShadow else OptionColors.labelShadow,
             m,
             bold = gameBoldLabels(),
         )
+    }
+}
+
+/**
+ * [text] at the widest letters that fit the chip: a font pixel 3 screen pixels wide, then 2, 1.5, 1 (the height
+ * stays), else the narrowest, cut. A plain [Layout] composing each width once, not BoxWithConstraints like
+ * [FittedGbaText]: the tab row asks its chips for their intrinsic height, which a SubcomposeLayout can't answer.
+ */
+@Composable
+private fun FittedChipText(text: String, color: Color, shadow: Color, m: GbaTextMetrics, bold: Boolean) {
+    val game = gameFontScaleX(m)
+    val widths = listOf(m.fontPixel, m.fontPixel - 1f, 1.5f, 1f).filter { it in 1f..m.fontPixel }.distinct().sortedDescending()
+    androidx.compose.ui.layout.Layout(content = {
+        widths.forEach { w -> GbaText(text, color, shadow, m, scaleX = (w / m.fontPixel) * game, bold = bold) }
+    }) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, maxWidth = androidx.compose.ui.unit.Constraints.Infinity)
+        val placeables = measurables.map { it.measure(loose) }
+        // a font pixel spare: a device rounds glyphs its own way, and the layout then cuts the word with "..."
+        val spare = m.fontPixel.toInt()
+        val pick = placeables.firstOrNull { it.width + spare <= constraints.maxWidth } ?: placeables.last()
+        layout(minOf(pick.width, constraints.maxWidth), pick.height) { pick.placeRelative(0, 0) }
     }
 }
 

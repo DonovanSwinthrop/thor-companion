@@ -272,7 +272,7 @@ private const val SLIDE_MS = 260
  * margin is ~22 GBA pixels: the longest move names need the narrowest.
  */
 @Composable
-private fun FittedGbaText(text: String, color: Color, shadow: Color, m: GbaTextMetrics, modifier: Modifier = Modifier) {
+internal fun FittedGbaText(text: String, color: Color, shadow: Color, m: GbaTextMetrics, modifier: Modifier = Modifier, bold: Boolean = false) {
     val small = rememberGbaTextMetrics(0.75f)
     val measurer = rememberTextMeasurer()
     val font = com.pokedaisy.app.companion.ui.theme.pixelFontFamily()
@@ -288,7 +288,7 @@ private fun FittedGbaText(text: String, color: Color, shadow: Color, m: GbaTextM
             val scaled = measurer.measure(text, gbaTextStyle(font, mm, sx), maxLines = 1, softWrap = false).size.width.toFloat()
             maxOf(plain, scaled) + mm.fontPixel <= width
         } ?: candidates.last()
-        GbaText(text, color, shadow, metrics, scaleX = scaleX)
+        GbaText(text, color, shadow, metrics, scaleX = scaleX, bold = bold)
     }
 }
 
