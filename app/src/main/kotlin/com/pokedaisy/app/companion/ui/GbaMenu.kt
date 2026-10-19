@@ -728,7 +728,15 @@ fun <T> OptionSelector(
                 OptionTitleWindow(title, m, onBack = onDismiss)
                 Spacer(Modifier.height(u * 4))
                 OptionListWindow(m, Modifier.fillMaxWidth()) {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                    // A long list opens with the current choice in view (two rows above it), not at its top: GAME CLOCK's
+                    // 24 hours opened on 00:00.
+                    val scroll = rememberScrollState()
+                    val rowPx = with(androidx.compose.ui.platform.LocalDensity.current) { rowHeight.toPx() }
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        val i = options.indexOf(selected)
+                        if (i > 2) scroll.scrollTo(((i - 2) * rowPx).toInt())
+                    }
+                    Column(Modifier.verticalScroll(scroll)) {
                         options.forEachIndexed { i, opt ->
                             val on = opt == selected
                             OptionLine(
