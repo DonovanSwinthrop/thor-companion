@@ -126,6 +126,8 @@ class NdsActivity : Activity() {
     @Volatile private var paused = false
     @Volatile private var ffHeld = false
     private val stateFile by lazy { File(File(filesDir, "nds-states").apply { mkdirs() }, rom.nameWithoutExtension + ".state") }
+    /** Beside the state while it was saved with INFINITE REPEL on: its Repel step counter is ours, not the game's. */
+    private val stateRepelMark by lazy { File(stateFile.path + ".repel") }
     private val menuView by lazy {
         ComposeView(this).apply {
             setContent {
@@ -335,6 +337,22 @@ class NdsActivity : Activity() {
         runCatching { e.block(feedRam, NdsFeed.zone(feedRam, game), NdsCore::writeRam) }
     }
 
+    /**
+     * The current map's own encounter rates back from the ROM (INFINITE REPEL off, or a state loaded with it off). With
+     * [clearCounter], the game's step counter we kept topped up goes to 0 at once too (no 100+ more steps, no "wore off"
+     * message). Called with the emulation parked (the menu is open).
+     */
+    private fun restoreEncounters(clearCounter: Boolean = false) {
+        val game = feedGame ?: return
+        if (!NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) return
+        enc?.let { e -> runCatching { e.restore(feedRam, NdsFeed.zone(feedRam, game), NdsCore::writeRam) } }
+        if (clearCounter) {
+            val at = NdsFeed.repelAddr(feedRam, game)
+            if (repelHeld && at != 0) NdsCore.writeRam(at, byteArrayOf(0))
+            repelHeld = false
+        }
+    }
+
     /** The RUN tab's state, twice a second (emu thread, between frames). */
     private fun feed() {
         val game = feedGame ?: return
@@ -523,10 +541,18 @@ class NdsActivity : Activity() {
             NdsMenuItem.RESUME -> setMenu(false)
             NdsMenuItem.SAVE_STATE -> {
                 hasState = NdsCore.saveState(stateFile.absolutePath)
+                if (hasState) runCatching { if (infiniteRepel) stateRepelMark.writeText("1") else stateRepelMark.delete() }
                 setMenu(false)
             }
             NdsMenuItem.LOAD_STATE -> if (stateFile.isFile) {
                 NdsCore.loadState(stateFile.absolutePath)
+                // A state saved while INFINITE REPEL was on carries that map's rates at 0 and our topped-up step counter:
+                // with it off now, put the rates back (else no wild Pokémon there until the next map change) and clear the
+                // counter (else up to 250 more steps of a Repel nobody used).
+                if (!infiniteRepel) {
+                    repelHeld = stateRepelMark.isFile
+                    restoreEncounters(clearCounter = true)
+                }
                 setMenu(false)
             }
             NdsMenuItem.FAST_FORWARD -> fastForward = !fastForward
@@ -545,15 +571,7 @@ class NdsActivity : Activity() {
                 infiniteRepel = !infiniteRepel
                 Prefs(this).setInfiniteRepel(rom.name, infiniteRepel)
                 // switched off: the map's own encounter rates come back (the emulation is parked while the menu is open)
-                val game = feedGame
-                val e = enc
-                if (!infiniteRepel && game != null && NdsCore.readRam(NdsMons.RAM_BASE, feedRam)) {
-                    if (e != null) runCatching { e.restore(feedRam, NdsFeed.zone(feedRam, game), NdsCore::writeRam) }
-                    // the step counter we kept topped up goes to 0 at once (no 100+ more steps, no "wore off" message)
-                    val at = NdsFeed.repelAddr(feedRam, game)
-                    if (repelHeld && at != 0) NdsCore.writeRam(at, byteArrayOf(0))
-                    repelHeld = false
-                }
+                if (!infiniteRepel) restoreEncounters(clearCounter = true)
             }
             NdsMenuItem.SHORTCUTS -> {
                 shortcuts = !shortcuts
