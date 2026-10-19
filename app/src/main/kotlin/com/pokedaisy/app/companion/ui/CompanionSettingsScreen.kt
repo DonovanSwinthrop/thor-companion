@@ -417,6 +417,21 @@ private fun homeRows(
             enabled = s.wildEncountersSupported, subtitle = "In grass, caves and water") {
             if (s.wildEncountersSupported) { s.setWildEncounters(if (s.wildEncounters == 0) 100 else 0); changed() }
         },
+        // GBA carts with a clock (Ruby / Sapphire / Emerald and hacks): the clock forward to an hour (berries, tides, daily
+        // events). Forward only, like waiting: the games' timed events don't expect time to go back.
+        s.gameClockHour.takeIf { it >= 0 }?.let { hour ->
+            SettingRow(
+                tk("GAME CLOCK"), clockLabel(hour), subtitle = "Moves the game's clock forward",
+                labelBadge = NewFeatures.badge(NewFeatures.GBA_CLOCK),
+            ) {
+                val now = s.gameClockHour
+                val labels = (0..23).map(::clockLabel)
+                if (now >= 0) select(Selector(tk("GAME CLOCK"), labels, clockLabel(now)) { l ->
+                    s.stepGameClock((labels.indexOf(l) - now + 24) % 24)
+                    changed()
+                })
+            }
+        },
         // B held for the player while walking on the field; holding it walks. Never on a bike or in a menu.
         SettingRow(tk("AUTO-RUN"), if (s.fieldReadable) onOff(s.autoRun) else tk("N/A"), enabled = s.fieldReadable,
             subtitle = "Holding B walks instead") { if (s.fieldReadable) { s.setAutoRun(!s.autoRun); changed() } },
@@ -655,6 +670,9 @@ private fun bindingValue(capture: KeyCapture?, title: String, keys: List<String>
 private fun KeyCapture.toggle(title: String, request: () -> KeyCapture.Request) {
     if (isFor(title)) cancel() else start(request())
 }
+
+/** GAME CLOCK's value: the hour on a 24-hour clock ("07:00"). */
+internal fun clockLabel(hour: Int) = "%02d:00".format(hour)
 
 /** WILD ENCOUNTERS' value: ON (the game's own rate) or OFF. */
 internal fun wildEncountersLabel(percent: Int) = if (percent == 0) tk("OFF") else tk("ON")

@@ -128,6 +128,10 @@ object MgbaCore {
     external fun pkRomSize(): Long
     /** 0 = GBA, 1 = Game Boy / Color, -1 = no core. */
     external fun pkPlatform(): Int
+    /** GAME CLOCK: the hour the cart's clock reads (Ruby / Sapphire / Emerald and hacks with it), -1 without one. */
+    external fun pkRtcHour(): Int
+    /** GAME CLOCK: moves the cart's clock [hours] on (kept in the save and in states); false without a clock. */
+    external fun pkRtcShift(hours: Int): Boolean
     /** A Game Boy / Color cart's ROM bytes (it's bank-switched, so not on the bus whole); null on GBA. */
     external fun pkRomRead(off: Long, len: Int): ByteArray?
 

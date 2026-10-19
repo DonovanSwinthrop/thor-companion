@@ -161,6 +161,12 @@ Only random encounters change. Fishing, moves that lure wild Pokémon out and ba
 
 It works on the original games in every language and on almost every supported hack, including the ones rebuilt from newer source code like SoulGold, Lazarus and Recharged Yellow. On Emerald Rogue and Quetzal it shows `N/A`.
 
+## GAME CLOCK
+
+Ruby, Sapphire and Emerald (and hacks built on them) have a clock in the cartridge, which runs berry growth, the tides in one cave, and things that happen once a day. `GAME CLOCK`, in the companion's `GAMEPLAY` group, shows the hour that clock reads. Tap it and pick an hour: the clock moves forward to it, as if you had waited (picking an earlier hour moves it to that hour the next day). It never goes back, since these games don't expect time to run backwards.
+
+The game picks up the new time the next time it checks its clock, and keeps it: it's stored with your save and in save states. The row only shows in games whose cartridge has a clock.
+
 ## External controllers
 
 Bluetooth and USB controllers (8BitDo, GameSir, Xbox and so on) work, and you can connect one while a game is running without restarting it. A short message on the game screen says when a controller connects or goes away. Its buttons follow `GAME BUTTONS` and `HOTKEYS` like the built-in ones, and diagonals on its D-pad press both directions.

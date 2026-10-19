@@ -133,6 +133,7 @@ val SETTING_KEYWORDS: Map<String, String> = mapOf(
     "AUTO-RUN" to "auto run autorun running shoes run sprint dash always run hold b",
     "RUN INDOORS" to "run inside buildings indoor running shoes houses",
     "WILD ENCOUNTERS" to "wild encounters encounter rate random battles grass caves repel no encounters fewer battles",
+    "GAME CLOCK" to "game clock time hour change time day night berries tides rtc real time clock",
 )
 
 private fun fold(s: String): String =

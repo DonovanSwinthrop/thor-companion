@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <mgba/core/core.h>
 #include <mgba/core/config.h>
@@ -1087,6 +1088,42 @@ Java_com_pokedaisy_app_MgbaCore_pkPlatform(JNIEnv* env, jobject thiz) {
 JNIEXPORT jlong JNICALL
 Java_com_pokedaisy_app_MgbaCore_pkRomSize(JNIEnv* env, jobject thiz) {
     return g.core ? (jlong) g.core->romSize(g.core) : 0;
+}
+
+/** The cart's clock (Ruby / Sapphire / Emerald and hacks that kept it), or NULL: no GBA core, or no RTC on the cart.
+ * Under the core lock. */
+static struct GBARTC* pkCartRtc(void) {
+    if (!g.core || !pk_is_gba(g.core)) return NULL;
+    struct GBA* gba = (struct GBA*) g.core->board;
+    return (gba->memory.hw.devices & HW_RTC) ? &gba->memory.hw.rtc : NULL;
+}
+
+// GAME CLOCK: the hour the cart's clock reads now (the device's time minus the clock's offset, as _rtcUpdateClock
+// does), -1 without a clock.
+JNIEXPORT jint JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkRtcHour(JNIEnv* env, jobject thiz) {
+    pthread_rwlock_rdlock(&pk_coreLock);
+    int hour = -1;
+    struct GBARTC* rtc = pkCartRtc();
+    if (rtc) {
+        time_t t = time(0) - rtc->offset;
+        struct tm date;
+        localtime_r(&t, &date);
+        hour = date.tm_hour;
+    }
+    pthread_rwlock_unlock(&pk_coreLock);
+    return hour;
+}
+
+// GAME CLOCK: moves the cart's clock [hours] on (the offset mGBA keeps in the save's clock bytes and in states, so the
+// game reads the new time from its next clock read on and keeps it). False without a clock.
+JNIEXPORT jboolean JNICALL
+Java_com_pokedaisy_app_MgbaCore_pkRtcShift(JNIEnv* env, jobject thiz, jint hours) {
+    pthread_rwlock_wrlock(&pk_coreLock);
+    struct GBARTC* rtc = pkCartRtc();
+    if (rtc) rtc->offset -= (time_t) hours * 3600;
+    pthread_rwlock_unlock(&pk_coreLock);
+    return rtc != NULL;
 }
 
 // --- cheats (pk_cheats.c) ----------------------------------------------------

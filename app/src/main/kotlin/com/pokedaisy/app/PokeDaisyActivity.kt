@@ -741,6 +741,8 @@ class PokeDaisyActivity : Activity() {
             if (::engine.isInitialized) engine.wildEncounters = percent
         }
         override val wildEncountersSupported get() = fieldGame != WideScreen.OFF && wildFlag != 0L
+        override val gameClockHour get() = if (::engine.isInitialized) MgbaCore.pkRtcHour() else -1
+        override fun stepGameClock(hours: Int) { if (::engine.isInitialized && hours != 0) MgbaCore.pkRtcShift(hours) }
         override val ffToggled get() = if (::engine.isInitialized) engine.fastForwardToggled else false
         override fun setFfToggled(on: Boolean) {
             if (::engine.isInitialized) engine.setFastForwardToggled(on)
