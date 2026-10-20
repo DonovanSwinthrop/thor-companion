@@ -131,7 +131,7 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [x] DS GAME CLOCK: the game's clock and day / night follow (Platinum 17:00 -> 22:00: Pokétch and night tint)
   - [x] Black / Blaze Black trainer flags (Claude A: trainer N = flag 1420 + N, badges at 3072 + n) wired into the b1 / bbk packs: leaders by
         badge, rivals / N by the next badge after their fight
-  - [x] Black / Blaze Black Elite Four (own flag 2409-2412 OR game clear 2403), Alder (2403), the fights after the 8th badge (any E4 flag OR 2403): doneAny in b1 / bbk (2403 not verified yet)
+  - [x] Black / Blaze Black Elite Four (own flag 2409-2412 OR game clear 2403), Alder (2403), the fights after the 8th badge (any E4 flag OR 2403): doneAny in b1 / bbk; live (A, 2026-10-20): the finished Blaze Black save reads Champion, clearing 2403 + 2409 shows Elite Four Shauntal next
   - [x] Overlay fixes (outside git): Next tab no longer crashes when no starter is owned; team-helper names in full; damage over 999% shows 999+;
         Team page says the PC isn't read on DS games
   - [x] Five tests that only failed on a Windows checkout fixed (File.renameTo over an existing file in SaveBackups / LibraryOrder /
@@ -146,7 +146,8 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] GAME CLOCK (companion SETTINGS > GAMEPLAY): GBA carts with a clock (Ruby / Sapphire / Emerald + hacks; mGBA rtc.offset, checked in
       Emerald: kept after an in-game save + restart) and Crystal / Crystal Clear / Prism (hHours 0xFF94, MBC3 latch; not live-tested, no ROM here)
 - [x] Tab chips fit long labels; pick-lists open on the current choice; Gen 4 packs without the rival-partner tag battles
-- [x] Touching the bottom screen handed key focus to that display's launcher (emulator): fixed, the game takes it back (DualScreenPresentation.reclaimFocus); still to see on the Thor
+- [x] Touching the bottom screen handed key focus to that display's launcher (emulator): fixed, the game takes it back (DualScreenPresentation.reclaimFocus), 250 ms later and only while still resumed, so HOME right after a tap still leaves; still to see on the Thor
+- [x] NdsEncountersTest: INFINITE REPEL's block / restore on Black 2 and Platinum dumps, byte for byte (C's draft, finished by A2)
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
 - [x] Blaze Black, Blaze Black 2 Redux, Renegade Platinum packs (bbk, bb2r, rp)
