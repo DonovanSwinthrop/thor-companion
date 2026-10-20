@@ -165,6 +165,18 @@ object NdsFeed {
     private const val B1_POS = 0x0224F90C
 
     /**
+     * Black's event flags (save 0x2037C: its EventWork at 0x20100 + 0x27C, RAM = save + 0x0221BBAC). Trainer N is
+     * flag [B1_TRAINER_FLAGS] + N: on the finished save 78% of the 327 trainers standing on maps (overworld script
+     * 3000 + N) read set at 1420 + N and 2% of the other ids; no other start comes within 0.5 of that. Gym leaders,
+     * the Elite Four, N and Ghetsis set none (as in Black 2). Blaze Black's maps carry the same trainers.
+     */
+    private const val B1_FLAGS = 0x0223BF28
+    private const val B1_TRAINER_FLAGS = 1420
+
+    /** Black's badges, a bit each (save 0x21204, after the money at 0x21200: 684,260 and 0xFF on the finished save). */
+    private const val B1_BADGES = 0x0223CDB0
+
+    /**
      * Black 2 (US)'s event flags (the save's EventWork flags, mirrored in RAM). Trainer N's "beaten" flag is
      * 1488 + N: found by diffing dumps around two Route 19 fights (Youngster 164 -> flag 1652, Lass 165 -> 1653),
      * each the only flag that changed. The packs' doneFlags use the same rule.
@@ -195,8 +207,8 @@ object NdsFeed {
             ?.copyOfRange(12, 16)?.toString(Charsets.US_ASCII) ?: return null
         val name = rom.name.lowercase()
         return when {
-            code == "IRBO" && "blaze" in name -> Game("bbk", B1_PARTY, B1_ZONE, pos = B1_POS)
-            code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE, pos = B1_POS)
+            code == "IRBO" && "blaze" in name -> Game("bbk", B1_PARTY, B1_ZONE, B1_FLAGS, B1_BADGES, pos = B1_POS, trainerFlags = B1_TRAINER_FLAGS)
+            code == "IRBO" -> Game("b1", B1_PARTY, B1_ZONE, B1_FLAGS, B1_BADGES, pos = B1_POS, trainerFlags = B1_TRAINER_FLAGS)
             code == "IREO" && ("blaze" in name || "redux" in name) -> Game("bb2r", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL, pos = B2_POS)
             code == "IREO" -> Game("b2", B2_PARTY, B2_ZONE, B2_FLAGS, B2_BADGES, B2_BAG, B2_REPEL, pos = B2_POS)
             code == "CPUE" && "renegade" in name -> Game("rp", PT_PARTY, PT_ZONE, flags = PT_FLAGS, badges = PT_BADGES, bag = PT_BALLS, repel = PT_REPEL, base = PT_BASE, gen4 = true, tid = PT_TID, bagSlots = PT_BALL_SLOTS,

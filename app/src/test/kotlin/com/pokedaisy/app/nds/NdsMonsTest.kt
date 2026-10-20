@@ -154,6 +154,22 @@ class NdsMonsTest {
     }
 
     @Test
+    fun blackTrainerFlagsAndBadges() {
+        // the finished Black save: Route 3's / Nacrene's early trainers beaten (Youngster Jimmy 1, Waiter Maxwell 9),
+        // Ace Trainer Lou 605 not; gym leaders (Lenora 21) and the Elite Four (Shauntal 228) set no trainer flag;
+        // all eight badges, sent after the event flags
+        val ram = dump("b1_station.bin")
+        assumeTrue("no Black dump", ram != null)
+        for (name in listOf("black.nds", "blaze_black.nds")) {
+            val game = NdsFeed.gameFor(File.createTempFile("bw1", name).apply {
+                deleteOnExit(); writeBytes(ByteArray(12) + "IRBO".toByteArray())
+            })!!
+            assertEquals(listOf(true, true, false, false, false), listOf(1, 9, 605, 21, 228).map { NdsFeed.trainerBeaten(ram!!, game, it) })
+            assertEquals(0xFF, ram!![0x0223CDB0 - 0x02000000].toInt() and 0xFF)
+        }
+    }
+
+    @Test
     fun gen4TrainerFlags() {
         // Platinum's finished save: the journal says "Beat Allison at Route 212" (trainer 96; 736-738 her rematches);
         // scripted fights (Elite Four 261, the rival 470) never set a trainer flag. SoulSilver: trainer 4 beaten, the
