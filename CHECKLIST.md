@@ -148,7 +148,7 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
 - [x] Blaze Black, Blaze Black 2 Redux, Renegade Platinum packs (bbk, bb2r, rp)
-- [ ] Blaze Black Reduxx: gets the Blaze Black pack by its file name; whether its trainers and wild data match is unchecked. Sterling Silver: both ROMs on E: are plain SoulSilver, so no pack
+- [x] "Blaze Black Reduxx LevelCap.nds" is Blaze Black 2 Redux with a level-cap patch (header POKEMON B2, IREO): gets the bb2r pack by name; a pack built from it matches bb2r (57 bosses, names, wild data) but Drayden's cap (ace 61 vs Redux's documented 60). Sterling Silver: both ROMs on E: are plain SoulSilver, so no pack
 
 ## Stage 5: 3DS
 - [ ] Floating button + companion over Azahar's bottom screen
