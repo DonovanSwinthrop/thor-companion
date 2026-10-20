@@ -1117,13 +1117,25 @@ Java_com_pokedaisy_app_MgbaCore_pkRtcHour(JNIEnv* env, jobject thiz) {
 
 // GAME CLOCK: moves the cart's clock [hours] on (the offset mGBA keeps in the save's clock bytes and in states, so the
 // game reads the new time from its next clock read on and keeps it). False without a clock.
+// Game Boy carts with a clock (MBC3: Crystal, Crystal Clear, Prism): mGBA adds the time since the last latch to the
+// clock's registers at the next latch, so moving the last latch [hours] back moves the clock that far forward.
 JNIEXPORT jboolean JNICALL
 Java_com_pokedaisy_app_MgbaCore_pkRtcShift(JNIEnv* env, jobject thiz, jint hours) {
     pthread_rwlock_wrlock(&pk_coreLock);
+    bool ok = false;
     struct GBARTC* rtc = pkCartRtc();
-    if (rtc) rtc->offset -= (time_t) hours * 3600;
+    if (rtc) {
+        rtc->offset -= (time_t) hours * 3600;
+        ok = true;
+    } else if (g.core && !pk_is_gba(g.core)) {
+        struct GB* gb = (struct GB*) g.core->board;
+        if (gb->memory.mbcType == GB_MBC3_RTC) {
+            gb->memory.rtcLastLatch -= (time_t) hours * 3600;
+            ok = true;
+        }
+    }
     pthread_rwlock_unlock(&pk_coreLock);
-    return rtc != NULL;
+    return ok;
 }
 
 // --- cheats (pk_cheats.c) ----------------------------------------------------

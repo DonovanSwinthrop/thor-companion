@@ -136,7 +136,7 @@ The `SPEED OPTIONS` page:
 | Setting | Choices | What it does | More |
 | --- | --- | --- | --- |
 | `WILD ENCOUNTERS` | **`ON`**, `OFF` | Wild Pokémon jumping out in grass, caves and water, or none. `N/A` in a game where it can't work. | [Controls](controls.md) |
-| `GAME CLOCK` | the hour, a pick-list | Moves the cartridge's clock forward to an hour, for berries, tides and daily events. Only in games with a clock (Ruby, Sapphire, Emerald and their hacks). | [Controls](controls.md) |
+| `GAME CLOCK` | the hour, a pick-list | Moves the cartridge's clock forward to an hour, for berries, tides and daily events. Only in games with a clock (Ruby, Sapphire, Emerald and their hacks; Crystal, Crystal Clear and Prism). | [Controls](controls.md) |
 | `BATTLE SHORTCUTS` | **`ON`**, `OFF` | In a wild battle, R runs away in one press (DS games: L throws your best ball too). | [Controls](controls.md) |
 | `AUTO-RUN` | `ON`, **`OFF`** | Walking on the field runs without holding B; holding B walks instead. | [Controls](controls.md) |
 | `RUN INDOORS` | `ON`, **`OFF`** | Lets you run inside buildings too. `N/A` on Ruby and Sapphire. | [Controls](controls.md) |

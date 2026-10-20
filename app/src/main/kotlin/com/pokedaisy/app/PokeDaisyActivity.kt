@@ -741,7 +741,14 @@ class PokeDaisyActivity : Activity() {
             if (::engine.isInitialized) engine.wildEncounters = percent
         }
         override val wildEncountersSupported get() = fieldGame != WideScreen.OFF && wildFlag != 0L
-        override val gameClockHour get() = if (::engine.isInitialized) MgbaCore.pkRtcHour() else -1
+        // Crystal / Crystal Clear / Prism: the game's own hour (hHours, HRAM 0xFF94: the cart clock plus the offset the
+        // player set at the start), which a cart-clock shift moves by as many hours. GBA: the cart clock itself.
+        override val gameClockHour get() = when {
+            !::engine.isInitialized -> -1
+            com.pokedaisy.app.companion.data.activeGame.isCrystalFamily ->
+                MgbaCore.pkReadBytes(0xFF94, 1)?.let { it[0].toInt() and 0xFF }?.takeIf { it < 24 } ?: -1
+            else -> MgbaCore.pkRtcHour()
+        }
         override fun stepGameClock(hours: Int) { if (::engine.isInitialized && hours != 0) MgbaCore.pkRtcShift(hours) }
         override val ffToggled get() = if (::engine.isInitialized) engine.fastForwardToggled else false
         override fun setFfToggled(on: Boolean) {

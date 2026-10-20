@@ -163,7 +163,7 @@ It works on the original games in every language and on almost every supported h
 
 ## GAME CLOCK
 
-Ruby, Sapphire and Emerald (and hacks built on them) have a clock in the cartridge, which runs berry growth, the tides in one cave, and things that happen once a day. `GAME CLOCK`, in the companion's `GAMEPLAY` group, shows the hour that clock reads. Tap it and pick an hour: the clock moves forward to it, as if you had waited (picking an earlier hour moves it to that hour the next day). It never goes back, since these games don't expect time to run backwards.
+Ruby, Sapphire and Emerald (and hacks built on them) have a clock in the cartridge, which runs berry growth, the tides in one cave, and things that happen once a day. So do Crystal, Crystal Clear and Prism, where it also decides morning, day and night, and with them which Pokémon you meet. `GAME CLOCK`, in the companion's `GAMEPLAY` group, shows the hour the game reads (in the Game Boy games, the time you set when you started). Tap it and pick an hour: the clock moves forward to it, as if you had waited (picking an earlier hour moves it to that hour the next day). It never goes back, since these games don't expect time to run backwards.
 
 The game picks up the new time the next time it checks its clock, and keeps it: it's stored with your save and in save states. The row only shows in games whose cartridge has a clock.
 

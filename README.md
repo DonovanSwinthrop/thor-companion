@@ -138,7 +138,8 @@ under LANGUAGE in either Settings screen. Species, move and item names and the G
   screen's Settings) sets a pace that stays, per game: 0.25×, 0.5×, 1×, 1.5×, 2×, 3× or 4×.
 - **Real-time clock** for the games that use one (Ruby, Sapphire, Emerald and ROM hacks):
   day and night, berries, tides and daily events follow the device's clock, and saves keep it.
-  **GAME CLOCK** (bottom screen's Settings > GAMEPLAY) moves that clock forward to the hour you pick.
+  **GAME CLOCK** (bottom screen's Settings > GAMEPLAY) moves that clock forward to the hour you pick, in those games
+  and in Crystal, Crystal Clear and Prism (morning, day and night).
 - **Fast-forward music** that keeps playing the song at its normal speed, instead of chipmunk sound.
 - **Save states** on hotkeys, with undo.
 - **Rewind** (optional, Settings > REWIND): hold the REWIND HOLD hotkey (R on a keyboard; pick a pad button in

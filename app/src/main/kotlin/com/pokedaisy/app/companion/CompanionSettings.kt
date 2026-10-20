@@ -64,7 +64,8 @@ interface CompanionSettings {
     fun setWildEncounters(percent: Int) {}
     val wildEncountersSupported: Boolean get() = false
 
-    /** GAME CLOCK (GBA carts with a clock: Ruby / Sapphire / Emerald and hacks): the hour it reads, -1 = no clock here;
+    /** GAME CLOCK (carts with a clock: Ruby / Sapphire / Emerald and hacks, Crystal / Crystal Clear / Prism): the hour the game
+     * reads, -1 = no clock here;
      * [stepGameClock] moves it [hours] on (MgbaCore.pkRtcShift). */
     val gameClockHour: Int get() = -1
     fun stepGameClock(hours: Int) {}

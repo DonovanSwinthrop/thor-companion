@@ -417,8 +417,8 @@ private fun homeRows(
             enabled = s.wildEncountersSupported, subtitle = "In grass, caves and water") {
             if (s.wildEncountersSupported) { s.setWildEncounters(if (s.wildEncounters == 0) 100 else 0); changed() }
         },
-        // GBA carts with a clock (Ruby / Sapphire / Emerald and hacks): the clock forward to an hour (berries, tides, daily
-        // events). Forward only, like waiting: the games' timed events don't expect time to go back.
+        // Carts with a clock (GBA: Ruby / Sapphire / Emerald and hacks; GB: Crystal, Crystal Clear, Prism): the clock forward
+        // to an hour (berries, tides, daily events; Crystal's morning / day / night). Forward only, like waiting: the games' timed events don't expect time to go back.
         s.gameClockHour.takeIf { it >= 0 }?.let { hour ->
             SettingRow(
                 tk("GAME CLOCK"), clockLabel(hour), subtitle = "Moves the game's clock forward",
