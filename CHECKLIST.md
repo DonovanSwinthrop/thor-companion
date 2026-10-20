@@ -131,7 +131,7 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [x] DS GAME CLOCK: the game's clock and day / night follow (Platinum 17:00 -> 22:00: Pokétch and night tint)
   - [x] Black / Blaze Black trainer flags (Claude A: trainer N = flag 1420 + N, badges at 3072 + n) wired into the b1 / bbk packs: leaders by
         badge, rivals / N by the next badge after their fight
-  - [ ] Black / Blaze Black Elite Four, Alder, Ghetsis and post-badge rival fights: no flag found yet (Next stays on them)
+  - [x] Black / Blaze Black Elite Four (own flag 2409-2412 OR game clear 2403), Alder (2403), the fights after the 8th badge (any E4 flag OR 2403): doneAny in b1 / bbk (2403 not verified yet)
   - [x] Overlay fixes (outside git): Next tab no longer crashes when no starter is owned; team-helper names in full; damage over 999% shows 999+;
         Team page says the PC isn't read on DS games
   - [x] Five tests that only failed on a Windows checkout fixed (File.renameTo over an existing file in SaveBackups / LibraryOrder /
