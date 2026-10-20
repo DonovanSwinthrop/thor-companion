@@ -129,7 +129,9 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
   - [x] Gen 4 story bosses in the RUN tab's Next (Elite Four, Champion, rivals, Galactic / Rockets, HGSS Kanto leaders): doneAny from event
         flags / variables (Claude A's map, B's overlay + pack wiring); live: Platinum and SoulSilver finished saves read Champion
   - [x] DS GAME CLOCK: the game's clock and day / night follow (Platinum 17:00 -> 22:00: Pokétch and night tint)
-  - [ ] Black / Blaze Black trainer flags: CUT for the release (needs an early-game Black save to find them)
+  - [x] Black / Blaze Black trainer flags (Claude A: trainer N = flag 1420 + N, badges at 3072 + n) wired into the b1 / bbk packs: leaders by
+        badge, rivals / N by the next badge after their fight
+  - [ ] Black / Blaze Black Elite Four, Alder, Ghetsis and post-badge rival fights: no flag found yet (Next stays on them)
   - [x] Overlay fixes (outside git): Next tab no longer crashes when no starter is owned; team-helper names in full; damage over 999% shows 999+;
         Team page says the PC isn't read on DS games
   - [x] Five tests that only failed on a Windows checkout fixed (File.renameTo over an existing file in SaveBackups / LibraryOrder /
