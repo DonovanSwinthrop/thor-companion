@@ -141,7 +141,9 @@ Our fork of PokeDaisy (github.com/DonovanSwinthrop/thor-companion). It keeps Pok
 - [x] Two screens: the top screen is just the game (the HUD shows on one-screen devices only); new WILD companion tab (this map's wild
       Pokemon, every one named, Repel steps, INFINITE REPEL = WILD ENCOUNTERS OFF), on the default bar; checked in Radical Red and Emerald
 - [x] Debug builds write the test walker's state for every GBA game (map, x / y, battle, party)
-- [ ] GBA extras still to do: change time (AUTO-RUN and WILD ENCOUNTERS OFF already exist)
+- [x] GAME CLOCK (companion SETTINGS > GAMEPLAY): GBA carts with a clock (Ruby / Sapphire / Emerald + hacks; mGBA rtc.offset, checked in
+      Emerald: kept after an in-game save + restart) and Crystal / Crystal Clear / Prism (hHours 0xFF94, MBC3 latch; not live-tested, no ROM here)
+- [x] Tab chips fit long labels; pick-lists open on the current choice; Gen 4 packs without the rival-partner tag battles
 - [x] Touching the bottom screen handed key focus to that display's launcher (emulator): fixed, the game takes it back (DualScreenPresentation.reclaimFocus); still to see on the Thor
 - [x] Pause menu (BACK / L3) in the app's look: save / load state, fast forward 3x (or hold R2), swap screens,
       close; checked on the test device (state saved, loaded, game ran on; FF ~2.4x on the slow test device)
