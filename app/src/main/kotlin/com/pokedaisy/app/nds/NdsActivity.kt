@@ -604,7 +604,7 @@ class NdsActivity : Activity() {
             NdsCore.setKeys(0)
             ffHeld = false
             // a tap on the touch screen handed the keys to that display: take them back
-            if (presentation?.touchedRecently == true) window.decorView.post { DualScreenPresentation.reclaimFocus(this) }
+            if (presentation?.touchedRecently == true) DualScreenPresentation.reclaimFocus(this) { resumed }
         }
     }
 

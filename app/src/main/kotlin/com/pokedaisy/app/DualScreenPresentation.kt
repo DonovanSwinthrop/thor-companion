@@ -126,11 +126,19 @@ class DualScreenPresentation(
          * activity when it loses window focus right after such a tap: its task comes back to the front of the main
          * display, and with it the keys. Does nothing on a device where the tap never took the focus.
          */
-        fun reclaimFocus(activity: Activity) {
-            val am = activity.getSystemService(android.app.ActivityManager::class.java) ?: return
-            runCatching { am.moveTaskToFront(activity.taskId, 0) }
-                .onFailure { android.util.Log.w("pokedaisy", "focus back to the game failed", it) }
+        fun reclaimFocus(activity: Activity, stillResumed: () -> Boolean) {
+            // A moment later, and only while the game is still resumed: HOME (the Thor's double press) right after a tap
+            // also takes the focus, but pauses the game first, and must not be undone.
+            activity.window.decorView.postDelayed({
+                if (!stillResumed() || activity.isFinishing) return@postDelayed
+                val am = activity.getSystemService(android.app.ActivityManager::class.java) ?: return@postDelayed
+                runCatching { am.moveTaskToFront(activity.taskId, 0) }
+                    .onFailure { android.util.Log.w("pokedaisy", "focus back to the game failed", it) }
+            }, RECLAIM_DELAY_MS)
         }
+
+        /** How long [reclaimFocus] waits for a pause (HOME) before taking the focus back. */
+        private const val RECLAIM_DELAY_MS = 250L
 
         /** The companion, for a second screen (or the main one, swapped). */
         fun companionView(
